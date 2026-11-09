@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.wrangler/
+.env
+.env.local
+.env.*.local
+.dev.vars
+*.log
+.DS_Store
+/freebuff-sites-build/
+sites-bundle/
+
+# Verification screenshots: kept on disk as evidence, never versioned and
+# never part of the shipped bundle.
+artifacts/
