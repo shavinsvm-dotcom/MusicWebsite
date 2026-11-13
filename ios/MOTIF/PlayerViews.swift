@@ -13,7 +13,7 @@ struct MiniPlayer: View {
                     HStack(spacing: 10) {
                         ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                             .frame(width: 42, height: 42)
-                            .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                            .clipShape(Circle())
 
                         VStack(alignment: .leading, spacing: 2) {
                             Text(track.title)
@@ -56,9 +56,10 @@ struct MiniPlayer: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 7)
-            .glassSurface(radius: 20)
+            .glassSurface(radius: 22)
             .padding(.horizontal, 12)
-            .padding(.bottom, 4)
+            .padding(.top, 6)
+            .padding(.bottom, 6)
         }
     }
 }

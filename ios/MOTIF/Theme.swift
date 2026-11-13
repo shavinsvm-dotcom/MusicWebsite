@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AppBackground: View {
     @Environment(\.colorScheme) private var colorScheme
@@ -6,53 +7,21 @@ struct AppBackground: View {
     var body: some View {
         ZStack {
             if colorScheme == .dark {
-                Color(red: 0.035, green: 0.035, blue: 0.050)
-                    .ignoresSafeArea()
-
-                Circle()
-                    .fill(Color(red: 0.20, green: 0.28, blue: 0.82))
-                    .frame(width: 420, height: 420)
-                    .blur(radius: 130)
-                    .offset(x: -150, y: -310)
-                    .opacity(0.50)
-
-                Circle()
-                    .fill(Color(red: 0.78, green: 0.20, blue: 0.48))
-                    .frame(width: 360, height: 360)
-                    .blur(radius: 140)
-                    .offset(x: 180, y: 130)
-                    .opacity(0.30)
-
-                Circle()
-                    .fill(Color(red: 0.10, green: 0.58, blue: 0.52))
-                    .frame(width: 320, height: 320)
-                    .blur(radius: 150)
-                    .offset(x: -10, y: 380)
-                    .opacity(0.22)
+                Color(red: 0.047, green: 0.047, blue: 0.055)
+                RadialGradient(
+                    colors: [Color.white.opacity(0.045), Color.clear],
+                    center: .top,
+                    startRadius: 0,
+                    endRadius: 520
+                )
             } else {
-                Color(red: 0.965, green: 0.968, blue: 0.985)
-                    .ignoresSafeArea()
-
-                Circle()
-                    .fill(Color(red: 0.58, green: 0.72, blue: 1.00))
-                    .frame(width: 430, height: 430)
-                    .blur(radius: 120)
-                    .offset(x: -160, y: -300)
-                    .opacity(0.52)
-
-                Circle()
-                    .fill(Color(red: 1.00, green: 0.64, blue: 0.78))
-                    .frame(width: 360, height: 360)
-                    .blur(radius: 130)
-                    .offset(x: 190, y: 120)
-                    .opacity(0.40)
-
-                Circle()
-                    .fill(Color(red: 0.58, green: 0.92, blue: 0.84))
-                    .frame(width: 330, height: 330)
-                    .blur(radius: 140)
-                    .offset(x: 0, y: 380)
-                    .opacity(0.30)
+                Color.white
+                RadialGradient(
+                    colors: [Color.black.opacity(0.028), Color.clear],
+                    center: .top,
+                    startRadius: 0,
+                    endRadius: 520
+                )
             }
         }
         .ignoresSafeArea()
@@ -106,16 +75,22 @@ struct ArtworkView: View {
             )
 
             if let url {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    } else if phase.error != nil {
-                        fallback
-                    } else {
-                        ProgressView()
-                            .tint(.white)
+                if url.isFileURL, let image = UIImage(contentsOfFile: url.path) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image {
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } else if phase.error != nil {
+                            fallback
+                        } else {
+                            ProgressView()
+                                .tint(.white)
+                        }
                     }
                 }
             } else {
@@ -126,16 +101,16 @@ struct ArtworkView: View {
     }
 
     private var fallback: some View {
-        Image(systemName: "music.note")
-            .font(.system(size: 28, weight: .medium))
-            .foregroundStyle(.white.opacity(0.85))
+        Text(String(seed.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1)).uppercased())
+            .font(.system(size: 28, weight: .semibold))
+            .foregroundStyle(.white.opacity(0.88))
     }
 
     private var palette: [Color] {
-        let hue = stableHue
+        let lift = 0.10 + stableHue * 0.10
         return [
-            Color(hue: hue, saturation: 0.52, brightness: 0.58),
-            Color(hue: (hue + 0.09).truncatingRemainder(dividingBy: 1), saturation: 0.55, brightness: 0.24)
+            Color(white: 0.18 + lift),
+            Color(white: 0.10 + lift * 0.45)
         ]
     }
 
@@ -153,7 +128,7 @@ struct SectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 20, weight: .semibold, design: .serif))
+            .font(.system(size: 19, weight: .semibold))
             .tracking(-0.3)
     }
 }
@@ -172,8 +147,8 @@ struct TrackRow: View {
             } label: {
                 HStack(spacing: 12) {
                     ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                        .frame(width: 52, height: 52)
-                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .frame(width: 54, height: 54)
+                        .clipShape(Circle())
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(track.title)

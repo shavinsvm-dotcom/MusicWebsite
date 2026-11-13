@@ -9,39 +9,37 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $selectedTab) {
             HomeView(showNowPlaying: $showNowPlaying)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    MiniPlayer(showNowPlaying: $showNowPlaying)
+                }
                 .tabItem { Label("Home", systemImage: "house") }
                 .tag(0)
 
             SearchView(showNowPlaying: $showNowPlaying)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    MiniPlayer(showNowPlaying: $showNowPlaying)
+                }
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
                 .tag(1)
 
             LibraryView(showNowPlaying: $showNowPlaying)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    MiniPlayer(showNowPlaying: $showNowPlaying)
+                }
                 .tabItem { Label("Library", systemImage: "square.stack") }
                 .tag(2)
         }
         .tint(.primary)
         .environmentObject(library)
         .environmentObject(player)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            MiniPlayer(showNowPlaying: $showNowPlaying)
-                .environmentObject(player)
-        }
         .fullScreenCover(isPresented: $showNowPlaying) {
             NowPlayingView()
                 .environmentObject(library)
                 .environmentObject(player)
         }
         .task {
+            await library.refreshLocalMetadata()
             await library.refreshCloud()
-
-            #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-MOTIFPreviewPlayer"),
-               let first = library.tracks.first {
-                player.play(first, queue: library.tracks)
-                showNowPlaying = true
-            }
-            #endif
         }
     }
 }

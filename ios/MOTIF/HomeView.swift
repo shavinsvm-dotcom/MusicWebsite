@@ -72,8 +72,8 @@ struct HomeView: View {
                     .foregroundStyle(.secondary)
 
                 Text(greeting)
-                    .font(.system(size: 34, weight: .semibold, design: .serif))
-                    .tracking(-1.1)
+                    .font(.system(size: 33, weight: .semibold))
+                    .tracking(-1.2)
                     .foregroundStyle(.primary)
             }
 
@@ -109,23 +109,19 @@ struct HomeView: View {
         } label: {
             ZStack(alignment: .bottomLeading) {
                 ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                    .frame(height: 224)
+                    .frame(height: 238)
                     .frame(maxWidth: .infinity)
 
                 LinearGradient(
-                    colors: [.clear, .black.opacity(0.78)],
+                    colors: [.clear, .black.opacity(0.72)],
                     startPoint: .center,
                     endPoint: .bottom
                 )
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("FEATURED")
-                        .font(.system(size: 10, weight: .bold))
-                        .tracking(1.8)
-                        .foregroundStyle(.white.opacity(0.7))
                     Text(track.title)
-                        .font(.system(size: 25, weight: .semibold, design: .serif))
-                        .tracking(-0.5)
+                        .font(.system(size: 26, weight: .bold))
+                        .tracking(-0.6)
                         .foregroundStyle(.white)
                         .lineLimit(2)
                     Text(track.artist)
@@ -133,22 +129,21 @@ struct HomeView: View {
                         .foregroundStyle(.white.opacity(0.72))
                         .lineLimit(1)
                 }
-                .padding(20)
+                .padding(18)
 
                 Image(systemName: "play.fill")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(.black)
-                    .frame(width: 50, height: 50)
+                    .frame(width: 46, height: 46)
                     .background(.white, in: Circle())
-                    .padding(16)
+                    .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.22), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
             }
-            .shadow(color: .black.opacity(0.22), radius: 26, x: 0, y: 16)
         }
         .buttonStyle(.plain)
     }
@@ -160,7 +155,7 @@ struct HomeView: View {
                 .foregroundStyle(.secondary)
 
             Text("Your library is empty.")
-                .font(.system(size: 23, weight: .semibold, design: .serif))
+                .font(.system(size: 23, weight: .semibold))
                 .tracking(-0.4)
 
             Text("Import audio from Files, or search the catalog for a preview.")

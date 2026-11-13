@@ -33,6 +33,14 @@ struct SearchView: View {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     if trimmedQuery.isEmpty {
                         browseHint
+
+                        if !library.tracks.isEmpty {
+                            resultSection(
+                                title: "Your library",
+                                subtitle: "\(library.tracks.count) tracks",
+                                tracks: Array(library.tracks.prefix(12))
+                            )
+                        }
                     }
 
                     if !localMatches.isEmpty {
@@ -100,23 +108,17 @@ struct SearchView: View {
     }
 
     private var browseHint: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: "sparkle.magnifyingglass")
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(.secondary)
-
+        VStack(alignment: .leading, spacing: 6) {
             Text("Find something new.")
-                .font(.system(size: 26, weight: .semibold, design: .serif))
-                .tracking(-0.6)
+                .font(.system(size: 24, weight: .semibold))
+                .tracking(-0.5)
 
             Text("Search the iTunes catalog for songs and artists. Previews play instantly and can be saved to your library.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(radius: 26)
     }
 
     private func resultSection(title: String, subtitle: String?, tracks: [Track]) -> some View {

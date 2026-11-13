@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import Foundation
+import UIKit
 
 @MainActor
 final class LibraryStore: ObservableObject {
@@ -16,6 +17,7 @@ final class LibraryStore: ObservableObject {
     private let documentsURL: URL
     private let importsURL: URL
     private let downloadsURL: URL
+    private let artworkDirectory: URL
     private let libraryURL: URL
 
     init(fileManager: FileManager = .default) {
@@ -23,9 +25,11 @@ final class LibraryStore: ObservableObject {
         self.documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         self.importsURL = documentsURL.appendingPathComponent("Imported", isDirectory: true)
         self.downloadsURL = documentsURL.appendingPathComponent("Offline", isDirectory: true)
+        self.artworkDirectory = documentsURL.appendingPathComponent("Artwork", isDirectory: true)
         self.libraryURL = documentsURL.appendingPathComponent("library.json")
         try? fileManager.createDirectory(at: importsURL, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: downloadsURL, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: artworkDirectory, withIntermediateDirectories: true)
         load()
     }
 
@@ -61,6 +65,42 @@ final class LibraryStore: ObservableObject {
     func isDownloading(_ track: Track) -> Bool {
         guard let existing = canonicalTrack(for: track) else { return false }
         return downloadingIDs.contains(existing.id)
+    }
+
+    func refreshLocalMetadata() async {
+        var changed = false
+
+        for index in tracks.indices where tracks[index].source == .local {
+            let track = tracks[index]
+            let asset = AVURLAsset(url: track.mediaURL)
+            let items = (try? await asset.load(.commonMetadata)) ?? []
+            var updated = track
+
+            if let title = await metadataString(in: items, key: .commonKeyTitle) {
+                updated.title = title
+            }
+            if let artist = await metadataString(in: items, key: .commonKeyArtist) {
+                updated.artist = artist
+            }
+            if let album = await metadataString(in: items, key: .commonKeyAlbumName) {
+                updated.album = album
+            }
+            if updated.artist == "Imported", updated.title.contains(" - ") {
+                let fallback = fallbackMetadata(from: updated.title)
+                updated.title = fallback.title
+                if let artist = fallback.artist { updated.artist = artist }
+            }
+            if updated.artworkURL == nil, let artwork = await artworkURL(in: items) {
+                updated.artworkURL = artwork
+            }
+
+            if updated != track {
+                tracks[index] = updated
+                changed = true
+            }
+        }
+
+        if changed { save() }
     }
 
     func refreshCloud() async {
@@ -199,6 +239,9 @@ final class LibraryStore: ObservableObject {
         if existing.mediaURL.isFileURL {
             try? fileManager.removeItem(at: existing.mediaURL)
         }
+        if let artworkURL = existing.artworkURL, artworkURL.isFileURL {
+            try? fileManager.removeItem(at: artworkURL)
+        }
         save()
     }
 
@@ -256,14 +299,20 @@ final class LibraryStore: ObservableObject {
                 let asset = AVURLAsset(url: destination)
                 let time = try? await asset.load(.duration)
                 let seconds = time.map(CMTimeGetSeconds) ?? 0
-                let title = url.deletingPathExtension().lastPathComponent
+                let items = (try? await asset.load(.commonMetadata)) ?? []
+                let fallbackTitle = url.deletingPathExtension().lastPathComponent
                     .replacingOccurrences(of: "_", with: " ")
+                let metaTitle = await metadataString(in: items, key: .commonKeyTitle)
+                let metaArtist = await metadataString(in: items, key: .commonKeyArtist)
+                let metaAlbum = await metadataString(in: items, key: .commonKeyAlbumName)
+                let metaArtwork = await artworkURL(in: items)
+                let fallback = fallbackMetadata(from: fallbackTitle)
 
                 imported.append(Track(
-                    title: title.isEmpty ? "Untitled track" : title,
-                    artist: "Imported",
-                    album: "Files",
-                    artworkURL: nil,
+                    title: cleaned(metaTitle) ?? fallback.title,
+                    artist: cleaned(metaArtist) ?? fallback.artist ?? "Imported",
+                    album: cleaned(metaAlbum) ?? "Files",
+                    artworkURL: metaArtwork,
                     mediaURL: destination,
                     duration: seconds.isFinite && seconds > 0 ? seconds : 0,
                     source: .local,
@@ -275,6 +324,45 @@ final class LibraryStore: ObservableObject {
         }
 
         if !imported.isEmpty { add(imported) }
+    }
+
+    private func cleaned(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    private func fallbackMetadata(from name: String) -> (title: String, artist: String?) {
+        let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = cleanedName.components(separatedBy: " - ")
+        guard parts.count > 1, let artist = parts.last, !artist.isEmpty else {
+            return (cleanedName.isEmpty ? "Untitled track" : cleanedName, nil)
+        }
+        let title = parts.dropLast().joined(separator: " - ")
+        return (title.isEmpty ? cleanedName : title, artist)
+    }
+
+    private func metadataString(in items: [AVMetadataItem], key: AVMetadataKey) async -> String? {
+        guard let item = items.first(where: { $0.commonKey == key }) else { return nil }
+        return cleaned(try? await item.load(.stringValue))
+    }
+
+    private func artworkURL(in items: [AVMetadataItem]) async -> URL? {
+        guard
+            let item = items.first(where: { $0.commonKey == .commonKeyArtwork }),
+            let data = try? await item.load(.dataValue),
+            let image = UIImage(data: data),
+            let jpeg = image.jpegData(compressionQuality: 0.9)
+        else { return nil }
+
+        let destination = artworkDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("jpg")
+        do {
+            try jpeg.write(to: destination, options: .atomic)
+            return destination
+        } catch {
+            return nil
+        }
     }
 
     private func canonicalTrack(for track: Track) -> Track? {

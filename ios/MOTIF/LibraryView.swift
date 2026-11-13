@@ -156,9 +156,7 @@ struct LibraryView: View {
             .disabled(library.isRefreshingCloud)
             .accessibilityLabel("Refresh Tigris library")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .glassSurface(radius: 16)
+        .padding(.vertical, 2)
     }
 
     private var emptyState: some View {
@@ -168,7 +166,7 @@ struct LibraryView: View {
                 .foregroundStyle(.secondary)
 
             Text("Nothing here yet.")
-                .font(.system(size: 25, weight: .semibold, design: .serif))
+                .font(.system(size: 25, weight: .semibold))
                 .tracking(-0.5)
 
             Text("Import files from your iPhone, or add previews from Search.")
@@ -271,8 +269,8 @@ struct LibraryView: View {
                                 Image(systemName: "music.note.list")
                                     .font(.system(size: 17, weight: .medium))
                                     .foregroundStyle(.secondary)
-                                    .frame(width: 44, height: 44)
-                                    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                    .frame(width: 54, height: 54)
+                                    .background(Color.secondary.opacity(0.12), in: Circle())
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(playlist.name)
@@ -321,7 +319,7 @@ struct PlaylistDetailView: View {
                 if tracks.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("This playlist is empty.")
-                            .font(.system(size: 23, weight: .semibold, design: .serif))
+                            .font(.system(size: 23, weight: .semibold))
                         Text("Use the menu next to any song to add it here.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
