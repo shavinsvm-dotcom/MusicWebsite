@@ -142,7 +142,7 @@ final class LibraryStore: ObservableObject {
     func removeDownload(_ track: Track) {
         guard
             let existing = canonicalTrack(for: track),
-            existing.isDownloaded,
+            isDownloaded(existing),
             let remoteURL = existing.streamURL
         else { return }
 
