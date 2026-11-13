@@ -36,6 +36,7 @@ jobs:
       - name: Build device app without signing
         working-directory: ios
         run: |
+          set -o pipefail
           xcodebuild \
             -project MOTIF.xcodeproj \
             -scheme MOTIF \
@@ -44,7 +45,15 @@ jobs:
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee /tmp/motif-build.log
+
+      - name: Publish build errors
+        if: failure()
+        run: |
+          if [ -f /tmp/motif-build.log ]; then
+            { echo '### Xcode errors'; grep -nE 'error:|warning:' /tmp/motif-build.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
+          fi
 
       - name: Package unsigned IPA
         working-directory: ios
