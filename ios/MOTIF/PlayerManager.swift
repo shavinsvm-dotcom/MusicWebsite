@@ -6,10 +6,18 @@ import UIKit
 
 @MainActor
 final class PlayerManager: ObservableObject {
+    enum RepeatMode {
+        case off
+        case all
+        case one
+    }
+
     @Published private(set) var current: Track?
     @Published private(set) var queue: [Track] = []
     @Published private(set) var isPlaying = false
     @Published private(set) var duration: Double = 0
+    @Published private(set) var isShuffled = false
+    @Published private(set) var repeatMode: RepeatMode = .off
     @Published var elapsed: Double = 0
 
     private let player = AVPlayer()
@@ -77,6 +85,21 @@ final class PlayerManager: ObservableObject {
         }
     }
 
+    func toggleShuffle() {
+        isShuffled.toggle()
+    }
+
+    func cycleRepeat() {
+        switch repeatMode {
+        case .off:
+            repeatMode = .all
+        case .all:
+            repeatMode = .one
+        case .one:
+            repeatMode = .off
+        }
+    }
+
     func seek(to seconds: Double) {
         guard duration > 0 || seconds == 0 else { return }
         let clamped = max(0, min(seconds, duration > 0 ? duration : seconds))
@@ -107,7 +130,7 @@ final class PlayerManager: ObservableObject {
             object: item,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.next() }
+            Task { @MainActor in self?.handleTrackEnded() }
         }
 
         try? AVAudioSession.sharedInstance().setActive(true)
@@ -116,13 +139,37 @@ final class PlayerManager: ObservableObject {
         updateNowPlaying()
     }
 
+    private func handleTrackEnded() {
+        if repeatMode == .one {
+            seek(to: 0)
+            resume()
+            return
+        }
+        advance(by: 1)
+    }
+
     private func advance(by offset: Int) {
         guard !queue.isEmpty else { return }
+
+        if isShuffled, queue.count > 1, offset > 0 {
+            let choices = queue.indices.filter { $0 != currentIndex }
+            if let randomIndex = choices.randomElement() {
+                currentIndex = randomIndex
+                load(queue[randomIndex])
+                return
+            }
+        }
+
         let nextIndex = currentIndex + offset
 
         if nextIndex >= queue.count {
-            pause()
-            seek(to: 0)
+            if repeatMode == .all {
+                currentIndex = 0
+                load(queue[0])
+            } else {
+                pause()
+                seek(to: 0)
+            }
             return
         }
         if nextIndex < 0 {

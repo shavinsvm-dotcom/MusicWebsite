@@ -13,6 +13,7 @@ enum MusicAPI {
         let artworkUrl100: String?
         let previewUrl: String?
         let trackTimeMillis: Int?
+        let releaseDate: String?
     }
 
     enum APIError: LocalizedError {
@@ -82,6 +83,7 @@ enum MusicAPI {
                 title: title,
                 artist: song.artistName ?? "Unknown artist",
                 album: song.collectionName ?? "",
+                releaseYear: song.releaseDate.flatMap { Int(String($0.prefix(4))) },
                 artworkURL: artwork,
                 mediaURL: mediaURL,
                 duration: Double(song.trackTimeMillis ?? 0) / 1000,

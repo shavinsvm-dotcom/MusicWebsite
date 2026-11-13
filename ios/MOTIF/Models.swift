@@ -10,6 +10,7 @@ struct Track: Identifiable, Codable, Hashable {
     var title: String
     var artist: String
     var album: String
+    var releaseYear: Int? = nil
     var artworkURL: URL?
     var mediaURL: URL
     var duration: Double
