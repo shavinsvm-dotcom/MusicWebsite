@@ -8,7 +8,7 @@ on:
       - ".github/workflows/ios-unsigned.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ios-ipa-${{ github.ref }}
@@ -53,6 +53,13 @@ jobs:
         run: |
           if [ -f /tmp/motif-build.log ]; then
             { echo '### Xcode errors'; grep -nE 'error:|warning:' /tmp/motif-build.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
+            tail -n 500 /tmp/motif-build.log > build-error.log
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git checkout -B ci/build-log
+            git add -f build-error.log
+            git commit -m 'Record Xcode build failure'
+            git push --force origin HEAD:ci/build-log
           fi
 
       - name: Package unsigned IPA
