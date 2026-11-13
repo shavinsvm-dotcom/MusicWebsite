@@ -1,0 +1,67 @@
+name: Build unsigned iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-unsigned.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build device app without signing
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -project MOTIF.xcodeproj \
+            -scheme MOTIF \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          rm -rf Payload MOTIF.ipa
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/MOTIF.app Payload/
+          zip -qry MOTIF.ipa Payload
+
+      - name: Verify IPA contents
+        working-directory: ios
+        run: unzip -l MOTIF.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: MOTIF-unsigned-ipa
+          path: ios/MOTIF.ipa
+          if-no-files-found: error
+          retention-days: 14

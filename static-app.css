@@ -1,0 +1,2042 @@
+/* ==========================================================================
+   MONOCHROME / COVER-FIRST THEME
+   Scoped to the three content views. The bottom navigation, mini player and
+   overlays keep their existing treatment.
+   ========================================================================== */
+
+:root {
+  --ns-bg: #0c0c0e;
+  --ns-bg-deep: #070708;
+  --ns-head: #f8f8f9;
+  --ns-text: #ededf0;
+  --ns-sub: #a0a0a2;
+  --ns-faint: #707072;
+  --ns-card: #17171a;
+  --ns-card-2: #212125;
+  --ns-line: rgba(255, 255, 255, .10);
+  --ns-glow: rgba(255, 255, 255, .055);
+  --ns-accent: #ffffff;
+  --ns-on-accent: #101012;
+  --ns-shadow: 0 24px 48px -32px rgba(0, 0, 0, .95);
+}
+html[data-theme="light"] {
+  --ns-bg: #ffffff;
+  --ns-bg-deep: #f3f3f5;
+  --ns-head: #111113;
+  --ns-text: #1b1b1f;
+  --ns-sub: #6d6d6f;
+  --ns-faint: #8c8c8e;
+  --ns-card: #f4f4f6;
+  --ns-card-2: #e9e9ec;
+  --ns-line: rgba(0, 0, 0, .10);
+  --ns-glow: rgba(0, 0, 0, .035);
+  --ns-accent: #111113;
+  --ns-on-accent: #ffffff;
+  --ns-shadow: 0 20px 40px -30px rgba(0, 0, 0, .22);
+}
+
+/* Theme-aware monochrome tokens. Everything that used to consume the old
+   accent, brass, success or danger palette resolves through these. */
+:root {
+  --mono-accent: #111113;
+  --mono-accent-2: #3a3a3c;
+  --mono-soft: rgba(0, 0, 0, .07);
+  --mono-success: #111113;
+  --mono-danger: #111113;
+  --mono-on-accent: #ffffff;
+}
+html[data-theme="dark"] {
+  --mono-accent: #ffffff;
+  --mono-accent-2: #d0d0d4;
+  --mono-soft: rgba(255, 255, 255, .12);
+  --mono-success: #ffffff;
+  --mono-danger: #ffffff;
+  --mono-on-accent: #111113;
+}
+html[data-theme="light"] {
+  --mono-accent: #111113;
+  --mono-accent-2: #3a3a3c;
+  --mono-soft: rgba(0, 0, 0, .07);
+  --mono-success: #111113;
+  --mono-danger: #111113;
+  --mono-on-accent: #ffffff;
+}
+
+#main {
+  background:
+    radial-gradient(90% 46% at 8% 0%, var(--ns-glow), transparent 68%),
+    linear-gradient(180deg, var(--ns-bg) 0%, var(--ns-bg) 58%, var(--ns-bg-deep) 100%) !important;
+}
+#view-home,
+#view-search,
+#view-library {
+  max-width: 820px !important;
+  margin-inline: auto !important;
+  padding: 24px 18px calc(126px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+  color: var(--ns-text);
+}
+#view-library { max-width: 980px !important; }
+
+/* ---- Home header ------------------------------------------------------- */
+#view-home .hm-mast {
+  border: 0 !important;
+  padding: 0 !important;
+}
+#view-home .hm-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-height: 46px;
+}
+#view-home .hm-avatar {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, .18);
+  background: linear-gradient(145deg, #3a3a40, #111113);
+  color: #fff;
+  box-shadow: 0 8px 18px -12px rgba(0, 0, 0, .8);
+}
+#view-home .hm-avatar svg { width: 23px; height: 23px; }
+html[data-theme="light"] #view-home .hm-avatar {
+  border-color: rgba(0, 0, 0, .12);
+  box-shadow: 0 8px 18px -12px rgba(0, 0, 0, .35);
+}
+#view-home .hm-tools { display: flex; gap: 9px; }
+#view-home .hm-tools .icon-btn {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ns-line) !important;
+  border-radius: 50% !important;
+  background: color-mix(in srgb, var(--ns-card) 82%, transparent) !important;
+  color: var(--ns-head) !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+  backdrop-filter: blur(14px) saturate(140%) !important;
+}
+#view-home .hm-lede { margin-top: 24px; }
+#view-home .hm-date,
+#view-home .hm-ledger { display: none !important; }
+#view-home .hm-greet {
+  margin: 0;
+  font-family: 'Kosmik', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: clamp(1.7rem, 6vw, 2.15rem);
+  line-height: 1.1;
+  font-weight: 500;
+  font-style: italic;
+  letter-spacing: -.035em;
+  color: var(--ns-head);
+}
+
+/* ---- Home hero --------------------------------------------------------- */
+#view-home .hm-hero-rail {
+  display: block !important;
+  margin: 20px 0 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  scroll-snap-type: none !important;
+}
+#view-home .hm-hero-rail .hm-lead { display: none !important; }
+#view-home .hm-hero-rail #heroCard {
+  display: block !important;
+  position: relative;
+  width: 100% !important;
+  max-width: none !important;
+  aspect-ratio: 1.62 / 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 24px !important;
+  background: var(--ns-card) !important;
+  box-shadow: var(--ns-shadow) !important;
+}
+#view-home #heroCard[hidden] { display: none !important; }
+#view-home .hm-lead-art.hero-art {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--ns-card) !important;
+}
+#view-home .hm-lead-art .hero-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#view-home .hm-lead-copy {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2;
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 26px 20px 22px !important;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(8, 8, 10, .60) 0%, rgba(8, 8, 10, .04) 48%, rgba(8, 8, 10, .66) 100%) !important;
+  color: #fff !important;
+}
+#view-home .hm-lead-kicker { display: none !important; }
+#view-home .hm-lead-title {
+  max-width: 88%;
+  margin: 0 !important;
+  font-size: clamp(1.15rem, 4.8vw, 1.5rem) !important;
+  line-height: 1.12 !important;
+  font-weight: 600 !important;
+  letter-spacing: -.025em !important;
+  color: #fff !important;
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+#view-home .hm-lead-artist {
+  margin-top: 4px !important;
+  font-size: 12px !important;
+  color: rgba(255, 255, 255, .72) !important;
+}
+#view-home .hm-lead-play {
+  position: absolute !important;
+  left: 50% !important;
+  top: auto !important;
+  bottom: 16px !important;
+  transform: translateX(-50%);
+  width: 48px !important;
+  height: 48px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: grid !important;
+  place-items: center;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: var(--ns-accent) !important;
+  color: var(--ns-on-accent) !important;
+  box-shadow: 0 10px 22px -12px rgba(0, 0, 0, .9) !important;
+}
+#view-home .hm-play-disc {
+  width: 48px !important;
+  height: 48px !important;
+  display: grid;
+  place-items: center;
+  border-radius: 50% !important;
+  background: transparent !important;
+  color: inherit !important;
+}
+#view-home #heroPlayText { display: none !important; }
+
+/* ---- Home sections ----------------------------------------------------- */
+#view-home .hm-grid {
+  display: block !important;
+  margin-top: 26px !important;
+}
+#view-home .hm-col-main {
+  display: flex !important;
+  flex-direction: column;
+  width: 100% !important;
+}
+#view-home .hm-col-side,
+#view-home .hm-block:has(#shuffleRail),
+#view-home #homeLocalCol { display: none !important; }
+#view-home #homeArtistsBlock { order: 1; }
+#view-home .hm-block:has(#recentRow) { order: 2; margin-top: 30px !important; }
+#view-home .hm-block { margin-top: 0 !important; }
+#view-home .hm-block-head {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 13px !important;
+  padding: 0 !important;
+  border: 0 !important;
+}
+#view-home .hm-block-title {
+  margin: 0 !important;
+  font-size: 19px !important;
+  line-height: 1.2 !important;
+  font-weight: 600 !important;
+  letter-spacing: -.025em !important;
+  color: var(--ns-head) !important;
+}
+#view-home .hm-block-count { font-size: 11px !important; color: var(--ns-sub) !important; }
+#view-home .hm-link { color: var(--ns-sub) !important; font-size: 11px !important; }
+
+#view-home .hm-artists {
+  display: flex !important;
+  gap: 16px !important;
+  margin: 0 !important;
+  padding: 1px 0 4px !important;
+  overflow-x: auto !important;
+  scrollbar-width: none;
+}
+#view-home .hm-artists::-webkit-scrollbar { display: none; }
+#view-home .hm-artist-card {
+  flex: 0 0 82px !important;
+  width: 82px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--ns-text) !important;
+  text-align: center;
+}
+#view-home .hm-artist-pic {
+  width: 82px !important;
+  height: 82px !important;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 50% !important;
+  border: 2px solid rgba(255, 255, 255, .10);
+  background: var(--ns-card) !important;
+  box-shadow: 0 12px 24px -20px rgba(0, 0, 0, .9);
+}
+html[data-theme="light"] #view-home .hm-artist-pic { border-color: rgba(0, 0, 0, .10); }
+#view-home .hm-artist-pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#view-home .hm-artist-name {
+  display: block;
+  width: 82px;
+  margin-top: 9px;
+  font-size: 12px !important;
+  line-height: 1.25;
+  font-weight: 500 !important;
+  color: var(--ns-text) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#view-home .hm-artist-count { display: none !important; }
+
+#view-home .hm-index { display: flex !important; flex-direction: column; gap: 0 !important; }
+#view-home .hm-row {
+  display: flex !important;
+  align-items: center;
+  gap: 14px !important;
+  width: 100%;
+  min-height: 76px;
+  margin: 0 !important;
+  padding: 10px 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--ns-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--ns-text) !important;
+  text-align: left;
+  box-shadow: none !important;
+}
+#view-home .hm-row:last-child { border-bottom: 0 !important; }
+#view-home .hm-row:hover { background: transparent !important; }
+#view-home .hm-row-index,
+#view-home .hm-row-time { display: none !important; }
+#view-home .hm-row-art {
+  flex: 0 0 56px !important;
+  width: 56px !important;
+  height: 56px !important;
+  overflow: hidden;
+  border-radius: 50% !important;
+  background: var(--ns-card) !important;
+}
+#view-home .hm-row-art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+#view-home .hm-row-text { flex: 1 1 auto; min-width: 0; display: block !important; }
+#view-home .hm-row-title {
+  display: block;
+  font-size: 14.5px !important;
+  line-height: 1.25;
+  font-weight: 600 !important;
+  color: var(--ns-text) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#view-home .hm-row-sub {
+  display: block;
+  margin-top: 3px !important;
+  font-size: 12px !important;
+  color: var(--ns-sub) !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Library ----------------------------------------------------------- */
+#view-library .lib-header { padding: 2px 0 16px !important; gap: 12px; }
+#view-library .lib-header-left { gap: 12px !important; }
+#view-library .lib-header-logo {
+  width: 48px !important;
+  height: 48px !important;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ns-line) !important;
+  border-radius: 50% !important;
+  background: var(--ns-card) !important;
+  color: var(--ns-head) !important;
+  box-shadow: none !important;
+}
+#view-library .lib-header-logo svg { width: 24px !important; height: 24px !important; }
+#view-library .lib-header-title {
+  font-size: 26px !important;
+  line-height: 1.05 !important;
+  font-weight: 600 !important;
+  letter-spacing: -.04em !important;
+  color: var(--ns-head) !important;
+}
+#view-library .lib-header-count {
+  margin-top: 4px !important;
+  font-size: 11px !important;
+  color: var(--ns-sub) !important;
+}
+#view-library .lib-icon-btn {
+  width: 44px !important;
+  height: 44px !important;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--ns-line) !important;
+  border-radius: 50% !important;
+  background: var(--ns-card) !important;
+  color: var(--ns-text) !important;
+  box-shadow: none !important;
+}
+#view-library .lib-tabs {
+  display: flex !important;
+  gap: 22px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+#view-library .lib-tabs::-webkit-scrollbar { display: none; }
+#view-library .lib-tab {
+  flex: 0 0 auto;
+  padding: 8px 0 !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: var(--ns-sub) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  box-shadow: none !important;
+}
+#view-library .lib-tab.active {
+  padding: 8px 0 !important;
+  border-bottom-color: var(--ns-accent) !important;
+  background: transparent !important;
+  color: var(--ns-head) !important;
+  font-weight: 600 !important;
+}
+#view-library .lib-tab-glider { display: none !important; }
+#view-library .lib-section-head {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  margin: 26px 0 13px !important;
+  padding: 0 !important;
+}
+#view-library .lib-section-title {
+  font-size: 19px !important;
+  font-weight: 600 !important;
+  letter-spacing: -.025em !important;
+  color: var(--ns-head) !important;
+}
+#view-library .lib-section-link,
+#view-library .lib-section-count { margin-left: auto; font-size: 11px !important; color: var(--ns-sub) !important; }
+
+#view-library #libRecentCarousel,
+#view-library #libAlbumsCarousel,
+#view-library #libPlaylistsCarousel {
+  display: flex !important;
+  gap: 14px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: auto !important;
+  scrollbar-width: none;
+}
+#view-library #libAlbumsCarousel[hidden],
+#view-library .lib-section-head[hidden],
+#libTabAll .lib-section-head:has(+ #libAlbumsCarousel[hidden]) { display: none !important; }
+#view-library .rail-wrap:has(#libRecentCarousel),
+#view-library .rail-wrap:has(#libAlbumsCarousel),
+#view-library .rail-wrap:has(#libArtistsCarousel),
+#view-library .rail-wrap:has(#libPlaylistsCarousel) {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+#view-library .rail-wrap:has(#libRecentCarousel)::before,
+#view-library .rail-wrap:has(#libRecentCarousel)::after,
+#view-library .rail-wrap:has(#libAlbumsCarousel)::before,
+#view-library .rail-wrap:has(#libAlbumsCarousel)::after,
+#view-library .rail-wrap:has(#libArtistsCarousel)::before,
+#view-library .rail-wrap:has(#libArtistsCarousel)::after,
+#view-library .rail-wrap:has(#libPlaylistsCarousel)::before,
+#view-library .rail-wrap:has(#libPlaylistsCarousel)::after { display: none !important; }
+#view-library #libRecentCarousel::-webkit-scrollbar,
+#view-library #libAlbumsCarousel::-webkit-scrollbar,
+#view-library #libPlaylistsCarousel::-webkit-scrollbar { display: none; }
+#view-library #libRecentCarousel .fan-card,
+#view-library #libAlbumsCarousel .fan-card {
+  flex: 0 0 148px !important;
+  width: 148px !important;
+  transform: none !important;
+  opacity: 1 !important;
+}
+#view-library #libRecentCarousel .fan-art,
+#view-library #libAlbumsCarousel .fan-art {
+  width: 148px !important;
+  height: 148px !important;
+  transform: none !important;
+  border: 0 !important;
+  border-radius: 20px !important;
+  box-shadow: var(--ns-shadow) !important;
+}
+#view-library #libRecentCarousel .fan-title,
+#view-library #libAlbumsCarousel .fan-title {
+  margin-top: 9px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--ns-text) !important;
+}
+#view-library #libRecentCarousel .fan-sub,
+#view-library #libAlbumsCarousel .fan-sub { font-size: 11px !important; color: var(--ns-sub) !important; }
+
+#view-library #libArtistsCarousel,
+#view-search .lib-artist-grid {
+  display: flex !important;
+  gap: 16px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: auto !important;
+  scrollbar-width: none;
+}
+#view-library #libArtistsCarousel::-webkit-scrollbar,
+#view-search .lib-artist-grid::-webkit-scrollbar { display: none; }
+#view-library #libArtistsCarousel .lib-carousel-artist,
+#view-search .lib-art-card { flex: 0 0 82px !important; width: 82px !important; }
+#view-library #libArtistsCarousel .lib-cir-photo,
+#view-search .lib-art-photo {
+  width: 82px !important;
+  height: 82px !important;
+  overflow: hidden;
+  border: 2px solid var(--ns-line) !important;
+  border-radius: 50% !important;
+  background: var(--ns-card) !important;
+}
+#view-library #libArtistsCarousel .lib-cir-name,
+#view-search .lib-art-name {
+  margin-top: 9px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: var(--ns-text) !important;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#view-library #libPlaylistsCarousel .lib-carousel-playlist {
+  flex: 0 0 148px !important;
+  width: 148px !important;
+}
+#view-library #libPlaylistsCarousel .lib-cpl-art {
+  width: 148px !important;
+  height: 148px !important;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 20px !important;
+  background: var(--ns-card) !important;
+  box-shadow: var(--ns-shadow) !important;
+}
+#view-library #libPlaylistsCarousel .lib-cpl-name {
+  margin-top: 9px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: var(--ns-text) !important;
+}
+#view-library #libPlaylistsCarousel .lib-cpl-count { font-size: 11px !important; color: var(--ns-sub) !important; }
+#view-library #libPlaylistsCarousel .lib-carousel-new .lib-cpl-art {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--ns-line) !important;
+  box-shadow: none !important;
+}
+#view-library #libPlaylistsCarousel .lib-cpl-new-plus {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ns-accent) 20%, transparent);
+  color: var(--ns-accent);
+}
+
+/* Song rows: full-width, round cover, never a square card. */
+#view-library .lib-song-grid,
+#view-search .lib-song-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+  width: 100% !important;
+}
+#view-library .lib-song-card,
+#view-search .lib-song-card {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 76px !important;
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+  padding: 10px 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--ns-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+#view-library .lib-song-card:last-child,
+#view-search .lib-song-card:last-child { border-bottom: 0 !important; }
+#view-library .lib-song-card:hover,
+#view-search .lib-song-card:hover { background: transparent !important; transform: none !important; }
+#view-library .lib-sc-art,
+#view-search .lib-sc-art {
+  flex: 0 0 56px !important;
+  width: 56px !important;
+  height: 56px !important;
+  overflow: hidden;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background: var(--ns-card) !important;
+}
+#view-library .lib-sc-info,
+#view-search .lib-sc-info { flex: 1 1 auto !important; min-width: 0 !important; }
+#view-library .lib-sc-title,
+#view-search .lib-sc-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: var(--ns-text) !important;
+}
+#view-library .lib-sc-artist,
+#view-search .lib-sc-artist { margin-top: 3px !important; font-size: 12px !important; color: var(--ns-sub) !important; }
+#view-library .lib-sort-btn,
+#view-library .lib-load-more {
+  border: 1px solid var(--ns-line) !important;
+  border-radius: 999px !important;
+  background: var(--ns-card) !important;
+  color: var(--ns-sub) !important;
+}
+
+/* Playlists tab reads like the reference list. */
+#view-library #libTabPlaylists .lib-playlist-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+}
+#view-library #libTabPlaylists .lib-pl-card {
+  display: flex !important;
+  align-items: center !important;
+  gap: 14px !important;
+  padding: 11px 0 !important;
+  border-bottom: 1px solid var(--ns-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+#view-library #libTabPlaylists .lib-pl-card:last-child { border-bottom: 0 !important; }
+#view-library #libTabPlaylists .lib-pl-art {
+  flex: 0 0 56px !important;
+  width: 56px !important;
+  height: 56px !important;
+  overflow: hidden;
+  border-radius: 50% !important;
+  background: var(--ns-card) !important;
+}
+#view-library #libTabPlaylists .lib-pl-name {
+  margin: 0 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  color: var(--ns-text) !important;
+}
+#view-library #libTabPlaylists .lib-pl-count { margin-top: 3px !important; font-size: 12px !important; color: var(--ns-sub) !important; }
+#view-library #libTabPlaylists .lib-pl-new .lib-pl-art {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--ns-line) !important;
+}
+#view-library #libTabPlaylists .lib-pl-new-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ns-accent) 20%, transparent);
+  color: var(--ns-accent);
+}
+
+/* Album and artist tabs keep the same cover language. */
+#view-library .lib-album-grid { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 20px 14px !important; }
+#view-library .lib-album-grid .lib-alb-art { width: 100% !important; aspect-ratio: 1 / 1 !important; overflow: hidden; border: 0 !important; border-radius: 20px !important; background: var(--ns-card); }
+#view-library .lib-alb-name { margin-top: 9px !important; font-size: 13px !important; font-weight: 600 !important; color: var(--ns-text) !important; }
+#view-library .lib-alb-artist { font-size: 11px !important; color: var(--ns-sub) !important; }
+#view-library .lib-artist-grid { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important; gap: 18px 12px !important; }
+#view-library .lib-art-photo { width: 100% !important; aspect-ratio: 1 / 1 !important; overflow: hidden; border: 2px solid var(--ns-line) !important; border-radius: 50% !important; background: var(--ns-card); }
+#view-library .lib-art-name { margin-top: 7px !important; font-size: 11.5px !important; color: var(--ns-text) !important; text-align: center; }
+
+/* ---- Search ------------------------------------------------------------ */
+#view-search .sm-mast { padding: 0 !important; }
+#view-search .sm-mast-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+#view-search .sm-wordmark {
+  font-size: clamp(2rem, 8vw, 2.5rem) !important;
+  line-height: 1 !important;
+  font-weight: 600 !important;
+  letter-spacing: -.045em !important;
+  color: var(--ns-head) !important;
+}
+#view-search .sm-count { padding: 0 0 4px !important; border: 0 !important; background: transparent !important; color: var(--ns-sub) !important; font-size: 11px !important; }
+#view-search .sm-hint { display: none !important; }
+#view-search .s-bar-wrap { margin-top: 18px; }
+#view-search .s-bar { position: relative; }
+#view-search .search-field {
+  width: 100%;
+  height: 52px;
+  padding: 0 18px !important;
+  border: 1px solid var(--ns-line) !important;
+  border-radius: 16px !important;
+  background: var(--ns-card) !important;
+  color: var(--ns-text) !important;
+  font-family: inherit;
+  font-size: 13px !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+#view-search .search-field::placeholder { color: var(--ns-faint) !important; }
+#view-search .search-field:focus { border-color: color-mix(in srgb, var(--ns-accent) 55%, transparent) !important; }
+#view-search .lib-section { margin-top: 24px !important; }
+#view-search .lib-section-head { margin: 0 0 13px !important; padding: 0 !important; }
+#view-search .lib-section-title { font-size: 19px !important; font-weight: 600 !important; color: var(--ns-head) !important; }
+#view-search .lib-section-link,
+#view-search .lib-section-count { margin-left: auto; font-size: 11px !important; color: var(--ns-sub) !important; }
+#view-search .s-top { background: var(--ns-card) !important; border: 1px solid var(--ns-line) !important; border-radius: 20px !important; box-shadow: none !important; }
+#view-search .s-top-title { color: var(--ns-head) !important; }
+#view-search .s-top-label, #view-search .s-top-sub { color: var(--ns-sub) !important; }
+#view-search .s-top-play { background: var(--ns-accent) !important; color: var(--ns-on-accent) !important; border: 0 !important; }
+#view-search .s-chip {
+  border: 1px solid var(--ns-line) !important;
+  border-radius: 999px !important;
+  background: var(--ns-card) !important;
+  color: var(--ns-text) !important;
+}
+#view-search .s-empty-title { color: var(--ns-head) !important; }
+#view-search .s-empty-sub { color: var(--ns-sub) !important; }
+
+/* The old mobile library turns every collection into a horizontal card deck.
+   These overrides restore real vertical navigation inside the Library. */
+#view-library .lib-song-grid,
+#view-search .lib-song-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  gap: 0 !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+#view-library .lib-song-grid .lib-song-card,
+#view-search .lib-song-grid .lib-song-card {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 76px !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 14px !important;
+  padding: 10px 0 !important;
+  border: 0 !important;
+  border-bottom: 1px solid var(--ns-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+#view-library .lib-song-grid .lib-sc-art,
+#view-search .lib-song-grid .lib-sc-art {
+  flex: 0 0 56px !important;
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 50% !important;
+  border: 0 !important;
+}
+#view-library .lib-song-grid .lib-sc-info,
+#view-search .lib-song-grid .lib-sc-info {
+  flex: 1 1 auto !important;
+  display: block !important;
+  min-width: 0 !important;
+  padding-top: 0 !important;
+}
+#view-library .lib-song-grid .lib-sc-title,
+#view-search .lib-song-grid .lib-sc-title { font-size: 14px !important; font-weight: 600 !important; }
+#view-library .lib-song-grid .lib-sc-artist,
+#view-search .lib-song-grid .lib-sc-artist { margin-top: 3px !important; font-size: 12px !important; }
+
+#view-library .lib-album-grid,
+#view-library .lib-artist-grid {
+  display: grid !important;
+  flex-direction: unset !important;
+  flex-wrap: wrap !important;
+  gap: 20px 14px !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+#view-library .lib-album-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+#view-library .lib-artist-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+#view-library .lib-album-grid .lib-alb-card,
+#view-library .lib-artist-grid .lib-art-card {
+  flex: 0 1 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+#view-library .lib-album-grid .lib-alb-art {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 20px !important;
+}
+#view-library .lib-artist-grid .lib-art-photo {
+  width: 100% !important;
+  height: auto !important;
+  aspect-ratio: 1 / 1 !important;
+  border-radius: 50% !important;
+}
+
+#view-library #libTabPlaylists .lib-playlist-grid {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  gap: 0 !important;
+  overflow: visible !important;
+  padding: 0 !important;
+  -webkit-mask-image: none !important;
+  mask-image: none !important;
+}
+#view-library #libTabPlaylists .lib-pl-card {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 14px !important;
+  padding: 11px 0 !important;
+  border-bottom: 1px solid var(--ns-line) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+#view-library #libTabPlaylists .lib-pl-art {
+  flex: 0 0 56px !important;
+  width: 56px !important;
+  height: 56px !important;
+  overflow: hidden !important;
+  border-radius: 50% !important;
+}
+#view-library #libTabPlaylists .lib-pl-art > * { border-radius: inherit; }
+#view-library #libTabPlaylists .lib-pl-new .lib-pl-art {
+  display: grid !important;
+  place-items: center !important;
+}
+
+/* Home's recently played is a list here, not a horizontal 132px deck. */
+#view-home .hm-block:has(#recentRow) .hm-index {
+  display: flex !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  overflow: visible !important;
+}
+#view-home .hm-block:has(#recentRow) .hm-index > .hm-row {
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 14px !important;
+  padding: 10px 0 !important;
+}
+#view-home .hm-index .hm-row-art {
+  flex: 0 0 56px !important;
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 50% !important;
+  border: 0 !important;
+}
+#view-home .hm-index .hm-row-text { padding-top: 0 !important; }
+
+@media (min-width: 900px) {
+  #view-home, #view-search { padding-top: 34px !important; }
+  #view-library { padding-top: 30px !important; }
+  #view-home .hm-hero-rail #heroCard { aspect-ratio: 2.05 / 1 !important; }
+  #view-library .lib-album-grid { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  #view-library .lib-artist-grid { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
+}
+
+/* ==========================================================================
+   STRICT MONOCHROME ENFORCEMENT
+   The legacy themes still carry warm/dark tokens, hardcoded hover colours and
+   cover-derived gradients. These final rules make the whole shell resolve to
+   neutral black / white / charcoal in every state.
+   ========================================================================== */
+html[data-theme="dark"] {
+  --base-top: #0c0c0e;
+  --base-mid: #0a0a0c;
+  --base-bottom: #070708;
+  --app-canvas: #0c0c0e;
+  --app-canvas-flat: #0c0c0e;
+  --edge-fade: #0c0c0e;
+  --status-tint: #0c0c0e;
+  --status-tone: #0c0c0e;
+  --bg: #0c0c0e;
+  --surface: #17171a;
+  --surface-2: #212125;
+  --ink: #f5f5f6;
+  --ink-dim: rgba(255, 255, 255, .72);
+  --ink-faint: rgba(255, 255, 255, .55);
+  --text: #f5f5f6;
+  --muted: #a0a0a2;
+  --accent: #ffffff;
+  --accent-2: #d0d0d4;
+  --accent-soft: rgba(255, 255, 255, .12);
+  --brass: #ffffff;
+  --chrome: 20, 20, 22;
+  --base-mid-rgb: 12, 12, 14;
+  --card-border: rgba(255, 255, 255, .14);
+  --glass: rgba(255, 255, 255, .055);
+  --glass-strong: rgba(255, 255, 255, .10);
+  --glass-border: rgba(255, 255, 255, .15);
+  --chrome-border: rgba(255, 255, 255, .17);
+}
+html[data-theme="light"] {
+  --base-top: #ffffff;
+  --base-mid: #ffffff;
+  --base-bottom: #f3f3f5;
+  --app-canvas: #ffffff;
+  --app-canvas-flat: #ffffff;
+  --edge-fade: #ffffff;
+  --status-tint: #ffffff;
+  --status-tone: #ffffff;
+  --bg: #ffffff;
+  --surface: #f5f5f6;
+  --surface-2: #ececee;
+  --ink: #111113;
+  --ink-dim: rgba(17, 17, 19, .66);
+  --ink-faint: rgba(17, 17, 19, .50);
+  --text: #111113;
+  --muted: #6d6d6f;
+  --accent: #111113;
+  --accent-2: #3a3a3c;
+  --accent-soft: rgba(0, 0, 0, .07);
+  --brass: #111113;
+  --chrome: 255, 255, 255;
+  --base-mid-rgb: 255, 255, 255;
+  --card-border: rgba(17, 17, 19, .12);
+  --glass: rgba(255, 255, 255, .60);
+  --glass-strong: rgba(255, 255, 255, .82);
+  --glass-border: rgba(17, 17, 19, .12);
+  --chrome-border: rgba(17, 17, 19, .12);
+}
+html { scrollbar-color: #707072 transparent; }
+
+/* Primary controls that sit on the accent surface need readable ink in BOTH
+   themes, because dark mode's accent is white and light mode's is black. */
+#view-home .hm-wordmark svg,
+.logo .mark,
+html[data-theme="dark"] #view-home .hm-wordmark svg,
+html[data-theme="dark"] .logo .mark,
+html[data-theme="light"] #view-home .hm-wordmark svg,
+html[data-theme="light"] .logo .mark {
+  background: var(--mono-accent) !important;
+  color: var(--mono-on-accent) !important;
+}
+#view-home .hm-tools .icon-btn.active {
+  background: var(--mono-accent) !important;
+  color: var(--mono-on-accent) !important;
+}
+
+/* Album tab: a real empty state, never a blank grid under a heading. */
+.lib-empty-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  padding: 24px 18px;
+  border: 1px dashed var(--ns-line);
+  border-radius: 18px;
+  color: var(--ns-sub);
+}
+.lib-empty-state strong {
+  color: var(--ns-head);
+  font-size: 15px;
+  font-weight: 600;
+}
+.lib-empty-state span { font-size: 12.5px; line-height: 1.5; }
+
+/* Monochrome focus treatment for every keyboard-reachable control. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--mono-accent) !important;
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   NAV: NO SHEEN
+   The active indicator is a flat translucent pill. The travelling white sweep,
+   its wake and the flight animation's sheen are removed; the indicator still
+   slides between tabs.
+   ========================================================================== */
+#navPill .nav-glider-fill::before,
+#navPill .nav-glider-fill::after {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  animation: none !important;
+  opacity: 0 !important;
+}
+#navPill .nav-glider-trail {
+  display: none !important;
+  background: none !important;
+  animation: none !important;
+}
+#navPill.travelling .nav-glider-fill,
+#navPill.travelling .nav-glider-fill::after {
+  animation: none !important;
+}
+#navPill .nav-glider-fill {
+  background: rgba(255, 255, 255, .10) !important;
+  box-shadow: none !important;
+}
+html[data-theme="light"] #navPill .nav-glider-fill {
+  background: rgba(17, 17, 19, .07) !important;
+  box-shadow: none !important;
+}
+
+/* Search: no box. The field is a plain text line, not a bordered plate. */
+#view-search .s-bar-wrap { margin-top: 8px !important; }
+#view-search .s-bar .search-field,
+#view-search .s-bar .search-field:focus,
+#view-search .s-bar .search-field:focus-visible {
+  height: 40px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: 0 !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+#view-search .s-bar .search-field::placeholder { color: var(--ns-faint) !important; }
+
+/* ==========================================================================
+   CONSISTENCY PASS
+   ========================================================================== */
+
+/* One mark in both headers: the filled circular M used on Home. */
+#view-home .hm-avatar,
+#view-library .lib-header-logo {
+  width: 46px !important;
+  height: 46px !important;
+  flex: 0 0 46px !important;
+  display: grid !important;
+  place-items: center !important;
+  border-radius: 50% !important;
+  border: 1px solid rgba(255, 255, 255, .20) !important;
+  background: #111113 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+#view-home .hm-avatar svg,
+#view-library .lib-header-logo svg { width: 23px !important; height: 23px !important; color: #ffffff !important; }
+html[data-theme="light"] #view-home .hm-avatar,
+html[data-theme="light"] #view-library .lib-header-logo {
+  border-color: rgba(17, 17, 19, .16) !important;
+  background: #111113 !important;
+  color: #ffffff !important;
+}
+
+/* The sort control is text, not a second search field. */
+#view-library .lib-sort-btn {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 2px !important;
+  color: var(--ns-sub) !important;
+  font-size: 12px !important;
+}
+#view-library .lib-sort-btn svg { opacity: .7; }
+
+/* New playlist is a real artwork tile, not a dashed empty rectangle. */
+#view-library #libTabPlaylists .lib-pl-new .lib-pl-art {
+  position: relative;
+  display: grid !important;
+  place-items: center !important;
+  border: 0 !important;
+  background: linear-gradient(145deg, #3a3a3c 0%, #17171a 58%, #111113 100%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18) !important;
+}
+#view-library #libTabPlaylists .lib-pl-new .lib-pl-art::before,
+#view-library #libTabPlaylists .lib-pl-new .lib-pl-art::after {
+  content: '';
+  position: absolute;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  pointer-events: none;
+}
+#view-library #libTabPlaylists .lib-pl-new .lib-pl-art::before {
+  inset: 10px 8px 8px 10px;
+  transform: rotate(-7deg);
+}
+#view-library #libTabPlaylists .lib-pl-new .lib-pl-art::after {
+  inset: 8px 10px 10px 8px;
+  transform: rotate(6deg);
+  border-color: rgba(255, 255, 255, .10);
+}
+#view-library #libTabPlaylists .lib-pl-new-icon {
+  position: relative;
+  z-index: 1;
+  background: rgba(255, 255, 255, .16) !important;
+  border: 1px solid rgba(255, 255, 255, .24);
+  color: #ffffff !important;
+  -webkit-backdrop-filter: blur(8px) saturate(160%);
+  backdrop-filter: blur(8px) saturate(160%);
+}
+#view-library #libTabPlaylists .lib-pl-art .gn-mosaic,
+#view-library #libTabPlaylists .lib-pl-art .gn-mosaic .gn-cell { width: 100%; height: 100%; }
+
+/* One liquid-glass material for every menu surface. The menus had different
+   near-opaque fills and 2.2px blurs; this makes the whole set read as one pane
+   of the same glass, with the page still visible through it. */
+.lib-overflow-menu,
+.lib-sort-sheet,
+.lib-context-menu,
+.lib-pl-menu,
+.sheet,
+.pl-sheet,
+.eq-sheet,
+.mix-sheet,
+.off-sheet,
+.rn-sheet,
+.mic-panel {
+  background-color: transparent !important;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, .04) 52%, rgba(255, 255, 255, 0) 82%),
+    linear-gradient(0deg, rgba(var(--chrome), .72), rgba(var(--chrome), .72)),
+    linear-gradient(145deg, rgba(255, 255, 255, .46) 0%, rgba(255, 255, 255, .06) 46%, rgba(255, 255, 255, .28) 100%) !important;
+  border: 1px solid var(--ns-line) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(185%) !important;
+  backdrop-filter: blur(24px) saturate(185%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .42),
+    inset 0 -18px 30px -22px rgba(0, 0, 0, .28),
+    0 24px 60px -26px rgba(0, 0, 0, .50) !important;
+}
+html[data-theme="light"] .lib-overflow-menu,
+html[data-theme="light"] .lib-sort-sheet,
+html[data-theme="light"] .lib-context-menu,
+html[data-theme="light"] .lib-pl-menu,
+html[data-theme="light"] .sheet,
+html[data-theme="light"] .pl-sheet,
+html[data-theme="light"] .eq-sheet,
+html[data-theme="light"] .mix-sheet,
+html[data-theme="light"] .off-sheet,
+html[data-theme="light"] .rn-sheet,
+html[data-theme="light"] .mic-panel {
+  border-color: rgba(17, 17, 19, .12) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .85),
+    inset 0 -18px 30px -22px rgba(17, 17, 19, .10),
+    0 24px 60px -28px rgba(17, 17, 19, .28) !important;
+}
+
+/* The dashed box belonged to the New playlist card, not its artwork. */
+#view-library #libTabPlaylists .lib-pl-new,
+#view-library #libTabPlaylists .lib-pl-new:hover {
+  border: 0 !important;
+  border-top: 0 !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
+  border-left: 0 !important;
+  border-style: none !important;
+  outline: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* Dark mode: the nav's specular rim was doubling its border and reading as a
+   bright wire outline. Keep the glass fill, drop the lit rim. */
+html[data-theme="dark"] #navPill {
+  border-color: transparent !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .05),
+    0 8px 24px rgba(0, 0, 0, .28) !important;
+}
+html[data-theme="dark"] #navPill > .lg-edge { display: none !important; }
+html[data-theme="dark"] #navPill .nav-glider-fill {
+  background: rgba(255, 255, 255, .07) !important;
+  box-shadow: none !important;
+}
+
+
+/* Symmetric frost: the old diagonal highlight made every dark menu brighter on
+   one side. The light now falls straight down the centre, and the fill sits a
+   little lower so the blur reads evenly instead of as a grey plate. */
+.lib-overflow-menu,
+.lib-sort-sheet,
+.lib-context-menu,
+.lib-pl-menu,
+.sheet,
+.pl-sheet,
+.eq-sheet,
+.mix-sheet,
+.off-sheet,
+.rn-sheet,
+.mic-panel {
+  background-color: rgba(18, 19, 23, .64) !important;
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, .16) 0%, rgba(255, 255, 255, .05) 38%, rgba(255, 255, 255, 0) 68%),
+    linear-gradient(180deg, rgba(255, 255, 255, .07) 0%, rgba(255, 255, 255, .01) 48%, rgba(255, 255, 255, .04) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, .12) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(140%) !important;
+  backdrop-filter: blur(20px) saturate(140%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    0 24px 60px -28px rgba(0, 0, 0, .55) !important;
+}
+html[data-theme="light"] .lib-overflow-menu,
+html[data-theme="light"] .lib-sort-sheet,
+html[data-theme="light"] .lib-context-menu,
+html[data-theme="light"] .lib-pl-menu,
+html[data-theme="light"] .sheet,
+html[data-theme="light"] .pl-sheet,
+html[data-theme="light"] .eq-sheet,
+html[data-theme="light"] .mix-sheet,
+html[data-theme="light"] .off-sheet,
+html[data-theme="light"] .rn-sheet,
+html[data-theme="light"] .mic-panel {
+  background-color: rgba(255, 255, 255, .66) !important;
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, .92) 0%, rgba(255, 255, 255, .30) 38%, rgba(255, 255, 255, .12) 68%),
+    linear-gradient(180deg, rgba(255, 255, 255, .40) 0%, rgba(255, 255, 255, .10) 48%, rgba(255, 255, 255, .22) 100%) !important;
+  border-color: rgba(17, 17, 19, .10) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .92),
+    0 24px 60px -28px rgba(17, 17, 19, .30) !important;
+}
+
+/* Dark glass, take two: no lit rim, no near-opaque slate. The dock and menus
+   now let the sleeve and page colour through the blur. */
+html[data-theme="dark"] .mini-player,
+html[data-theme="dark"] .mini-player:active {
+  background: rgba(18, 19, 23, .56) !important;
+  border-color: transparent !important;
+  -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+  backdrop-filter: blur(24px) saturate(150%) !important;
+  box-shadow: 0 12px 34px -18px rgba(0, 0, 0, .68) !important;
+}
+html[data-theme="dark"] .lib-overflow-menu,
+html[data-theme="dark"] .lib-sort-sheet,
+html[data-theme="dark"] .lib-context-menu,
+html[data-theme="dark"] .lib-pl-menu,
+html[data-theme="dark"] .sheet,
+html[data-theme="dark"] .pl-sheet,
+html[data-theme="dark"] .eq-sheet,
+html[data-theme="dark"] .mix-sheet,
+html[data-theme="dark"] .off-sheet,
+html[data-theme="dark"] .rn-sheet,
+html[data-theme="dark"] .mic-panel {
+  background-color: rgba(16, 17, 21, .34) !important;
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, .14) 0%, rgba(255, 255, 255, .035) 42%, rgba(255, 255, 255, 0) 70%) !important;
+  border-color: rgba(255, 255, 255, .06) !important;
+  -webkit-backdrop-filter: blur(32px) saturate(165%) !important;
+  backdrop-filter: blur(32px) saturate(165%) !important;
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, .72) !important;
+}
+
+/* The dock is inside .bottom-chrome, whose dark rule is more specific than a
+   plain .mini-player selector. Match it, and drop the specular rim the glass
+   module adds — that was the white hairline around the pill. */
+html[data-theme="dark"] .bottom-chrome .mini-player,
+html[data-theme="dark"] .bottom-chrome .mini-player:active {
+  background-color: rgba(18, 19, 23, .56) !important;
+  border-color: transparent !important;
+  box-shadow: 0 12px 34px -18px rgba(0, 0, 0, .68) !important;
+}
+html[data-theme="dark"] :is(.mini-player, .lib-overflow-menu, .lib-sort-sheet, .lib-context-menu, .lib-pl-menu, .sheet, .pl-sheet, .eq-sheet, .mix-sheet, .off-sheet, .rn-sheet, .mic-panel) > .lg-edge {
+  display: none !important;
+}
+
+/* Phone layouts start well below the top edge. The browser chrome / status
+   area was eating the header at 24px, so give the whole app a real top shelf. */
+@media (max-width: 899px) {
+  #view-home,
+  #view-search,
+  #view-library {
+    padding-top: max(88px, calc(env(safe-area-inset-top, 0px) + 44px)) !important;
+  }
+}
+
+/* Smoother mini-player <-> full player handoff. The old open was a 300ms throw
+   while the overlay faded over 350ms; the close was a flat fade with the pill
+   arriving on the next timeupdate. These share one 460ms beat. */
+@media (max-width: 899px) {
+  .player-overlay {
+    transition: opacity .44s cubic-bezier(.22, .8, .24, 1), background .8s ease;
+  }
+  .player-overlay.closing {
+    transition: opacity .46s cubic-bezier(.45, 0, .8, .35);
+  }
+  .player-overlay.from-pill.opening .player-panel {
+    transform-origin: 50% 100%;
+    animation: npOpenFromPill .46s cubic-bezier(.18, .92, .18, 1) both;
+  }
+  .player-overlay.opening:not(.from-pill) .player-panel {
+    animation: npRise .44s cubic-bezier(.18, .92, .18, 1) both;
+  }
+  .player-overlay.from-pill.opening .player-panel > * {
+    animation: npChildIn .34s cubic-bezier(.2, .8, .24, 1) both;
+  }
+  .player-overlay.from-pill.opening .player-panel > *:nth-child(2) {
+    animation-name: npArtIn;
+    animation-duration: .4s;
+  }
+  .player-overlay.from-pill.opening .player-panel > *:nth-child(n+3) {
+    animation-delay: .06s;
+  }
+
+  .player-overlay.closing .player-panel {
+    transform-origin: 50% 100%;
+    animation: npCloseToPill .46s cubic-bezier(.36, 0, .2, 1) both;
+  }
+  .player-overlay.closing .player-panel > * {
+    animation: npChildOut .26s cubic-bezier(.4, 0, .7, .3) both;
+  }
+  @keyframes npCloseToPill {
+    0%   { opacity: 1; transform: translateY(0) scale(1); border-radius: 0; }
+    58%  { opacity: .92; transform: translateY(6px) scale(.74); border-radius: 18px; }
+    100% { opacity: 0; transform: translateY(10px) scale(.18); border-radius: 26px; }
+  }
+  @keyframes npChildOut {
+    0%   { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(8px); }
+  }
+}
+
+/* Search fields: one clear affordance, not the browser's cancel button plus
+   ours. WebKit keeps painting the native controls even when the field itself
+   has appearance:none, so remove each piece explicitly. */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+}
+#libSearchPanel .lib-search-field:placeholder-shown + #libSearchClear { display: none !important; }
+input[type="search"]::-ms-clear,
+input[type="search"]::-ms-reveal {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* The featured recommendation is the top glass object on Home. The text sits
+   in a floating, centred capsule over the sleeve; the play control is the same
+   material, so neither is a flat chip pasted onto the artwork. */
+#view-home #heroCard .hm-lead-copy {
+  inset: 14px auto auto 50% !important;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 36px);
+  padding: 10px 18px 12px !important;
+  justify-content: center;
+  border-radius: 20px !important;
+  background-color: rgba(16, 17, 21, .34) !important;
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, .14) 0%, rgba(255, 255, 255, .035) 42%, rgba(255, 255, 255, 0) 70%) !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: blur(22px) saturate(150%) !important;
+  backdrop-filter: blur(22px) saturate(150%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .14),
+    0 16px 34px -24px rgba(0, 0, 0, .68) !important;
+}
+#view-home #heroCard .hm-lead-play {
+  background: rgba(16, 17, 21, .38) !important;
+  color: #fff !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
+  backdrop-filter: blur(20px) saturate(150%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .16),
+    0 12px 26px -16px rgba(0, 0, 0, .70) !important;
+}
+
+/* Player top bar: no glass slab. The two controls are the glass objects; the
+   centred "Now playing" label stays plain type over the sleeve. */
+.player-overlay .np-topbar,
+.player-overlay .np-topbar:hover {
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+.player-overlay .np-topbar .drag-handle.np-icon-btn,
+.player-overlay .np-topbar .lyrics-toggle {
+  width: 38px !important;
+  height: 38px !important;
+  border: 0 !important;
+  border-radius: 50% !important;
+  background-color: rgba(255, 255, 255, .16) !important;
+  background-image:
+    radial-gradient(110% 90% at 50% 0%, rgba(255, 255, 255, .28) 0%, rgba(255, 255, 255, .04) 55%, rgba(255, 255, 255, 0) 78%) !important;
+  color: #fff !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .32),
+    0 8px 20px -12px rgba(0, 0, 0, .55) !important;
+}
+.player-overlay .np-topbar .drag-handle.np-icon-btn:hover,
+.player-overlay .np-topbar .lyrics-toggle:hover {
+  background-color: rgba(255, 255, 255, .24) !important;
+}
+
+/* ---- Consistency pass: symmetry + one glass family --------------------- */
+
+/* The dock was 6px from the left edge and 10px from the right. */
+.mini-player { padding: 0 10px !important; }
+
+/* Hero capsule and play button share the same 16px inset. */
+#view-home #heroCard .hm-lead-copy {
+  top: 16px !important;
+  padding: 11px 18px !important;
+  -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+  backdrop-filter: blur(24px) saturate(150%) !important;
+}
+#view-home #heroCard .hm-lead-play {
+  background-color: rgba(255, 255, 255, .16) !important;
+  background-image:
+    radial-gradient(110% 90% at 50% 0%, rgba(255, 255, 255, .30) 0%, rgba(255, 255, 255, .05) 55%, rgba(255, 255, 255, 0) 78%) !important;
+  color: #fff !important;
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .32),
+    0 10px 24px -14px rgba(0, 0, 0, .60) !important;
+}
+
+/* One page-control glass for Home, Library and the search clear buttons. */
+#view-home .hm-tools .icon-btn:not(.active),
+#view-library .lib-icon-btn:not(.active),
+#view-search .s-bar-clear,
+#view-library .lib-search-clear {
+  border-color: rgba(255, 255, 255, .08) !important;
+  background-color: rgba(18, 19, 23, .42) !important;
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, .12) 0%, rgba(255, 255, 255, .025) 50%, rgba(255, 255, 255, 0) 75%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
+  backdrop-filter: blur(20px) saturate(150%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .10),
+    0 8px 20px -18px rgba(0, 0, 0, .55) !important;
+}
+html[data-theme="light"] #view-home .hm-tools .icon-btn:not(.active),
+html[data-theme="light"] #view-library .lib-icon-btn:not(.active),
+html[data-theme="light"] #view-search .s-bar-clear,
+html[data-theme="light"] #view-library .lib-search-clear {
+  border-color: rgba(17, 17, 19, .08) !important;
+  background-color: rgba(255, 255, 255, .60) !important;
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, .95) 0%, rgba(255, 255, 255, .35) 50%, rgba(255, 255, 255, .10) 75%) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .90),
+    0 8px 20px -18px rgba(17, 17, 19, .22) !important;
+}
+#topMenu > .lg-edge { display: none !important; }
+#view-library .lib-header-actions { gap: 9px !important; }
+
+/* The nav now uses the same frost depth as the dock instead of a 6px blur. */
+html[data-theme="dark"] .bottom-chrome .nav-pill {
+  border-color: transparent !important;
+  background: rgba(18, 19, 23, .52) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
+  backdrop-filter: blur(20px) saturate(150%) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .30) !important;
+}
+html[data-theme="light"] .bottom-chrome .nav-pill {
+  border-color: rgba(17, 17, 19, .08) !important;
+  background: rgba(255, 255, 255, .64) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(150%) !important;
+  backdrop-filter: blur(20px) saturate(150%) !important;
+  box-shadow: 0 8px 24px rgba(17, 17, 19, .12) !important;
+}
+
+/* Player transport chips keep their dark hierarchy but get the same frost
+   instead of looking like flat painted circles. */
+.player-overlay .np-dock-row .heart-btn,
+.player-overlay .np-controls .ctrl {
+  -webkit-backdrop-filter: blur(18px) saturate(150%) !important;
+  backdrop-filter: blur(18px) saturate(150%) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12) !important;
+}
+
+/* The capsule is shrink-to-fit; a percentage max-width on the title measures
+   against that shrinking box and wraps short titles onto two lines. */
+#view-home #heroCard .hm-lead-title { max-width: none !important; }
+#view-home #heroCard .hm-lead-copy { min-width: 132px; }
+
+/* Pale sleeves were turning the hero capsule milky and washing out its white
+   type. Keep the blur, but give the artwork glass a darker neutral base so it
+   works over both light and dark covers. */
+#view-home #heroCard .hm-lead-copy {
+  background-color: rgba(10, 11, 14, .50) !important;
+  background-image:
+    radial-gradient(120% 90% at 50% 0%, rgba(255, 255, 255, .18) 0%, rgba(255, 255, 255, .04) 42%, rgba(255, 255, 255, 0) 70%),
+    linear-gradient(180deg, rgba(10, 11, 14, .06), rgba(10, 11, 14, .18)) !important;
+}
+#view-home #heroCard .hm-lead-play {
+  background-color: rgba(10, 11, 14, .46) !important;
+  background-image:
+    radial-gradient(110% 90% at 50% 0%, rgba(255, 255, 255, .18) 0%, rgba(255, 255, 255, .03) 55%, rgba(255, 255, 255, 0) 78%) !important;
+  color: #fff !important;
+}
+
+/* ==========================================================================
+   ONE GLASS MATERIAL
+   The mini-player recipe is now the app standard: a flat translucent fill,
+   24px frost, no lit rim, and one soft drop shadow. Every menu, sheet and the
+   nav read as the same material instead of five near-misses.
+   ========================================================================== */
+html[data-theme="dark"] .lib-overflow-menu,
+html[data-theme="dark"] .lib-sort-sheet,
+html[data-theme="dark"] .lib-context-menu,
+html[data-theme="dark"] .lib-pl-menu,
+html[data-theme="dark"] .sheet,
+html[data-theme="dark"] .pl-sheet,
+html[data-theme="dark"] .eq-sheet,
+html[data-theme="dark"] .mix-sheet,
+html[data-theme="dark"] .off-sheet,
+html[data-theme="dark"] .rn-sheet,
+html[data-theme="dark"] .mic-panel {
+  background-color: rgba(18, 19, 23, .56) !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+  backdrop-filter: blur(24px) saturate(150%) !important;
+  box-shadow: 0 12px 34px -18px rgba(0, 0, 0, .68) !important;
+}
+html[data-theme="light"] .lib-overflow-menu,
+html[data-theme="light"] .lib-sort-sheet,
+html[data-theme="light"] .lib-context-menu,
+html[data-theme="light"] .lib-pl-menu,
+html[data-theme="light"] .sheet,
+html[data-theme="light"] .pl-sheet,
+html[data-theme="light"] .eq-sheet,
+html[data-theme="light"] .mix-sheet,
+html[data-theme="light"] .off-sheet,
+html[data-theme="light"] .rn-sheet,
+html[data-theme="light"] .mic-panel {
+  background-color: rgba(255, 255, 255, .68) !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+  backdrop-filter: blur(24px) saturate(150%) !important;
+  box-shadow: 0 12px 34px -18px rgba(17, 17, 19, .24) !important;
+}
+html[data-theme="dark"] .bottom-chrome .nav-pill {
+  background-color: rgba(18, 19, 23, .56) !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+  backdrop-filter: blur(24px) saturate(150%) !important;
+  box-shadow: 0 12px 34px -18px rgba(0, 0, 0, .68) !important;
+}
+html[data-theme="dark"] #heroCard .hm-lead-copy,
+html[data-theme="dark"] #heroCard .hm-lead-play {
+  background-color: rgba(18, 19, 23, .56) !important;
+  background-image: none !important;
+  border-color: transparent !important;
+  -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+  backdrop-filter: blur(24px) saturate(150%) !important;
+  box-shadow: 0 12px 34px -18px rgba(0, 0, 0, .68) !important;
+}
+
+/* ---- Lyrics sheet (phone) ------------------------------------------------ */
+@media (max-width: 899px) {
+  .player-overlay .player-panel .lyrics {
+    top: 30%;
+    padding: 28px 20px calc(30px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+    border-radius: 28px 28px 0 0;
+    background: rgba(18, 19, 23, .56) !important;
+    -webkit-backdrop-filter: blur(24px) saturate(150%) !important;
+    backdrop-filter: blur(24px) saturate(150%) !important;
+    box-shadow: 0 -18px 50px -30px rgba(0, 0, 0, .72) !important;
+  }
+  .player-overlay .player-panel .lyrics::before {
+    content: "LYRICS";
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: block;
+    width: max-content;
+    margin: -6px auto 18px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .09);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: rgba(255, 255, 255, .58);
+    font-size: .58rem;
+    font-weight: 600;
+    letter-spacing: .17em;
+    line-height: 1;
+  }
+  .player-overlay .player-panel .lyrics .line.active {
+    color: #fff;
+    text-shadow: 0 0 24px rgba(255, 255, 255, .26);
+  }
+  .player-overlay .player-panel .lyrics .line.near {
+    color: rgba(255, 255, 255, .66);
+  }
+  .player-overlay .player-panel .lyric-resume {
+    background: rgba(18, 19, 23, .55);
+    border-color: transparent;
+    -webkit-backdrop-filter: blur(18px) saturate(150%);
+    backdrop-filter: blur(18px) saturate(150%);
+  }
+}
+
+/* Lyrics, refined: a floating glass card rather than a full-bleed slab. The
+   cover stays visible around all four edges, and the active line gets a soft
+   glass band instead of only a colour change. */
+@media (max-width: 899px) {
+  .player-overlay .player-panel .lyrics {
+    top: 32% !important;
+    left: 10px !important;
+    right: 10px !important;
+    bottom: calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+    border-radius: 26px !important;
+    padding: 26px 18px calc(26px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+    background: rgba(18, 19, 23, .52) !important;
+    -webkit-backdrop-filter: blur(26px) saturate(155%) !important;
+    backdrop-filter: blur(26px) saturate(155%) !important;
+    box-shadow: 0 22px 60px -30px rgba(0, 0, 0, .75) !important;
+    -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 90%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0, #000 90%, transparent 100%);
+  }
+  .player-overlay .player-panel .lyrics .line {
+    border-radius: 12px;
+    transition: color .46s var(--ease-out), background-color .4s var(--ease-out), transform .5s cubic-bezier(.2, 1.35, .4, 1);
+  }
+  .player-overlay .player-panel .lyrics .line.active {
+    background-color: rgba(255, 255, 255, .075);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .055);
+    text-shadow: 0 0 26px rgba(255, 255, 255, .30);
+  }
+}
+
+/* ==========================================================================
+   FINAL GLASS CONTRACT
+   Every glass surface is one of two fills by theme, one blur, one shadow,
+   no border and no inset rim. Shape (pill/circle/card) is the only variation.
+   ========================================================================== */
+:root {
+  --app-glass-bg: rgba(255, 255, 255, .68);
+  --app-glass-shadow: 0 12px 34px -18px rgba(17, 17, 19, .24);
+  --app-glass-dark-bg: rgba(18, 19, 23, .56);
+  --app-glass-dark-shadow: 0 12px 34px -18px rgba(0, 0, 0, .68);
+  --app-glass-filter: blur(24px) saturate(150%);
+  --app-glass-radius: 22px;
+}
+html[data-theme="dark"] {
+  --app-glass-bg: rgba(18, 19, 23, .56);
+  --app-glass-shadow: 0 12px 34px -18px rgba(0, 0, 0, .68);
+}
+
+/* Themed surfaces: nav, dock, menus, sheets, list headers, picker footer,
+   library tabs and the import banner. */
+html[data-theme="light"] #navPill,
+html[data-theme="dark"] #navPill,
+html[data-theme="light"] .bottom-chrome .mini-player,
+html[data-theme="dark"] .bottom-chrome .mini-player,
+html[data-theme="light"] .lib-overflow-menu,
+html[data-theme="dark"] .lib-overflow-menu,
+html[data-theme="light"] .lib-sort-sheet,
+html[data-theme="dark"] .lib-sort-sheet,
+html[data-theme="light"] .lib-context-menu,
+html[data-theme="dark"] .lib-context-menu,
+html[data-theme="light"] .lib-pl-menu,
+html[data-theme="dark"] .lib-pl-menu,
+html[data-theme="light"] .sheet,
+html[data-theme="dark"] .sheet,
+html[data-theme="light"] .pl-sheet,
+html[data-theme="dark"] .pl-sheet,
+html[data-theme="light"] .eq-sheet,
+html[data-theme="dark"] .eq-sheet,
+html[data-theme="light"] .mix-sheet,
+html[data-theme="dark"] .mix-sheet,
+html[data-theme="light"] .off-sheet,
+html[data-theme="dark"] .off-sheet,
+html[data-theme="light"] .rn-sheet,
+html[data-theme="dark"] .rn-sheet,
+html[data-theme="light"] .mic-panel,
+html[data-theme="dark"] .mic-panel,
+html[data-theme="light"] #libTabs,
+html[data-theme="dark"] #libTabs,
+html[data-theme="light"] .lib-pl-detail-head,
+html[data-theme="dark"] .lib-pl-detail-head,
+html[data-theme="light"] .lib-pick-foot,
+html[data-theme="dark"] .lib-pick-foot,
+html[data-theme="light"] .mini-banner,
+html[data-theme="dark"] .mini-banner {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+}
+html[data-theme="light"] .lib-overflow-menu,
+html[data-theme="dark"] .lib-overflow-menu,
+html[data-theme="light"] .lib-sort-sheet,
+html[data-theme="dark"] .lib-sort-sheet,
+html[data-theme="light"] .lib-context-menu,
+html[data-theme="dark"] .lib-context-menu,
+html[data-theme="light"] .lib-pl-menu,
+html[data-theme="dark"] .lib-pl-menu,
+html[data-theme="light"] .sheet,
+html[data-theme="dark"] .sheet,
+html[data-theme="light"] .pl-sheet,
+html[data-theme="dark"] .pl-sheet,
+html[data-theme="light"] .eq-sheet,
+html[data-theme="dark"] .eq-sheet,
+html[data-theme="light"] .mix-sheet,
+html[data-theme="dark"] .mix-sheet,
+html[data-theme="light"] .off-sheet,
+html[data-theme="dark"] .off-sheet,
+html[data-theme="light"] .rn-sheet,
+html[data-theme="dark"] .rn-sheet,
+html[data-theme="light"] .mic-panel,
+html[data-theme="dark"] .mic-panel {
+  border-radius: var(--app-glass-radius) !important;
+}
+
+/* Cover-tinted surfaces always use the dark fill, in both app themes. */
+#heroCard .hm-lead-copy,
+#heroCard .hm-lead-play,
+.player-overlay .player-panel .lyrics,
+.player-overlay .player-panel .lyrics::before,
+.player-overlay .player-panel .lyric-resume {
+  background-color: var(--app-glass-dark-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-dark-shadow) !important;
+}
+#heroCard .hm-lead-copy { border-radius: var(--app-glass-radius) !important; }
+.player-overlay .player-panel .lyrics { border-radius: var(--app-glass-radius) !important; }
+.player-overlay .player-panel .lyrics::before,
+.player-overlay .player-panel .lyric-resume { border-radius: 999px !important; }
+
+/* No glass module rim on any surface, in either theme. */
+:is(#navPill, .mini-player, .lib-overflow-menu, .lib-sort-sheet, .lib-context-menu,
+    .lib-pl-menu, .sheet, .pl-sheet, .eq-sheet, .mix-sheet, .off-sheet,
+    .rn-sheet, .mic-panel, .lib-tabs, .lib-pl-detail-head, .lib-pick-foot,
+    .mini-banner) > .lg-edge {
+  display: none !important;
+}
+
+/* Equal outer spacing for floating sheets and cards. */
+@media (max-width: 899px) {
+  .lib-sort-sheet,
+  .pl-sheet,
+  .eq-sheet,
+  .mix-sheet,
+  .off-sheet,
+  .rn-sheet,
+  .mic-panel {
+    left: max(10px, env(safe-area-inset-left)) !important;
+    right: max(10px, env(safe-area-inset-right)) !important;
+  }
+}
+@media (max-width: 899px) {
+  .lib-pick-foot {
+    left: max(10px, env(safe-area-inset-left)) !important;
+    right: max(10px, env(safe-area-inset-right)) !important;
+    bottom: calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+    border-radius: var(--app-glass-radius) !important;
+  }
+}
+
+/* The recommendation has an old high-specificity recipe; match its specificity
+   so it joins the contract instead of keeping its inset highlight and 20px radius. */
+#view-home #heroCard .hm-lead-copy,
+#view-home #heroCard .hm-lead-play {
+  background-color: var(--app-glass-dark-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-dark-shadow) !important;
+}
+#view-home #heroCard .hm-lead-copy { border-radius: var(--app-glass-radius) !important; }
+#view-home #heroCard .hm-lead-play { border-radius: 50% !important; }
+#libTabs { border-radius: 999px !important; }
+#view-library #libTabs { border-radius: 999px !important; }
+
+/* Desktop dock keeps the same card radius as every other glass panel. */
+@media (min-width: 900px) {
+  .bottom-chrome .mini-player { border-radius: var(--app-glass-radius) !important; }
+}
+.lib-pick-foot { border-radius: var(--app-glass-radius) !important; }
+
+/* The sung line is a highlight inside the lyrics card, not a second glass
+   layer: a flat tint with no inset hairline and no doubled shadow. */
+.player-overlay .player-panel .lyrics .line.active {
+  background-color: rgba(255, 255, 255, .07) !important;
+  box-shadow: none !important;
+}
+
+/* Circular header actions are glass too: same fill/filter/shadow, no hairline. */
+#view-home .hm-tools .icon-btn,
+#view-home .hm-theme,
+#view-library .lib-icon-btn {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+  border-radius: 50% !important;
+}
+
+/* Keep the picker action bar floating and equally inset on every width. */
+.lib-pick-foot {
+  left: max(10px, env(safe-area-inset-left)) !important;
+  right: max(10px, env(safe-area-inset-right)) !important;
+  bottom: calc(10px + var(--safe-bottom, env(safe-area-inset-bottom, 0px))) !important;
+}
+
+/* Header actions: the old :not(.active) rule is more specific, so match it. */
+html #view-home .hm-tools .icon-btn:not(.active),
+html #view-home .hm-theme:not(.active),
+html #view-library .lib-icon-btn:not(.active) {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+}
+:is(#view-home .hm-tools .icon-btn, #view-home .hm-theme, #view-library .lib-icon-btn) > .lg-edge {
+  display: none !important;
+}
+
+/* Theme-qualified header buttons: the retiring rules include the theme
+   attribute, so match that specificity to retire their fill and inset rim. */
+html[data-theme="light"] #view-home .hm-tools .icon-btn:not(.active),
+html[data-theme="dark"] #view-home .hm-tools .icon-btn:not(.active),
+html[data-theme="light"] #view-home .hm-theme:not(.active),
+html[data-theme="dark"] #view-home .hm-theme:not(.active),
+html[data-theme="light"] #view-library .lib-icon-btn:not(.active),
+html[data-theme="dark"] #view-library .lib-icon-btn:not(.active),
+html[data-theme="light"] #view-search .s-bar-clear,
+html[data-theme="dark"] #view-search .s-bar-clear,
+html[data-theme="light"] #view-library .lib-search-clear,
+html[data-theme="dark"] #view-library .lib-search-clear {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+}
+
+/* Library header actions, detail header and desktop rail join the same glass. */
+html[data-theme="light"] .lib-pl-play-all,
+html[data-theme="dark"] .lib-pl-play-all {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+}
+html[data-theme="light"] .lib-pl-detail-bar,
+html[data-theme="dark"] .lib-pl-detail-bar {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+}
+html[data-theme="light"] aside.sidebar,
+html[data-theme="dark"] aside.sidebar {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+}
+
+/* Carousel clones are the same recommendation surface while the rail loops. */
+html #view-home .hm-hero-rail .hm-lead-copy {
+  background-color: var(--app-glass-dark-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  border-radius: var(--app-glass-radius) !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-dark-shadow) !important;
+}
+html #view-home .hm-hero-rail .hm-lead-play {
+  background-color: var(--app-glass-dark-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-dark-shadow) !important;
+}
+html aside.sidebar { border-radius: 0 var(--app-glass-radius) var(--app-glass-radius) 0 !important; }
+
+/* Remaining transparent frosts drop from 155% to the shared 150% saturation;
+   opaque content chips keep their own paint and are not glass panels. */
+.hm-row,
+#heroCard,
+.hm-lead.cloned,
+#libSearchInput.lib-search-field,
+#searchTop.s-top {
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+}
+
+/* No specular module rim on any secondary glass control either. */
+:is(.lib-pl-play-all, .lib-search-clear, #view-search .s-bar-clear,
+    .player-overlay .heart-btn, .player-overlay .ctrl, .player-overlay .play-toggle,
+    #playerBar, aside.sidebar, .lib-pl-detail-bar) > .lg-edge {
+  display: none !important;
+}
+
+/* Search/list frost, empty-state glass and the playlist's secondary action
+   were still the last live surfaces off the shared recipe. */
+.lib-song-card,
+#view-search .s-top,
+#view-search .s-empty-icon,
+.lib-pl-shuffle {
+  background-color: var(--app-glass-bg) !important;
+  background-image: none !important;
+  border: 0 !important;
+  -webkit-backdrop-filter: var(--app-glass-filter) !important;
+  backdrop-filter: var(--app-glass-filter) !important;
+  box-shadow: var(--app-glass-shadow) !important;
+}
+.lib-song-card {
+  background-color: transparent !important;
+  box-shadow: none !important;
+}
+#view-search .s-top { border-radius: var(--app-glass-radius) !important; }
+#view-search .s-empty-icon { border-radius: 50% !important; }
+.lib-pl-shuffle { border-radius: 999px !important; }
+:is(#view-search .s-top, #view-search .s-empty-icon, .lib-pl-shuffle) > .lg-edge {
+  display: none !important;
+}
+
+/* ---- Closed mini-player: one clean row ---------------------------------
+   The collapsed dock is a surface, not a stage: cover, title/artist, play and
+   next. The cover glow, equaliser, up-next column, progress hairline, playhead,
+   ripple and per-state animations all retired so nothing competes with the song. */
+.mini-player {
+  height: 54px !important;
+  padding: 0 9px 0 8px !important;
+  gap: 11px !important;
+  border-radius: 999px !important;
+  overflow: hidden;
+}
+
+.mini-player .mp-art {
+  width: 34px !important;
+  height: 34px !important;
+  border-radius: 10px !important;
+  animation: none !important;
+  transform: none !important;
+  transition: none !important;
+}
+.mini-player .mp-text { gap: 2px !important; }
+.mini-player .mp-title {
+  font-size: .875rem !important;
+  font-weight: 560 !important;
+  letter-spacing: -.015em !important;
+  animation: none !important;
+  transform: none !important;
+}
+.mini-player .mp-artist {
+  font-size: .6875rem !important;
+  color: var(--ink-dim) !important;
+  animation: none !important;
+  transform: none !important;
+}
+.mini-player .mp-btn {
+  width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  color: var(--ink) !important;
+  opacity: 1 !important;
+  transform: none !important;
+  transition: opacity .15s ease !important;
+}
+.mini-player .mp-btn:hover { transform: none !important; opacity: .62 !important; }
+.mini-player .mp-btn:active { transform: none !important; opacity: .45 !important; }
+.mini-player #mpPlayIcon { width: 22px; height: 22px; }
+.mini-player #mpNextBtn svg { width: 19px; height: 19px; }
+
+
+/* A single, stable motion language for the closed dock: the pill fades/slides
+   between states, and the play glyph pops without blinking out. */
+.mini-player {
+  transition: opacity .2s ease, transform .26s cubic-bezier(.22, 1, .2, 1) !important;
+}
+.mini-player.dragging { transition: none !important; }
+.mini-player.show { animation: none !important; }
+.mini-player.leaving,
+.mini-player.swipe-out,
+.mini-player.morph-out .mp-art-wrap { animation: none !important; }
+@keyframes mpIconPopClean {
+  0%   { transform: scale(.82); }
+  55%  { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+.mini-player.icon-pop #mpPlayIcon {
+  animation: mpIconPopClean .3s cubic-bezier(.2, 1.5, .4, 1) both !important;
+}

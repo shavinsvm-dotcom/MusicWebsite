@@ -1,0 +1,7 @@
+MOTIF.xcodeproj/
+build/
+Payload/
+*.ipa
+xcuserdata/
+DerivedData/
+.DS_Store
