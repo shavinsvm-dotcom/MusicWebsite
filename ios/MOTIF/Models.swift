@@ -4,6 +4,7 @@ struct Track: Identifiable, Codable, Hashable {
     enum Source: String, Codable {
         case local
         case preview
+        case cloud
     }
 
     var id: UUID = UUID()
@@ -16,9 +17,12 @@ struct Track: Identifiable, Codable, Hashable {
     var duration: Double
     var source: Source
     var remoteID: String?
+    var streamURL: URL? = nil
     var addedAt: Date = Date()
 
     var isPreview: Bool { source == .preview }
+    var isCloud: Bool { source == .cloud }
+    var isOffline: Bool { mediaURL.isFileURL }
 
     var durationText: String {
         guard duration.isFinite, duration > 0 else { return "--:--" }

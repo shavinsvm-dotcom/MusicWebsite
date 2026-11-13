@@ -32,5 +32,8 @@ struct RootView: View {
                 .environmentObject(library)
                 .environmentObject(player)
         }
+        .task {
+            await library.refreshCloud()
+        }
     }
 }

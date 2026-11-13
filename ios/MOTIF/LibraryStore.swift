@@ -7,19 +7,25 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var tracks: [Track] = []
     @Published private(set) var favoriteIDs: Set<UUID> = []
     @Published private(set) var playlists: [Playlist] = []
+    @Published private(set) var isRefreshingCloud = false
+    @Published private(set) var downloadingIDs: Set<UUID> = []
+    @Published private(set) var cloudMessage: String?
     @Published var errorMessage: String?
 
     private let fileManager: FileManager
     private let documentsURL: URL
     private let importsURL: URL
+    private let downloadsURL: URL
     private let libraryURL: URL
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
         self.documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         self.importsURL = documentsURL.appendingPathComponent("Imported", isDirectory: true)
+        self.downloadsURL = documentsURL.appendingPathComponent("Offline", isDirectory: true)
         self.libraryURL = documentsURL.appendingPathComponent("library.json")
         try? fileManager.createDirectory(at: importsURL, withIntermediateDirectories: true)
+        try? fileManager.createDirectory(at: downloadsURL, withIntermediateDirectories: true)
         load()
     }
 
@@ -46,6 +52,105 @@ final class LibraryStore: ObservableObject {
 
     func tracks(in playlist: Playlist) -> [Track] {
         playlist.trackIDs.compactMap { id in tracks.first(where: { $0.id == id }) }
+    }
+
+    func isDownloaded(_ track: Track) -> Bool {
+        track.mediaURL.isFileURL && fileManager.fileExists(atPath: track.mediaURL.path)
+    }
+
+    func isDownloading(_ track: Track) -> Bool {
+        guard let existing = canonicalTrack(for: track) else { return false }
+        return downloadingIDs.contains(existing.id)
+    }
+
+    func refreshCloud() async {
+        guard !isRefreshingCloud else { return }
+        isRefreshingCloud = true
+        cloudMessage = nil
+        defer { isRefreshingCloud = false }
+
+        do {
+            let remoteTracks = try await TigrisAPI.library()
+            let covers = (try? await TigrisAPI.covers()) ?? [:]
+
+            let incoming = remoteTracks.compactMap { remote -> Track? in
+                guard
+                    let title = remote.title,
+                    let mediaString = remote.url,
+                    let mediaURL = TigrisAPI.resolve(mediaString)
+                else { return nil }
+
+                let artworkURL = covers[remote.id].flatMap(TigrisAPI.resolve)
+
+                return Track(
+                    title: title,
+                    artist: remote.artist ?? "Unknown artist",
+                    album: remote.album ?? "",
+                    releaseYear: remote.year,
+                    artworkURL: artworkURL,
+                    mediaURL: mediaURL,
+                    duration: remote.duration ?? 0,
+                    source: .cloud,
+                    remoteID: remote.id,
+                    streamURL: mediaURL
+                )
+            }
+
+            add(incoming)
+            cloudMessage = remoteTracks.isEmpty
+                ? "No tracks in the Tigris library yet."
+                : "\(remoteTracks.count) tracks in the Tigris library"
+        } catch {
+            cloudMessage = "Couldn’t reach the Tigris library. Tap refresh to retry."
+        }
+    }
+
+    func download(_ track: Track) async {
+        guard
+            let existing = canonicalTrack(for: track),
+            !isDownloaded(existing),
+            !downloadingIDs.contains(existing.id),
+            let remoteURL = existing.streamURL ?? (existing.isCloud ? existing.mediaURL : nil)
+        else { return }
+
+        downloadingIDs.insert(existing.id)
+        defer { downloadingIDs.remove(existing.id) }
+
+        do {
+            let (temporaryURL, response) = try await URLSession.shared.download(from: remoteURL)
+            guard let http = response as? HTTPURLResponse,
+                  (200..<300).contains(http.statusCode) else {
+                throw TigrisAPI.APIError.invalidResponse
+            }
+
+            let filename = (existing.remoteID ?? existing.id.uuidString) + ".mp3"
+            let destination = downloadsURL.appendingPathComponent(filename)
+            if fileManager.fileExists(atPath: destination.path) {
+                try? fileManager.removeItem(at: destination)
+            }
+            try fileManager.moveItem(at: temporaryURL, to: destination)
+
+            if let index = tracks.firstIndex(where: { $0.id == existing.id }) {
+                tracks[index].mediaURL = destination
+            }
+            save()
+        } catch {
+            errorMessage = "Couldn’t download \(existing.title): \(error.localizedDescription)"
+        }
+    }
+
+    func removeDownload(_ track: Track) {
+        guard
+            let existing = canonicalTrack(for: track),
+            existing.isDownloaded,
+            let remoteURL = existing.streamURL
+        else { return }
+
+        try? fileManager.removeItem(at: existing.mediaURL)
+        if let index = tracks.firstIndex(where: { $0.id == existing.id }) {
+            tracks[index].mediaURL = remoteURL
+        }
+        save()
     }
 
     func add(_ incoming: [Track]) {
@@ -91,7 +196,7 @@ final class LibraryStore: ObservableObject {
         for index in playlists.indices {
             playlists[index].trackIDs.removeAll { $0 == existing.id }
         }
-        if existing.source == .local {
+        if existing.mediaURL.isFileURL {
             try? fileManager.removeItem(at: existing.mediaURL)
         }
         save()
@@ -186,8 +291,18 @@ final class LibraryStore: ObservableObject {
             let snapshot = try? JSONDecoder().decode(LibrarySnapshot.self, from: data)
         else { return }
 
-        tracks = snapshot.tracks.filter { track in
-            track.source != .local || fileManager.fileExists(atPath: track.mediaURL.path)
+        tracks = snapshot.tracks.compactMap { stored in
+            var track = stored
+            if track.source == .local {
+                return fileManager.fileExists(atPath: track.mediaURL.path) ? track : nil
+            }
+            if track.source == .cloud,
+               track.mediaURL.isFileURL,
+               !fileManager.fileExists(atPath: track.mediaURL.path) {
+                guard let streamURL = track.streamURL else { return nil }
+                track.mediaURL = streamURL
+            }
+            return track
         }
         favoriteIDs = Set(snapshot.favoriteIDs)
         playlists = snapshot.playlists

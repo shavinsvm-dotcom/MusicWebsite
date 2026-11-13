@@ -96,25 +96,26 @@ struct NowPlayingView: View {
             ZStack {
                 ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                     .frame(width: geometry.size.width, height: geometry.size.height)
-                    .scaleEffect(1.15)
-                    .blur(radius: 72)
+                    .scaleEffect(1.08)
+                    .saturation(1.18)
+                    .blur(radius: 26)
 
                 LinearGradient(
                     colors: [
-                        Color.black.opacity(0.22),
-                        Color.black.opacity(0.30),
-                        Color.black.opacity(0.76),
-                        Color.black.opacity(0.94)
+                        Color.black.opacity(0.08),
+                        Color.black.opacity(0.14),
+                        Color.black.opacity(0.70),
+                        Color.black.opacity(0.95)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
 
                 RadialGradient(
-                    colors: [Color.clear, Color.black.opacity(0.36)],
+                    colors: [Color.clear, Color.black.opacity(0.24)],
                     center: .center,
-                    startRadius: geometry.size.width * 0.24,
-                    endRadius: geometry.size.width * 0.82
+                    startRadius: geometry.size.width * 0.30,
+                    endRadius: geometry.size.width * 0.86
                 )
             }
             .ignoresSafeArea()
@@ -123,58 +124,75 @@ struct NowPlayingView: View {
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
-            let artSide = min(geometry.size.width - 96, geometry.size.height * 0.42)
+            let artSide = min(geometry.size.width - 84, geometry.size.height * 0.40)
+            let bottomHeight: CGFloat = 243
+            let gap = max(
+                42,
+                min(
+                    geometry.size.height * 0.28,
+                    geometry.size.height - artSide - bottomHeight - 6
+                )
+            )
 
-            VStack(spacing: 0) {
-                topBar(track)
+            ZStack(alignment: .top) {
+                VStack(spacing: 0) {
+                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                        .frame(width: artSide, height: artSide)
+                        .clipShape(Rectangle())
+                        .overlay(alignment: .bottom) {
+                            LinearGradient(
+                                colors: [.clear, .black.opacity(0.16)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .frame(height: 52)
+                        }
+                        .padding(.top, 4)
 
-                Spacer(minLength: 12)
+                    Spacer().frame(height: gap)
 
-                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                    .frame(width: artSide, height: artSide)
-                    .clipShape(Rectangle())
-                    .shadow(color: .black.opacity(0.48), radius: 38, x: 0, y: 24)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(track.title)
+                            .font(.system(size: 44, weight: .heavy))
+                            .tracking(-1.8)
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.68)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                Spacer(minLength: 22)
-
-                VStack(alignment: .leading, spacing: 9) {
-                    Text(track.title)
-                        .font(.system(size: 43, weight: .bold))
-                        .tracking(-1.7)
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.72)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text(track.artist)
-                        .font(.system(size: 21, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.66))
-                        .lineLimit(1)
-
-                    HStack(spacing: 8) {
-                        Image(systemName: "opticaldisc")
-                            .font(.system(size: 13, weight: .regular))
-                        Text(metadataText(track))
+                        Text(track.artist)
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.66))
                             .lineLimit(1)
+
+                        HStack(spacing: 8) {
+                            Image(systemName: "opticaldisc")
+                                .font(.system(size: 13, weight: .regular))
+                            Text(metadataText(track))
+                                .lineLimit(1)
+                        }
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.52))
+                        .padding(.top, 2)
                     }
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.52))
-                    .padding(.top, 3)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 30)
-
-                scrubber
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 30)
-                    .padding(.top, 20)
 
-                Spacer(minLength: 18)
+                    scrubber
+                        .padding(.horizontal, 30)
+                        .padding(.top, 10)
 
-                controls(track)
-                    .padding(.horizontal, 22)
-                    .padding(.bottom, 8)
+                    controls(track)
+                        .padding(.horizontal, 22)
+                        .padding(.top, 12)
+
+                    Spacer(minLength: 0)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+
+                topBar(track)
+                    .padding(.top, 4)
             }
-            .frame(width: geometry.size.width, height: geometry.size.height)
         }
     }
 

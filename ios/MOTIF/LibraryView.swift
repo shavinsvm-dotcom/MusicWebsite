@@ -12,10 +12,22 @@ struct LibraryView: View {
     @State private var newPlaylistName = ""
     @State private var importError: String?
 
+    private var downloadedCount: Int {
+        library.tracks.filter { library.isDownloaded($0) }.count
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 26) {
+                    cloudStatus
+
+                    if downloadedCount > 0 {
+                        Label("\(downloadedCount) tracks available offline", systemImage: "arrow.down.circle")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+
                     if library.tracks.isEmpty {
                         emptyState
                     } else {
@@ -50,6 +62,12 @@ struct LibraryView: View {
                             showNewPlaylist = true
                         } label: {
                             Label("New playlist", systemImage: "text.badge.plus")
+                        }
+
+                        Button {
+                            Task { await library.refreshCloud() }
+                        } label: {
+                            Label("Refresh Tigris library", systemImage: "arrow.clockwise")
                         }
                     } label: {
                         Image(systemName: "plus.circle")
@@ -100,6 +118,47 @@ struct LibraryView: View {
                 Text(importError ?? library.errorMessage ?? "")
             }
         }
+    }
+
+    private var cloudStatus: some View {
+        HStack(spacing: 10) {
+            if library.isRefreshingCloud {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.secondary)
+            } else {
+                Image(systemName: "cloud")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(
+                library.isRefreshingCloud
+                    ? "Syncing the Tigris library…"
+                    : (library.cloudMessage ?? "Tigris library")
+            )
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+
+            Spacer(minLength: 4)
+
+            Button {
+                Task { await library.refreshCloud() }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .disabled(library.isRefreshingCloud)
+            .accessibilityLabel("Refresh Tigris library")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .glassSurface(radius: 16)
     }
 
     private var emptyState: some View {

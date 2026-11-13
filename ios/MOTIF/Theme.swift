@@ -188,6 +188,18 @@ struct TrackRow: View {
 
                     Spacer(minLength: 8)
 
+                    if track.isCloud {
+                        if library.isDownloading(track) {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.secondary)
+                        } else {
+                            Image(systemName: library.isDownloaded(track) ? "arrow.down.circle.fill" : "icloud")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     if library.isFavorite(track) {
                         Image(systemName: "heart.fill")
                             .font(.caption)
@@ -227,6 +239,23 @@ struct TrackRow: View {
                         }
                     } label: {
                         Label("Add to playlist", systemImage: "text.badge.plus")
+                    }
+                }
+
+                if track.isCloud {
+                    if library.isDownloaded(track) {
+                        Button(role: .destructive) {
+                            library.removeDownload(track)
+                        } label: {
+                            Label("Remove download", systemImage: "icloud.slash")
+                        }
+                    } else {
+                        Button {
+                            Task { await library.download(track) }
+                        } label: {
+                            Label("Download for offline", systemImage: "arrow.down.circle")
+                        }
+                        .disabled(library.isDownloading(track))
                     }
                 }
 
