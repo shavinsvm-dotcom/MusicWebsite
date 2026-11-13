@@ -1,0 +1,65 @@
+name: iOS UI preview
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-preview.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ios-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build for simulator
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -project MOTIF.xcodeproj \
+            -scheme MOTIF \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -derivedDataPath build-sim \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Boot simulator and capture the player
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; names=[x for xs in d.values() for x in xs if x["name"].startswith("iPhone")]; print(names[0]["udid"])')
+          echo "Using simulator $UDID"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time "17:46" --batteryState charged --batteryLevel 46 --wifiBars 3 --cellularBars 4 || true
+          xcrun simctl install "$UDID" ios/build-sim/Build/Products/Debug-iphonesimulator/MOTIF.app
+          xcrun simctl launch "$UDID" com.example.motif -MOTIFPreviewPlayer
+          sleep 15
+          xcrun simctl io "$UDID" screenshot "$GITHUB_WORKSPACE/preview-player.png"
+
+      - name: Publish screenshot
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B ci/ui-preview
+          git add -f preview-player.png
+          git commit -m 'Capture MOTIF player preview'
+          git push --force origin HEAD:ci/ui-preview

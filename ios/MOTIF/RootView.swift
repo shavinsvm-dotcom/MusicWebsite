@@ -34,6 +34,14 @@ struct RootView: View {
         }
         .task {
             await library.refreshCloud()
+
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-MOTIFPreviewPlayer"),
+               let first = library.tracks.first {
+                player.play(first, queue: library.tracks)
+                showNowPlaying = true
+            }
+            #endif
         }
     }
 }
