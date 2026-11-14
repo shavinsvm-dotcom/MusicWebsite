@@ -240,9 +240,9 @@ struct PlaylistsView: View {
     }
 
     @ViewBuilder
-    private func playlistLink<Label: View>(
+    private func playlistLink<Content: View>(
         _ playlist: Playlist,
-        @ViewBuilder label: () -> Label
+        @ViewBuilder content: () -> Content
     ) -> some View {
         NavigationLink {
             PlaylistDetailView(
@@ -250,7 +250,7 @@ struct PlaylistsView: View {
                 showNowPlaying: $showNowPlaying
             )
         } label: {
-            label()
+            content()
         }
         .buttonStyle(MotifPressStyle(scale: 0.975, opacity: 0.92))
         .contextMenu {
