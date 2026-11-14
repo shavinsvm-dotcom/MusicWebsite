@@ -212,6 +212,9 @@ struct NowPlayingView: View {
                 transitionSettled = true
             }
         }
+        .onDisappear {
+            transitionSettled = false
+        }
         .sheet(isPresented: $showQueue) {
             UpNextView()
                 .environmentObject(player)
