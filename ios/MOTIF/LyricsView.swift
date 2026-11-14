@@ -96,15 +96,21 @@ enum LyricsParser {
 struct LyricsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var library: LibraryStore
-    @EnvironmentObject private var progress: PlaybackProgress
 
     let track: Track
 
     @State private var activeIndex: Int?
     @State private var showFinder = false
 
+    private var currentTrack: Track {
+        library.tracks.first { existing in
+            existing.id == track.id
+                || (track.remoteID != nil && existing.remoteID == track.remoteID)
+        } ?? track
+    }
+
     private var document: LyricsDocument {
-        guard let lyrics = track.lyrics, !lyrics.isEmpty else { return .empty }
+        guard let lyrics = currentTrack.lyrics, !lyrics.isEmpty else { return .empty }
         return LyricsParser.parse(lyrics)
     }
 
@@ -151,14 +157,14 @@ struct LyricsView: View {
         .presentationDragIndicator(.visible)
         .presentationDetents([.medium, .large])
         .sheet(isPresented: $showFinder) {
-            LyricsFinderView(track: track)
+            LyricsFinderView(track: currentTrack)
                 .environmentObject(library)
         }
     }
 
     private var header: some View {
         HStack(spacing: 14) {
-            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+            ArtworkView(url: currentTrack.artworkURL, seed: currentTrack.title + currentTrack.artist)
                 .frame(width: 64, height: 64)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
@@ -180,10 +186,10 @@ struct LyricsView: View {
                     }
                 }
 
-                Text(track.title)
+                Text(currentTrack.title)
                     .font(.headline)
                     .lineLimit(2)
-                Text(track.artist)
+                Text(currentTrack.artist)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -207,7 +213,7 @@ struct LyricsView: View {
                 }
             }
 
-            LazyVStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(document.lines.enumerated()), id: \.element.id) { index, line in
                 let isActive = index == activeIndex
 
@@ -302,7 +308,7 @@ private struct LyricsPlayhead: View {
 
     var body: some View {
         Color.clear
-            .frame(width: 0, height: 0)
+            .frame(height: 1)
             .onAppear {
                 onChange(index(for: progress.elapsed))
             }
