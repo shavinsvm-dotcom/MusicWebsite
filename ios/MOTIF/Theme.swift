@@ -29,30 +29,51 @@ struct AppBackground: View {
     }
 }
 
+extension View {
+    /// Uses Apple's Liquid Glass on iOS 26 and falls back to a thin system
+    /// material on earlier versions. The only hand-built glass in MOTIF is
+    /// the closed mini player, which needs its own compact pill treatment.
+    @ViewBuilder
+    func nativeGlass<S: Shape>(_ shape: S) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            glassEffect(.regular, in: shape)
+        } else {
+            glassFallback(shape)
+        }
+        #else
+        glassFallback(shape)
+        #endif
+    }
+
+    @ViewBuilder
+    private func glassFallback<S: Shape>(_ shape: S) -> some View {
+        background(.ultraThinMaterial, in: shape)
+    }
+}
+
+struct MotifPressStyle: ButtonStyle {
+    var scale: CGFloat = 0.94
+    var opacity: Double = 0.86
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .opacity(configuration.isPressed ? opacity : 1)
+            .animation(
+                .spring(response: 0.28, dampingFraction: 0.62),
+                value: configuration.isPressed
+            )
+    }
+}
+
 private struct GlassSurface: ViewModifier {
     let radius: CGFloat
 
     func body(content: Content) -> some View {
-        content
-            .background(
-                .ultraThinMaterial,
-                in: RoundedRectangle(cornerRadius: radius, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color.white.opacity(0.46),
-                                Color.white.opacity(0.05)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-            }
-            .shadow(color: .black.opacity(0.16), radius: 22, x: 0, y: 12)
+        content.nativeGlass(
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+        )
     }
 }
 
@@ -187,7 +208,7 @@ struct TrackRow: View {
                 }
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MotifPressStyle(scale: 0.99, opacity: 0.9))
 
             Menu {
                 Button {

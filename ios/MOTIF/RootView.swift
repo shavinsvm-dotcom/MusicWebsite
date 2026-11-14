@@ -92,11 +92,11 @@ private struct BottomChrome: View {
                     }
                 }
                 .padding(5)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay {
-                    Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.20), radius: 18, x: 0, y: 8)
+                .nativeGlass(Capsule())
+                .animation(
+                    .spring(response: 0.34, dampingFraction: 0.72),
+                    value: selectedTab
+                )
 
                 Button {
                     showSearch = true
@@ -107,12 +107,8 @@ private struct BottomChrome: View {
                         .frame(width: 56, height: 56)
                         .contentShape(Circle())
                 }
-                .buttonStyle(.plain)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle().strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.20), radius: 18, x: 0, y: 8)
+                .buttonStyle(MotifPressStyle(scale: 0.88))
+                .nativeGlass(Circle())
                 .accessibilityLabel("Search")
             }
         }
@@ -149,7 +145,7 @@ private struct BottomChrome: View {
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MotifPressStyle(scale: 0.9))
         .accessibilityLabel(tab.title)
     }
 }

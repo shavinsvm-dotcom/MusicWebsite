@@ -87,7 +87,7 @@ struct HomeView: View {
                     .frame(width: 42, height: 42)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MotifPressStyle(scale: 0.9))
             .glassSurface(radius: 21)
             .accessibilityLabel("Import music")
         }
@@ -145,7 +145,7 @@ struct HomeView: View {
                     .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MotifPressStyle(scale: 0.985))
     }
 
     private var emptyCard: some View {
@@ -173,7 +173,7 @@ struct HomeView: View {
                     .background(Color.primary, in: Capsule())
                     .foregroundStyle(Color(uiColor: .systemBackground))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MotifPressStyle(scale: 0.94))
             .padding(.top, 4)
         }
         .padding(24)
@@ -211,7 +211,7 @@ struct HomeView: View {
                             }
                             .frame(width: 146, alignment: .leading)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(MotifPressStyle(scale: 0.94))
                     }
                 }
                 .padding(.horizontal, 2)

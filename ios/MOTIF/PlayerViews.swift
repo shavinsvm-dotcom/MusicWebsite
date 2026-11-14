@@ -1,4 +1,6 @@
+import CoreImage
 import SwiftUI
+import UIKit
 
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
@@ -31,7 +33,7 @@ struct MiniPlayer: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MotifPressStyle(scale: 0.985, opacity: 0.92))
                     .layoutPriority(1)
 
                     if let next = player.upNext {
@@ -57,7 +59,7 @@ struct MiniPlayer: View {
                             .frame(width: 28, height: 32)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MotifPressStyle(scale: 0.8))
                     .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                     Button {
@@ -68,7 +70,7 @@ struct MiniPlayer: View {
                             .frame(width: 28, height: 32)
                             .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MotifPressStyle(scale: 0.8))
                     .accessibilityLabel("Next")
                 }
                 .padding(.leading, 6)
@@ -115,6 +117,8 @@ struct NowPlayingView: View {
 
     @State private var isScrubbing = false
     @State private var scrubValue = 0.0
+    @State private var backdropImage: UIImage?
+    @State private var backdropColor = Color(white: 0.10)
 
     var body: some View {
         ZStack {
@@ -134,36 +138,85 @@ struct NowPlayingView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task(id: player.current?.id) {
+            await loadBackdropImage()
+        }
     }
 
     private func backdrop(_ track: Track) -> some View {
         GeometryReader { geometry in
             ZStack {
-                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .scaleEffect(1.08)
-                    .saturation(1.18)
-                    .blur(radius: 26)
+                backdropColor
+
+                if let image = backdropImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(
+                            width: geometry.size.width * 1.24,
+                            height: geometry.size.width * 1.24
+                        )
+                        .blur(radius: 58)
+                        .opacity(0.58)
+                        .blendMode(.screen)
+                        .offset(y: -geometry.size.height * 0.17)
+                } else {
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist
+                    )
+                    .frame(
+                        width: geometry.size.width * 1.2,
+                        height: geometry.size.width * 1.2
+                    )
+                    .blur(radius: 42)
+                    .opacity(0.50)
+                    .blendMode(.screen)
+                }
 
                 LinearGradient(
-                    colors: [
-                        Color.black.opacity(0.08),
-                        Color.black.opacity(0.14),
-                        Color.black.opacity(0.70),
-                        Color.black.opacity(0.95)
+                    stops: [
+                        .init(color: .black.opacity(0.03), location: 0),
+                        .init(color: .black.opacity(0.18), location: 0.32),
+                        .init(color: .black.opacity(0.72), location: 0.64),
+                        .init(color: .black.opacity(0.97), location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-
-                RadialGradient(
-                    colors: [Color.clear, Color.black.opacity(0.24)],
-                    center: .center,
-                    startRadius: geometry.size.width * 0.30,
-                    endRadius: geometry.size.width * 0.86
-                )
             }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
             .ignoresSafeArea()
+        }
+    }
+
+    @MainActor
+    private func loadBackdropImage() async {
+        guard let url = player.current?.artworkURL else {
+            backdropImage = nil
+            backdropColor = Color(white: 0.10)
+            return
+        }
+
+        var image: UIImage?
+        if url.isFileURL {
+            image = UIImage(contentsOfFile: url.path)
+        } else {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                image = UIImage(data: data)
+            } catch {
+                image = nil
+            }
+        }
+
+        guard !Task.isCancelled else { return }
+        backdropImage = image
+        if let image {
+            backdropColor = Color(uiColor: image.motifAverageColor)
+        } else {
+            backdropColor = Color(white: 0.10)
         }
     }
 
@@ -251,12 +304,9 @@ struct NowPlayingView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .background(.ultraThinMaterial, in: Circle())
-                        .overlay {
-                            Circle().strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-                        }
+                        .nativeGlass(Circle())
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("Close player")
 
                 Spacer()
@@ -287,6 +337,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .contentShape(Rectangle())
                 }
+                .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("More options")
             }
 
@@ -383,7 +434,7 @@ struct NowPlayingView: View {
                     .frame(width: 32, height: 48)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Previous")
 
             Button {
@@ -393,13 +444,9 @@ struct NowPlayingView: View {
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 78, height: 78)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay {
-                        Circle().strokeBorder(Color.white.opacity(0.20), lineWidth: 1)
-                    }
-                    .shadow(color: .black.opacity(0.28), radius: 18, x: 0, y: 10)
+                    .nativeGlass(Circle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MotifPressStyle(scale: 0.9))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
@@ -411,7 +458,7 @@ struct NowPlayingView: View {
                     .frame(width: 32, height: 48)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Next")
         }
     }
@@ -426,12 +473,9 @@ struct NowPlayingView: View {
                 .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(active ? Color.white : Color.white.opacity(0.62))
                 .frame(width: 48, height: 48)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-                }
+                .nativeGlass(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MotifPressStyle(scale: 0.88))
     }
 
     private var repeatButton: some View {
@@ -451,12 +495,9 @@ struct NowPlayingView: View {
                 }
             }
             .frame(width: 48, height: 48)
-            .background(.ultraThinMaterial, in: Circle())
-            .overlay {
-                Circle().strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-            }
+            .nativeGlass(Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MotifPressStyle(scale: 0.88))
         .accessibilityLabel("Repeat")
         .accessibilityValue(repeatLabel)
     }
@@ -479,5 +520,49 @@ struct NowPlayingView: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private extension UIImage {
+    var motifAverageColor: UIColor {
+        guard let cgImage else {
+            return UIColor(white: 0.10, alpha: 1)
+        }
+
+        let input = CIImage(cgImage: cgImage)
+        guard let filter = CIFilter(name: "CIAreaAverage") else {
+            return UIColor(white: 0.10, alpha: 1)
+        }
+
+        let extent = input.extent
+        let upperHalf = CGRect(
+            x: extent.minX,
+            y: extent.midY,
+            width: extent.width,
+            height: extent.height * 0.55
+        )
+        filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(CIVector(cgRect: upperHalf), forKey: kCIInputExtentKey)
+
+        guard let output = filter.outputImage else {
+            return UIColor(white: 0.10, alpha: 1)
+        }
+
+        var bitmap = [UInt8](repeating: 0, count: 4)
+        CIContext().render(
+            output,
+            toBitmap: &bitmap,
+            rowBytes: 4,
+            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+
+        return UIColor(
+            red: CGFloat(bitmap[0]) / 255,
+            green: CGFloat(bitmap[1]) / 255,
+            blue: CGFloat(bitmap[2]) / 255,
+            alpha: 1
+        )
     }
 }

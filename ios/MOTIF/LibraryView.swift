@@ -151,7 +151,7 @@ struct LibraryView: View {
                     .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MotifPressStyle(scale: 0.9))
             .foregroundStyle(.secondary)
             .disabled(library.isRefreshingCloud)
             .accessibilityLabel("Refresh Tigris library")
@@ -184,7 +184,7 @@ struct LibraryView: View {
                     .background(Color.primary, in: Capsule())
                     .foregroundStyle(Color(uiColor: .systemBackground))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MotifPressStyle(scale: 0.94))
             .padding(.top, 4)
         }
         .padding(24)
@@ -205,7 +205,7 @@ struct LibraryView: View {
                     Label("Play all", systemImage: "play.fill")
                         .font(.caption.weight(.semibold))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MotifPressStyle(scale: 0.92))
                 .foregroundStyle(.secondary)
             }
 
@@ -247,7 +247,7 @@ struct LibraryView: View {
                         .font(.caption.weight(.semibold))
                         .frame(width: 28, height: 28)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MotifPressStyle(scale: 0.9))
                 .glassSurface(radius: 14)
                 .accessibilityLabel("New playlist")
             }
@@ -290,7 +290,7 @@ struct LibraryView: View {
                             .contentShape(Rectangle())
                             .glassSurface(radius: 18)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(MotifPressStyle(scale: 0.97))
                     }
                 }
             }
@@ -340,7 +340,7 @@ struct PlaylistDetailView: View {
                             .background(Color.primary, in: Capsule())
                             .foregroundStyle(Color(uiColor: .systemBackground))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MotifPressStyle(scale: 0.94))
 
                     VStack(spacing: 0) {
                         ForEach(tracks) { track in
