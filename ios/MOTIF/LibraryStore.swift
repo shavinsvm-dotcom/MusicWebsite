@@ -217,6 +217,7 @@ final class LibraryStore: ObservableObject {
             // Keep lyrics with the offline copy. Embedded lyrics win; when the
             // file has none, ask LRCLIB and persist the result in the library.
             if downloadedLyrics == nil,
+               tracks.first(where: { $0.id == existing.id })?.lyrics == nil,
                let record = try? await LyricsService.findLyrics(for: existing),
                let onlineLyrics = record.lyricsText {
                 setLyrics(onlineLyrics, for: existing)
