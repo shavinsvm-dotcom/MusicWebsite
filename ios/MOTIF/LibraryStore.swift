@@ -197,16 +197,33 @@ final class LibraryStore: ObservableObject {
             for remote in incoming {
                 guard
                     let remoteID = remote.remoteID,
-                    let index = tracks.firstIndex(where: { $0.remoteID == remoteID }),
-                    let artworkURL = remote.artworkURL
+                    let index = tracks.firstIndex(where: { $0.remoteID == remoteID })
                 else { continue }
 
-                let current = tracks[index].artworkURL
-                if current == nil
-                    || (tracks[index].source == .cloud
-                        && current?.isFileURL == false
-                        && current != artworkURL) {
-                    tracks[index].artworkURL = artworkURL
+                var row = tracks[index]
+
+                // A download can disappear after an app update or an OS cleanup.
+                // Put the row back on its cloud stream instead of leaving it
+                // pointing at a file that no longer exists.
+                if isMissingLocalFile(row.mediaURL) {
+                    row.mediaURL = remote.mediaURL
+                    row.streamURL = remote.streamURL ?? row.streamURL
+                }
+
+                let missingArtwork = isMissingLocalFile(row.artworkURL)
+                if let artworkURL = remote.artworkURL,
+                   (row.artworkURL == nil
+                    || missingArtwork
+                    || (row.source == .cloud
+                        && row.artworkURL?.isFileURL == false
+                        && row.artworkURL != artworkURL)) {
+                    row.artworkURL = artworkURL
+                } else if missingArtwork {
+                    row.artworkURL = nil
+                }
+
+                if row != tracks[index] {
+                    tracks[index] = row
                     merged = true
                 }
             }
@@ -882,17 +899,48 @@ final class LibraryStore: ObservableObject {
             let snapshot = try? JSONDecoder().decode(LibrarySnapshot.self, from: data)
         else { return }
 
+        var migrated = false
+
         tracks = snapshot.tracks.compactMap { stored in
             var track = stored
-            if track.source == .local {
-                return fileManager.fileExists(atPath: track.mediaURL.path) ? track : nil
+
+            // iOS can change the app container path between installs. An
+            // absolute file URL saved in library.json then points at the old
+            // container even though the file moved with the app. Recover it
+            // by filename from the current directory before giving up.
+            if isMissingLocalFile(track.mediaURL) {
+                let directory = track.source == .local ? importsURL : downloadsURL
+                if let relocated = existingFile(
+                    named: track.mediaURL.lastPathComponent,
+                    in: directory
+                ) {
+                    track.mediaURL = relocated
+                    migrated = true
+                } else if track.source == .local {
+                    migrated = true
+                    return nil
+                } else if let streamURL = track.streamURL {
+                    track.mediaURL = streamURL
+                    migrated = true
+                } else {
+                    migrated = true
+                    return nil
+                }
             }
-            if track.source == .cloud,
-               track.mediaURL.isFileURL,
-               !fileManager.fileExists(atPath: track.mediaURL.path) {
-                guard let streamURL = track.streamURL else { return nil }
-                track.mediaURL = streamURL
+
+            if isMissingLocalFile(track.artworkURL) {
+                if let artworkURL = track.artworkURL,
+                   let relocated = existingFile(
+                    named: artworkURL.lastPathComponent,
+                    in: artworkDirectory
+                   ) {
+                    track.artworkURL = relocated
+                } else {
+                    track.artworkURL = nil
+                }
+                migrated = true
             }
+
             return track
         }
         favoriteIDs = Set(snapshot.favoriteIDs)
@@ -900,6 +948,19 @@ final class LibraryStore: ObservableObject {
         recentTrackIDs = snapshot.recentTrackIDs.filter { id in
             tracks.contains { $0.id == id }
         }
+
+        if migrated { save() }
+    }
+
+    private func isMissingLocalFile(_ url: URL?) -> Bool {
+        guard let url, url.isFileURL else { return false }
+        return !fileManager.fileExists(atPath: url.path)
+    }
+
+    private func existingFile(named name: String, in directory: URL) -> URL? {
+        guard !name.isEmpty else { return nil }
+        let candidate = directory.appendingPathComponent(name)
+        return fileManager.fileExists(atPath: candidate.path) ? candidate : nil
     }
 
     private func save() {
