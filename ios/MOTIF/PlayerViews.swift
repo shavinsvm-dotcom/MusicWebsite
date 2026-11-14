@@ -224,6 +224,17 @@ struct NowPlayingView: View {
             LyricsFinderView(track: track)
                 .environmentObject(library)
         }
+        .alert(
+            "Couldn’t complete that",
+            isPresented: Binding(
+                get: { library.errorMessage != nil },
+                set: { if !$0 { library.errorMessage = nil } }
+            )
+        ) {
+            Button("OK") { library.errorMessage = nil }
+        } message: {
+            Text(library.errorMessage ?? "")
+        }
     }
 
     private func backdrop(_ track: Track) -> some View {

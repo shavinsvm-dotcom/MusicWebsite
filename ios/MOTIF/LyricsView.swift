@@ -95,6 +95,7 @@ enum LyricsParser {
 
 struct LyricsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var progress: PlaybackProgress
 
     let track: Track
@@ -151,6 +152,7 @@ struct LyricsView: View {
         .presentationDetents([.medium, .large])
         .sheet(isPresented: $showFinder) {
             LyricsFinderView(track: track)
+                .environmentObject(library)
         }
     }
 

@@ -287,7 +287,7 @@ final class LibraryStore: ObservableObject {
                 "artist": existing.artist.isEmpty ? "Unknown artist" : existing.artist,
                 "albumArtist": existing.artist,
                 "album": existing.album,
-                "duration": existing.duration,
+                "duration": existing.duration.isFinite ? max(0, existing.duration) : 0,
                 "url": remoteURL.absoluteString,
                 "storagePath": storageKey,
                 "uploadedAt": Int(Date().timeIntervalSince1970 * 1000),
