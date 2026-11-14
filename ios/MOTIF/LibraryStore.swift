@@ -10,6 +10,7 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var favoriteIDs: Set<UUID> = []
     @Published private(set) var playlists: [Playlist] = []
     @Published private(set) var recentTrackIDs: [UUID] = []
+    @Published private(set) var playCounts: [UUID: Int] = [:]
     @Published private(set) var isRefreshingCloud = false
     @Published private(set) var downloadingIDs: Set<UUID> = []
     @Published private(set) var uploadingIDs: Set<UUID> = []
@@ -46,8 +47,20 @@ final class LibraryStore: ObservableObject {
         recentTrackIDs.compactMap { id in tracks.first(where: { $0.id == id }) }
     }
 
+    var mostPlayed: [Track] {
+        tracks
+            .filter { (playCounts[$0.id] ?? 0) > 0 }
+            .sorted { lhs, rhs in
+                let left = playCounts[lhs.id] ?? 0
+                let right = playCounts[rhs.id] ?? 0
+                if left != right { return left > right }
+                return lhs.addedAt > rhs.addedAt
+            }
+    }
+
     func recordPlay(_ track: Track) {
         guard let existing = canonicalTrack(for: track) else { return }
+        playCounts[existing.id, default: 0] += 1
         recentTrackIDs.removeAll { $0 == existing.id }
         recentTrackIDs.insert(existing.id, at: 0)
         if recentTrackIDs.count > 20 {
@@ -640,6 +653,7 @@ final class LibraryStore: ObservableObject {
         guard let existing = canonicalTrack(for: track) else { return }
         tracks.removeAll { $0.id == existing.id }
         favoriteIDs.remove(existing.id)
+        playCounts.removeValue(forKey: existing.id)
         recentTrackIDs.removeAll { $0 == existing.id }
         for index in playlists.indices {
             playlists[index].trackIDs.removeAll { $0 == existing.id }
@@ -948,6 +962,8 @@ final class LibraryStore: ObservableObject {
         recentTrackIDs = snapshot.recentTrackIDs.filter { id in
             tracks.contains { $0.id == id }
         }
+        let identifiers = Set(tracks.map(\.id))
+        playCounts = snapshot.playCounts.filter { identifiers.contains($0.key) }
 
         if migrated { save() }
     }
@@ -968,7 +984,8 @@ final class LibraryStore: ObservableObject {
             tracks: tracks,
             favoriteIDs: Array(favoriteIDs),
             playlists: playlists,
-            recentTrackIDs: recentTrackIDs
+            recentTrackIDs: recentTrackIDs,
+            playCounts: playCounts
         )
         do {
             let data = try JSONEncoder().encode(snapshot)

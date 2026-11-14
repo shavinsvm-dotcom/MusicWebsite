@@ -23,6 +23,95 @@ private enum PlaylistSort: String, CaseIterable, Identifiable {
     }
 }
 
+enum SmartPlaylist: String, CaseIterable, Identifiable {
+    case recentlyPlayed
+    case favorites
+    case downloaded
+    case recentlyAdded
+    case mostPlayed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .recentlyPlayed: return "Recently Played"
+        case .favorites: return "Favorites"
+        case .downloaded: return "Downloaded"
+        case .recentlyAdded: return "Recently Added"
+        case .mostPlayed: return "Most Played"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .recentlyPlayed: return "clock.arrow.circlepath"
+        case .favorites: return "heart.fill"
+        case .downloaded: return "arrow.down.circle.fill"
+        case .recentlyAdded: return "sparkles"
+        case .mostPlayed: return "chart.bar.fill"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .recentlyPlayed:
+            return Color(red: 0.29, green: 0.43, blue: 0.62)
+        case .favorites:
+            return Color(red: 0.61, green: 0.25, blue: 0.33)
+        case .downloaded:
+            return Color(red: 0.20, green: 0.45, blue: 0.37)
+        case .recentlyAdded:
+            return Color(red: 0.42, green: 0.32, blue: 0.58)
+        case .mostPlayed:
+            return Color(red: 0.57, green: 0.39, blue: 0.20)
+        }
+    }
+
+    var emptyTitle: String {
+        switch self {
+        case .recentlyPlayed: return "Nothing played yet"
+        case .favorites: return "No favorites yet"
+        case .downloaded: return "Nothing downloaded"
+        case .recentlyAdded: return "No songs yet"
+        case .mostPlayed: return "No play history yet"
+        }
+    }
+
+    var emptyMessage: String {
+        switch self {
+        case .recentlyPlayed:
+            return "Songs you play will appear here automatically."
+        case .favorites:
+            return "Tap the heart on any song and it will live here."
+        case .downloaded:
+            return "Download a cloud song and it will show up here."
+        case .recentlyAdded:
+            return "Import files or add previews and they will appear here."
+        case .mostPlayed:
+            return "Play a song and your most played tracks will rise to the top."
+        }
+    }
+
+    @MainActor
+    func tracks(in library: LibraryStore) -> [Track] {
+        switch self {
+        case .recentlyPlayed:
+            return library.recentTracks
+        case .favorites:
+            return library.favorites
+        case .downloaded:
+            return library.tracks.filter { library.isDownloaded($0) }
+        case .recentlyAdded:
+            return library.tracks.sorted { lhs, rhs in
+                if lhs.addedAt != rhs.addedAt { return lhs.addedAt > rhs.addedAt }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+        case .mostPlayed:
+            return library.mostPlayed
+        }
+    }
+}
+
 struct PlaylistsView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
@@ -50,21 +139,15 @@ struct PlaylistsView: View {
         }
     }
 
-    private var recentTracks: [Track] {
-        Array(library.recentTracks.prefix(10))
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
-                    if !recentTracks.isEmpty {
-                        recentlyPlayed
-                    }
+                    smartPlaylistsSection
 
                     if library.playlists.isEmpty {
                         emptyState
-                            .padding(.top, 54)
+                            .padding(.top, 18)
                     } else {
                         sectionHeader
 
@@ -167,37 +250,30 @@ struct PlaylistsView: View {
         }
     }
 
-    private var recentlyPlayed: some View {
+    private var smartPlaylistsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionTitle(title: "Recently Played")
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Smart Playlists")
+                Spacer()
+                Text("AUTOMATIC")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(1.2)
+                    .foregroundStyle(.tertiary)
+            }
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(recentTracks) { track in
-                        Button {
-                            player.play(track, queue: recentTracks)
-                            showNowPlaying = true
+                    ForEach(SmartPlaylist.allCases) { smart in
+                        NavigationLink {
+                            SmartPlaylistDetailView(
+                                smart: smart,
+                                showNowPlaying: $showNowPlaying
+                            )
                         } label: {
-                            VStack(alignment: .leading, spacing: 7) {
-                                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                                    .frame(width: 128, height: 128)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-                                    }
-
-                                Text(track.title)
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-
-                                Text(track.artist)
-                                    .font(.system(size: 11, weight: .regular))
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .frame(width: 128, alignment: .leading)
+                            SmartPlaylistTile(
+                                smart: smart,
+                                tracks: smart.tracks(in: library)
+                            )
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.975, opacity: 0.9))
                     }
@@ -1068,5 +1144,289 @@ struct PlaylistEditorView: View {
             )
         }
         dismiss()
+    }
+}
+
+struct SmartPlaylistTile: View {
+    let smart: SmartPlaylist
+    let tracks: [Track]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            SmartPlaylistCover(smart: smart, tracks: tracks)
+                .frame(width: 132, height: 132)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                }
+
+            Text(smart.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Text(countText)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 132, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var countText: String {
+        tracks.count == 1 ? "1 song" : "\(tracks.count) songs"
+    }
+}
+
+struct SmartPlaylistCover: View {
+    let smart: SmartPlaylist
+    let tracks: [Track]
+
+    var body: some View {
+        GeometryReader { geometry in
+            let side = min(geometry.size.width, geometry.size.height)
+
+            ZStack {
+                if tracks.isEmpty {
+                    LinearGradient(
+                        colors: [
+                            smart.tint.opacity(0.95),
+                            smart.tint.opacity(0.48),
+                            Color(white: 0.06)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+
+                    Image(systemName: smart.icon)
+                        .font(.system(size: side * 0.30, weight: .light))
+                        .foregroundStyle(.white.opacity(0.92))
+                } else {
+                    PlaylistMosaic(tracks: Array(tracks.prefix(4)))
+
+                    LinearGradient(
+                        colors: [.clear, .black.opacity(0.16), .black.opacity(0.48)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Image(systemName: smart.icon)
+                                .font(.system(size: max(10, side * 0.095), weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: side * 0.18, height: side * 0.18)
+                                .background(.black.opacity(0.44), in: Circle())
+                            Spacer()
+                        }
+                        .padding(side * 0.07)
+                    }
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .background(smart.tint.opacity(0.22))
+    }
+}
+
+struct SmartPlaylistDetailView: View {
+    @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var player: PlayerManager
+
+    let smart: SmartPlaylist
+    @Binding var showNowPlaying: Bool
+
+    private var tracks: [Track] {
+        smart.tracks(in: library)
+    }
+
+    private var downloadable: [Track] {
+        tracks.filter { $0.isCloud && !library.isDownloaded($0) }
+    }
+
+    private var isDownloading: Bool {
+        tracks.contains { library.isDownloading($0) }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                    .padding(.bottom, 26)
+                    .frame(maxWidth: .infinity)
+                    .background(alignment: .top) {
+                        RadialGradient(
+                            colors: [smart.tint.opacity(0.22), .clear],
+                            center: .top,
+                            startRadius: 0,
+                            endRadius: 340
+                        )
+                        .frame(height: 460)
+                    }
+
+                if tracks.isEmpty {
+                    emptyState
+                        .padding(.horizontal, 20)
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(tracks) { track in
+                            TrackRow(track: track, queue: tracks)
+
+                            if track.id != tracks.last?.id {
+                                Divider().opacity(0.32)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                }
+
+                Spacer(minLength: 120)
+            }
+        }
+        .scrollIndicators(.hidden)
+        .background(AppBackground())
+        .navigationTitle(smart.title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+    }
+
+    private var header: some View {
+        VStack(spacing: 14) {
+            SmartPlaylistCover(smart: smart, tracks: tracks)
+                .frame(width: 222, height: 222)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                }
+                .shadow(color: .black.opacity(0.28), radius: 24, y: 12)
+
+            VStack(spacing: 6) {
+                Text("SMART PLAYLIST")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.3)
+                    .foregroundStyle(.secondary)
+
+                Text(smart.title)
+                    .font(.system(size: 33, weight: .bold))
+                    .tracking(-1.1)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 1)
+            }
+            .padding(.horizontal, 16)
+
+            if !tracks.isEmpty {
+                HStack(spacing: 10) {
+                    Button {
+                        play(shuffled: false)
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .padding(.horizontal, 22)
+                            .frame(height: 42)
+                            .background(Color.primary, in: Capsule())
+                            .foregroundStyle(Color(uiColor: .systemBackground))
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.94))
+
+                    Button {
+                        play(shuffled: true)
+                    } label: {
+                        Image(systemName: "shuffle")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .frame(width: 42, height: 42)
+                            .contentShape(Circle())
+                            .nativeGlass(Circle(), interactive: true)
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.9))
+                    .accessibilityLabel("Shuffle \(smart.title)")
+
+                    if !downloadable.isEmpty {
+                        Button {
+                            Task { await library.downloadAll(downloadable) }
+                        } label: {
+                            Group {
+                                if isDownloading {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                        .tint(.secondary)
+                                } else {
+                                    Image(systemName: "arrow.down.circle")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                }
+                            }
+                            .frame(width: 42, height: 42)
+                            .contentShape(Circle())
+                            .nativeGlass(Circle(), interactive: true)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.9))
+                        .disabled(isDownloading)
+                        .accessibilityLabel("Download \(smart.title)")
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: smart.icon)
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(.tertiary)
+
+            Text(smart.emptyTitle)
+                .font(.system(size: 21, weight: .semibold))
+                .tracking(-0.3)
+
+            Text(smart.emptyMessage)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 16)
+    }
+
+    private var subtitle: String {
+        let count = tracks.count
+        let songText = count == 1 ? "1 song" : "\(count) songs"
+        guard let duration = durationText else { return songText }
+        return "\(songText) · \(duration)"
+    }
+
+    private var durationText: String? {
+        let total = Int(tracks.reduce(0) { $0 + $1.duration }.rounded())
+        guard total > 0 else { return nil }
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        if hours > 0 {
+            return "\(hours) hr \(minutes) min"
+        }
+        return "\(minutes) min"
+    }
+
+    private func play(shuffled: Bool) {
+        guard let first = tracks.first else { return }
+        if player.isShuffled != shuffled {
+            player.toggleShuffle()
+        }
+        player.play(first, queue: tracks)
+        showNowPlaying = true
     }
 }

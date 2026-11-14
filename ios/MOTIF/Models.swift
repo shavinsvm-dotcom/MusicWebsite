@@ -99,17 +99,20 @@ struct LibrarySnapshot: Codable {
     var favoriteIDs: [UUID]
     var playlists: [Playlist]
     var recentTrackIDs: [UUID]
+    var playCounts: [UUID: Int]
 
     init(
         tracks: [Track] = [],
         favoriteIDs: [UUID] = [],
         playlists: [Playlist] = [],
-        recentTrackIDs: [UUID] = []
+        recentTrackIDs: [UUID] = [],
+        playCounts: [UUID: Int] = [:]
     ) {
         self.tracks = tracks
         self.favoriteIDs = favoriteIDs
         self.playlists = playlists
         self.recentTrackIDs = recentTrackIDs
+        self.playCounts = playCounts
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -117,6 +120,7 @@ struct LibrarySnapshot: Codable {
         case favoriteIDs
         case playlists
         case recentTrackIDs
+        case playCounts
     }
 
     init(from decoder: Decoder) throws {
@@ -125,5 +129,6 @@ struct LibrarySnapshot: Codable {
         favoriteIDs = try container.decodeIfPresent([UUID].self, forKey: .favoriteIDs) ?? []
         playlists = try container.decodeIfPresent([Playlist].self, forKey: .playlists) ?? []
         recentTrackIDs = try container.decodeIfPresent([UUID].self, forKey: .recentTrackIDs) ?? []
+        playCounts = try container.decodeIfPresent([UUID: Int].self, forKey: .playCounts) ?? [:]
     }
 }
