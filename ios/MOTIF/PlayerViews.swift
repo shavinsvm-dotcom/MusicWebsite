@@ -9,7 +9,7 @@ struct MiniPlayer: View {
     var body: some View {
         if let track = player.current {
             VStack(spacing: 0) {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Button {
                         showNowPlaying = true
                     } label: {
@@ -33,48 +33,48 @@ struct MiniPlayer: View {
                         }
                         .contentShape(Rectangle())
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.985, opacity: 0.92))
+                    .buttonStyle(MotifPressStyle(scale: 0.98, opacity: 0.9))
                     .layoutPriority(1)
 
-                    if let next = player.upNext {
-                        VStack(alignment: .trailing, spacing: 1) {
-                            Text(next.title)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(.primary)
-                                .lineLimit(1)
-                            Text(next.artist)
-                                .font(.system(size: 10, weight: .regular))
-                                .foregroundStyle(.tertiary)
-                                .lineLimit(1)
-                        }
-                        .frame(maxWidth: 112, alignment: .trailing)
-                        .padding(.leading, 2)
+                    Button {
+                        player.previous()
+                    } label: {
+                        Image(systemName: "backward.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(width: 30, height: 30)
+                            .contentShape(Circle())
                     }
+                    .buttonStyle(MotifPressStyle(scale: 0.8))
+                    .nativeGlass(Circle())
+                    .accessibilityLabel("Previous")
 
                     Button {
                         player.toggle()
                     } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 17, weight: .semibold))
-                            .frame(width: 28, height: 32)
-                            .contentShape(Rectangle())
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 34, height: 34)
+                            .contentShape(Circle())
+                            .motifBounce(player.isPlaying)
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.8))
+                    .nativeGlass(Circle())
                     .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                     Button {
                         player.next()
                     } label: {
-                        Image(systemName: "forward.end.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .frame(width: 28, height: 32)
-                            .contentShape(Rectangle())
+                        Image(systemName: "forward.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .frame(width: 30, height: 30)
+                            .contentShape(Circle())
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.8))
+                    .nativeGlass(Circle())
                     .accessibilityLabel("Next")
                 }
                 .padding(.leading, 6)
-                .padding(.trailing, 8)
+                .padding(.trailing, 6)
                 .frame(height: 46)
             }
             .background(.ultraThinMaterial, in: Capsule())
@@ -86,6 +86,8 @@ struct MiniPlayer: View {
             }
             .clipShape(Capsule())
             .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 8)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
             .transition(
                 .move(edge: .bottom)
                     .combined(with: .opacity)
@@ -165,25 +167,26 @@ struct NowPlayingView: View {
                         .resizable()
                         .scaledToFill()
                         .frame(
-                            width: geometry.size.width * 1.24,
-                            height: geometry.size.width * 1.24
+                            width: geometry.size.width * 1.35,
+                            height: geometry.size.height * 1.25
                         )
-                        .blur(radius: 58)
-                        .opacity(0.58)
+                        .blur(radius: 64)
+                        .opacity(0.56)
                         .blendMode(.screen)
-                        .offset(y: -geometry.size.height * 0.17)
+                        .offset(y: -geometry.size.height * 0.10)
                 } else {
                     ArtworkView(
                         url: track.artworkURL,
                         seed: track.title + track.artist
                     )
                     .frame(
-                        width: geometry.size.width * 1.2,
-                        height: geometry.size.width * 1.2
+                        width: geometry.size.width * 1.35,
+                        height: geometry.size.height * 1.25
                     )
-                    .blur(radius: 42)
-                    .opacity(0.50)
+                    .blur(radius: 52)
+                    .opacity(0.46)
                     .blendMode(.screen)
+                    .offset(y: -geometry.size.height * 0.10)
                 }
 
                 LinearGradient(
@@ -234,7 +237,7 @@ struct NowPlayingView: View {
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
-            let artSide = min(geometry.size.width - 48, geometry.size.height * 0.45)
+            let artSide = min(geometry.size.width, geometry.size.height * 0.50)
             let bottomHeight: CGFloat = 243
             let gap = max(
                 42,
@@ -246,28 +249,21 @@ struct NowPlayingView: View {
 
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
-                    ZStack {
-                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                            .frame(width: artSide * 1.13, height: artSide * 1.13)
-                            .blur(radius: 30)
-                            .opacity(0.82)
-
-                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                            .frame(width: artSide, height: artSide)
-                            .mask(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .black, location: 0),
-                                        .init(color: .black, location: 0.93),
-                                        .init(color: .clear, location: 1)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
+                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                        .frame(width: artSide, height: artSide)
+                        .mask(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: .black, location: 0.035),
+                                    .init(color: .black, location: 0.925),
+                                    .init(color: .clear, location: 1)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
                             )
-                    }
-                    .frame(width: artSide, height: artSide)
-                    .padding(.top, 4)
+                        )
+                        .padding(.top, 4)
 
                     Spacer().frame(height: gap)
 
@@ -462,11 +458,12 @@ struct NowPlayingView: View {
             Button {
                 player.toggle()
             } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 78, height: 78)
-                    .nativeGlass(Circle())
+                                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 78, height: 78)
+                        .motifBounce(player.isPlaying)
+                        .nativeGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.9))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
