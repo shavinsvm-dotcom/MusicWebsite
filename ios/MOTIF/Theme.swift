@@ -62,6 +62,15 @@ extension View {
         }
     }
 
+    @ViewBuilder
+    func motifBounce(tick: Int) -> some View {
+        if #available(iOS 17.0, *) {
+            symbolEffect(.bounce, options: .speed(1.6), value: tick)
+        } else {
+            self
+        }
+    }
+
     func screenEntrance() -> some View {
         modifier(ScreenEntrance())
     }

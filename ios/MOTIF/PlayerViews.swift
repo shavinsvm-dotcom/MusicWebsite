@@ -1,3 +1,4 @@
+import CoreImage
 import SwiftUI
 import UIKit
 
@@ -140,6 +141,7 @@ struct NowPlayingView: View {
     @State private var isScrubbing = false
     @State private var scrubValue = 0.0
     @State private var backdropImage: UIImage?
+    @State private var backdropColor = Color(red: 0.043, green: 0.047, blue: 0.063)
     @State private var contentVisible = false
     @State private var skipPulse = 0
 
@@ -177,7 +179,7 @@ struct NowPlayingView: View {
     private func backdrop(_ track: Track) -> some View {
         GeometryReader { geometry in
             ZStack {
-                Color(red: 0.043, green: 0.047, blue: 0.063)
+                backdropColor
 
                 Group {
                     if let image = backdropImage {
@@ -218,6 +220,7 @@ struct NowPlayingView: View {
     private func loadBackdropImage() async {
         guard let url = player.current?.artworkURL else {
             backdropImage = nil
+            backdropColor = Color(red: 0.043, green: 0.047, blue: 0.063)
             return
         }
 
@@ -234,7 +237,12 @@ struct NowPlayingView: View {
         }
 
         guard !Task.isCancelled else { return }
-        backdropImage = image
+        withAnimation(.easeInOut(duration: 0.35)) {
+            backdropImage = image
+            if let image {
+                backdropColor = Color(uiColor: image.motifAverageColor)
+            }
+        }
     }
 
     private func content(_ track: Track) -> some View {
@@ -475,7 +483,7 @@ struct NowPlayingView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
-                    .symbolEffect(.bounce, options: .speed(1.6), value: skipPulse)
+                    .motifBounce(tick: skipPulse)
                     .nativeGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
@@ -507,7 +515,7 @@ struct NowPlayingView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
-                    .symbolEffect(.bounce, options: .speed(1.6), value: skipPulse)
+                    .motifBounce(tick: skipPulse)
                     .nativeGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
@@ -577,5 +585,64 @@ struct NowPlayingView: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private extension UIImage {
+    var motifAverageColor: UIColor {
+        guard let cgImage else {
+            return UIColor(white: 0.10, alpha: 1)
+        }
+
+        let input = CIImage(cgImage: cgImage)
+        guard let filter = CIFilter(name: "CIAreaAverage") else {
+            return UIColor(white: 0.10, alpha: 1)
+        }
+
+        let extent = input.extent
+        let upperHalf = CGRect(
+            x: extent.minX,
+            y: extent.midY,
+            width: extent.width,
+            height: extent.height * 0.55
+        )
+        filter.setValue(input, forKey: kCIInputImageKey)
+        filter.setValue(CIVector(cgRect: upperHalf), forKey: kCIInputExtentKey)
+
+        guard let output = filter.outputImage else {
+            return UIColor(white: 0.10, alpha: 1)
+        }
+
+        var bitmap = [UInt8](repeating: 0, count: 4)
+        CIContext().render(
+            output,
+            toBitmap: &bitmap,
+            rowBytes: 4,
+            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
+            format: .RGBA8,
+            colorSpace: CGColorSpaceCreateDeviceRGB()
+        )
+
+        let sampled = UIColor(
+            red: CGFloat(bitmap[0]) / 255,
+            green: CGFloat(bitmap[1]) / 255,
+            blue: CGFloat(bitmap[2]) / 255,
+            alpha: 1
+        )
+
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard sampled.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            return sampled
+        }
+
+        return UIColor(
+            hue: hue,
+            saturation: min(saturation * 1.05, 1),
+            brightness: min(brightness * 1.05 + 0.01, 0.82),
+            alpha: 1
+        )
     }
 }
