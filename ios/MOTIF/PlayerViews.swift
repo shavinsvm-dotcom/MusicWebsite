@@ -22,8 +22,8 @@ struct MiniPlayer: View {
                     } label: {
                         HStack(spacing: 9) {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                                .frame(width: 28, height: 28)
-                                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                                .frame(width: 32, height: 32)
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                                 .modifier(
                                     MiniArtworkTransitionSource(
                                         sourceID: transitionSourceID,
