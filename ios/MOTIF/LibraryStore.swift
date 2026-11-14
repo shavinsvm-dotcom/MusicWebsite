@@ -213,6 +213,14 @@ final class LibraryStore: ObservableObject {
                 }
             }
             save()
+
+            // Keep lyrics with the offline copy. Embedded lyrics win; when the
+            // file has none, ask LRCLIB and persist the result in the library.
+            if downloadedLyrics == nil,
+               let record = try? await LyricsService.findLyrics(for: existing),
+               let onlineLyrics = record.lyricsText {
+                setLyrics(onlineLyrics, for: existing)
+            }
         } catch {
             errorMessage = "Couldn’t download \(existing.title): \(error.localizedDescription)"
         }
@@ -258,6 +266,17 @@ final class LibraryStore: ObservableObject {
         }
 
         if changed { save() }
+    }
+
+    func setLyrics(_ lyrics: String, for track: Track) {
+        guard let existing = canonicalTrack(for: track),
+              let index = tracks.firstIndex(where: { $0.id == existing.id })
+        else { return }
+
+        let trimmed = lyrics.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        tracks[index].lyrics = lyrics
+        save()
     }
 
     func toggleFavorite(_ track: Track) {

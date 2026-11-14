@@ -24,6 +24,9 @@ struct MiniPlayer: View {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                                 .frame(width: 32, height: 32)
                                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .overlay {
+                                    MiniArtworkProgressRing()
+                                }
                                 .modifier(
                                     MiniArtworkTransitionSource(
                                         sourceID: transitionSourceID,
@@ -106,8 +109,6 @@ struct MiniPlayer: View {
                 .padding(.leading, 8)
                 .padding(.trailing, 8)
                 .frame(height: 42)
-
-                MiniPlayerProgress()
             }
             .nativeGlass(Capsule())
             .contentShape(Capsule())
@@ -126,43 +127,30 @@ struct MiniPlayer: View {
     }
 }
 
-private struct MiniPlayerProgress: View {
+private struct MiniArtworkProgressRing: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var progress: PlaybackProgress
 
+    private var fraction: CGFloat {
+        guard player.duration > 0 else { return 0 }
+        return CGFloat(min(max(progress.elapsed / player.duration, 0), 1))
+    }
+
     var body: some View {
-        GeometryReader { geometry in
-            let width = max(geometry.size.width, 1)
-            let fraction = player.duration > 0
-                ? min(max(progress.elapsed / player.duration, 0), 1)
-                : 0
-            let headX = min(max(width * fraction, 2.5), max(width - 2.5, 2.5))
+        ZStack {
+            RoundedRectangle(cornerRadius: 12.5, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 1.5)
 
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.white.opacity(0.15))
-                    .frame(width: width, height: 3)
-
-                Capsule()
-                    .fill(Color.white.opacity(0.88))
-                    .frame(width: max(width * fraction, 3), height: 3)
-
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 5, height: 5)
-                    .position(x: headX, y: 1.5)
-                    .shadow(color: .black.opacity(0.24), radius: 2, y: 1)
-            }
-            .frame(width: width, height: 3)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .animation(
-                .linear(duration: player.isPlaying ? 0.90 : 0.20),
-                value: fraction
-            )
+            RoundedRectangle(cornerRadius: 12.5, style: .continuous)
+                .trim(from: 0, to: max(fraction, 0.001))
+                .stroke(
+                    Color.white.opacity(0.94),
+                    style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
+                )
+                .rotationEffect(.degrees(-90))
         }
-        .frame(height: 3)
-        .padding(.horizontal, 18)
-        .padding(.bottom, 5)
+        .frame(width: 38, height: 38)
+        .animation(.linear(duration: 1.0 / 60.0), value: fraction)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -181,13 +169,22 @@ struct NowPlayingView: View {
     @State private var skipPulse = 0
     @State private var showQueue = false
     @State private var lyricsTrack: Track?
+    @State private var lyricsFinderTrack: Track?
     @State private var transitionSettled = false
+
+    private var currentTrack: Track? {
+        guard let current = player.current else { return nil }
+        return library.tracks.first { existing in
+            existing.id == current.id
+                || (current.remoteID != nil && existing.remoteID == current.remoteID)
+        } ?? current
+    }
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if let track = player.current {
+            if let track = currentTrack {
                 backdrop(track)
                 content(track)
             } else {
@@ -221,6 +218,10 @@ struct NowPlayingView: View {
         }
         .sheet(item: $lyricsTrack) { track in
             LyricsView(track: track)
+        }
+        .sheet(item: $lyricsFinderTrack) { track in
+            LyricsFinderView(track: track)
+                .environmentObject(library)
         }
     }
 
@@ -314,65 +315,68 @@ struct NowPlayingView: View {
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(track.title)
-                            .font(.system(size: 44, weight: .heavy))
-                            .tracking(-1.8)
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.68)
-                            .fixedSize(horizontal: false, vertical: true)
+                                .font(.system(size: 44, weight: .heavy))
+                                .tracking(-1.8)
+                                .foregroundStyle(.white)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.68)
+                                .fixedSize(horizontal: false, vertical: true)
 
-                        Text(track.artist)
-                            .font(.system(size: 20, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.66))
-                            .lineLimit(1)
-
-                        HStack(spacing: 8) {
-                            Image(systemName: "opticaldisc")
-                                .font(.system(size: 13, weight: .regular))
-                            Text(metadataText(track))
+                            Text(track.artist)
+                                .font(.system(size: 20, weight: .regular))
+                                .foregroundStyle(.white.opacity(0.66))
                                 .lineLimit(1)
-                        }
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.52))
-                        .padding(.top, 2)
 
-                        if let lyrics = track.lyrics, !lyrics.isEmpty {
-                            Button {
-                                lyricsTrack = track
-                            } label: {
-                                Label("Lyrics", systemImage: "quote.bubble")
+                            HStack(spacing: 8) {
+                                Image(systemName: "opticaldisc")
+                                    .font(.system(size: 13, weight: .regular))
+                                Text(metadataText(track))
+                                    .lineLimit(1)
+                            }
+                            .font(.system(size: 14, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.52))
+                            .padding(.top, 2)
+
+                            if transitionSettled {
+                                Menu {
+                                    lyricsOptions(track)
+                                } label: {
+                                    Label(
+                                        track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
+                                        systemImage: "quote.bubble"
+                                    )
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundStyle(.white.opacity(0.70))
                                     .padding(.top, 3)
+                                }
+                                .buttonStyle(MotifPressStyle(scale: 0.94))
+                                .transition(.opacity)
                             }
-                            .buttonStyle(MotifPressStyle(scale: 0.94))
                         }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 24)
-                    .opacity(transitionSettled ? 1 : 0)
-                    .allowsHitTesting(transitionSettled)
-
-                    NowPlayingScrubber()
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
-                        .padding(.top, 10)
-                        .opacity(transitionSettled ? 1 : 0)
-                        .allowsHitTesting(transitionSettled)
 
-                    controls(track)
-                        .padding(.horizontal, 22)
-                        .padding(.top, 12)
-                        .opacity(transitionSettled ? 1 : 0)
-                        .allowsHitTesting(transitionSettled)
+                        if transitionSettled {
+                            NowPlayingScrubber()
+                                .padding(.horizontal, 24)
+                                .padding(.top, 10)
+                                .transition(.opacity)
+
+                            controls(track)
+                                .padding(.horizontal, 22)
+                                .padding(.top, 12)
+                                .transition(.opacity)
+                        }
 
                     Spacer(minLength: 0)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
 
-                topBar(track)
-                    .padding(.top, 4)
-                    .opacity(transitionSettled ? 1 : 0)
-                    .allowsHitTesting(transitionSettled)
+                if transitionSettled {
+                    topBar(track)
+                        .padding(.top, 4)
+                        .transition(.opacity)
+                }
             }
         }
     }
@@ -393,6 +397,18 @@ struct NowPlayingView: View {
                 .accessibilityLabel("Close player")
 
                 Spacer()
+
+                Menu {
+                    lyricsOptions(track)
+                } label: {
+                    Image(systemName: "quote.bubble")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 40, height: 40)
+                        .nativeGlass(Circle(), interactive: true)
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.88))
+                .accessibilityLabel("Lyrics options")
 
                 Menu {
                     if !library.playlists.isEmpty {
@@ -438,8 +454,8 @@ struct NowPlayingView: View {
                             Label("Up Next", systemImage: "text.line.first.and.arrowtriangle.forward")
                         }
 
-                        Button {
-                            lyricsTrack = track
+                        Menu {
+                            lyricsOptions(track)
                         } label: {
                             Label("Lyrics", systemImage: "quote.bubble")
                         }
@@ -648,6 +664,28 @@ struct NowPlayingView: View {
         }
     }
 
+    @ViewBuilder
+    private func lyricsOptions(_ track: Track) -> some View {
+        if track.lyrics?.isEmpty == false {
+            Button {
+                lyricsTrack = track
+            } label: {
+                Label("View Lyrics", systemImage: "quote.bubble")
+            }
+
+            Divider()
+        }
+
+        Button {
+            lyricsFinderTrack = track
+        } label: {
+            Label(
+                track.lyrics?.isEmpty == false ? "Find Different Lyrics" : "Find Lyrics Online",
+                systemImage: "globe"
+            )
+        }
+    }
+
     private func metadataText(_ track: Track) -> String {
         let album = track.album.isEmpty ? "Single" : track.album
         guard let year = track.releaseYear else { return album }
@@ -692,7 +730,7 @@ private struct NowPlayingScrubber: View {
                 }
                 .frame(height: geometry.size.height)
                 .animation(
-                    isScrubbing ? nil : .linear(duration: 0.42),
+                    isScrubbing ? nil : .linear(duration: 1.0 / 60.0),
                     value: fraction
                 )
                 .contentShape(Rectangle())

@@ -286,7 +286,7 @@ final class PlayerManager: ObservableObject {
 
     private func installTimeObserver() {
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
+            forInterval: CMTime(seconds: 1.0 / 60.0, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             Task { @MainActor in
@@ -309,7 +309,7 @@ final class PlayerManager: ObservableObject {
                 }
 
                 self.infoTick += 1
-                if self.infoTick % 20 == 0 { self.updateNowPlaying() }
+                if self.infoTick % 120 == 0 { self.updateNowPlaying() }
                 self.maybeBeginCrossfade()
             }
         }

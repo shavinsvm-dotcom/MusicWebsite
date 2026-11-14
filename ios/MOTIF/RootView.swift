@@ -25,6 +25,7 @@ struct RootView: View {
     @StateObject private var routeMonitor = AudioRouteMonitor()
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .forYou
+    @State private var attemptedLyricsIDs: Set<UUID> = []
     @Namespace private var playerTransition
 
     var body: some View {
@@ -61,8 +62,25 @@ struct RootView: View {
                 await library.refreshCloud()
             }
             .task(id: player.current?.id) {
-                guard let url = player.current?.artworkURL else { return }
-                await PlaybackBackdropCache.shared.prepare(for: url)
+                guard let track = player.current else { return }
+
+                if let url = track.artworkURL {
+                    await PlaybackBackdropCache.shared.prepare(for: url)
+                }
+
+                // An offline track should have its lyrics available offline too.
+                // New downloads fetch them during download; this covers files
+                // that were downloaded before lyrics lookup was added.
+                guard track.mediaURL.isFileURL,
+                      track.lyrics == nil,
+                      !attemptedLyricsIDs.contains(track.id)
+                else { return }
+
+                attemptedLyricsIDs.insert(track.id)
+                if let record = try? await LyricsService.findLyrics(for: track),
+                   let lyrics = record.lyricsText {
+                    library.setLyrics(lyrics, for: track)
+                }
             }
     }
 
