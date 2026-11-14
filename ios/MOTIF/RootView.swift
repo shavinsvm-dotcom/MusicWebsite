@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum AppTab: String, Hashable {
     case forYou
@@ -38,7 +39,7 @@ struct RootView: View {
                 }
             }
             .fullScreenCover(isPresented: $showNowPlaying) {
-                NowPlayingView()
+                NowPlayingView(backdropImage: currentBackdrop)
                     .environmentObject(library)
                     .environmentObject(player)
                     .environmentObject(player.progress)
@@ -56,6 +57,15 @@ struct RootView: View {
                 await library.refreshLocalMetadata()
                 await library.refreshCloud()
             }
+            .task(id: player.current?.id) {
+                guard let url = player.current?.artworkURL else { return }
+                await PlaybackBackdropCache.shared.prepare(for: url)
+            }
+    }
+
+    private var currentBackdrop: UIImage? {
+        guard let url = player.current?.artworkURL else { return nil }
+        return PlaybackBackdropCache.shared.preparedImage(for: url)
     }
 
     @ViewBuilder

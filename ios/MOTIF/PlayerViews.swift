@@ -8,18 +8,22 @@ struct MiniPlayer: View {
     let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
+    private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
         if let track = player.current {
             VStack(spacing: 0) {
-                HStack(spacing: 6) {
+                HStack(spacing: 8) {
                     Button {
+                        if let url = track.artworkURL {
+                            _ = PlaybackBackdropCache.shared.preparedImage(for: url)
+                        }
                         showNowPlaying = true
                     } label: {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 9) {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                                .frame(width: 24, height: 24)
-                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .frame(width: 28, height: 28)
+                                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                                 .modifier(
                                     MiniArtworkTransitionSource(
                                         sourceID: transitionSourceID,
@@ -45,57 +49,62 @@ struct MiniPlayer: View {
                     .buttonStyle(MotifPressStyle(scale: 0.98, opacity: 0.9))
                     .layoutPriority(1)
 
-                    Button {
-                        skipPulse += 1
-                        withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
-                            player.previous()
+                    HStack(spacing: 8) {
+                        Button {
+                            tapFeedback()
+                            skipPulse += 1
+                            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                                player.previous()
+                            }
+                        } label: {
+                            Image(systemName: "backward.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 32, height: 32)
+                                .motifBounce(tick: skipPulse)
+                                .contentShape(Circle())
                         }
-                    } label: {
-                        Image(systemName: "backward.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .frame(width: 30, height: 30)
-                            .motifBounce(tick: skipPulse)
-                            .contentShape(Circle())
-                    }
-                    .buttonStyle(MotifPressStyle(scale: 0.8))
-                    .nativeGlass(Circle(), interactive: true)
-                    .accessibilityLabel("Previous")
+                        .buttonStyle(MotifPressStyle(scale: 0.8))
+                        .nativeGlass(Circle(), interactive: true)
+                        .accessibilityLabel("Previous")
 
-                    Button {
-                        playPulse += 1
-                        withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
-                            player.toggle()
+                        Button {
+                            tapFeedback()
+                            playPulse += 1
+                            withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
+                                player.toggle()
+                            }
+                        } label: {
+                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 32, height: 32)
+                                .contentShape(Circle())
+                                .motifReplace()
+                                .motifBounce(tick: playPulse)
                         }
-                    } label: {
-                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: 34, height: 34)
-                            .contentShape(Circle())
-                            .motifReplace()
-                            .motifBounce(tick: playPulse)
-                    }
-                    .buttonStyle(MotifPressStyle(scale: 0.8))
-                    .nativeGlass(Circle(), interactive: true)
-                    .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                        .buttonStyle(MotifPressStyle(scale: 0.8))
+                        .nativeGlass(Circle(), interactive: true)
+                        .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
-                    Button {
-                        skipPulse += 1
-                        withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
-                            player.next()
+                        Button {
+                            tapFeedback()
+                            skipPulse += 1
+                            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                                player.next()
+                            }
+                        } label: {
+                            Image(systemName: "forward.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 32, height: 32)
+                                .motifBounce(tick: skipPulse)
+                                .contentShape(Circle())
                         }
-                    } label: {
-                        Image(systemName: "forward.fill")
-                            .font(.system(size: 13, weight: .semibold))
-                            .frame(width: 30, height: 30)
-                            .motifBounce(tick: skipPulse)
-                            .contentShape(Circle())
+                        .buttonStyle(MotifPressStyle(scale: 0.8))
+                        .nativeGlass(Circle(), interactive: true)
+                        .accessibilityLabel("Next")
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.8))
-                    .nativeGlass(Circle(), interactive: true)
-                    .accessibilityLabel("Next")
                 }
-                .padding(.leading, 6)
-                .padding(.trailing, 6)
+                .padding(.leading, 8)
+                .padding(.trailing, 8)
                 .frame(height: 42)
 
                 MiniPlayerProgress()
@@ -112,6 +121,9 @@ struct MiniPlayer: View {
         }
     }
 
+    private func tapFeedback() {
+        Self.tapGenerator.impactOccurred(intensity: 0.7)
+    }
 }
 
 private struct MiniPlayerProgress: View {
@@ -161,6 +173,8 @@ struct NowPlayingView: View {
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
 
+    let backdropImage: UIImage?
+
     @State private var playPulse = 0
     @State private var skipPulse = 0
 
@@ -190,23 +204,22 @@ struct NowPlayingView: View {
                 Color.black
 
                 Group {
-                    if let image = track.artworkURL.flatMap({ ArtworkImageCache.shared.image(for: $0) }) {
+                    if let backdropImage {
+                        Image(uiImage: backdropImage)
+                            .resizable()
+                            .scaledToFill()
+                    } else if let image = track.artworkURL.flatMap({ ArtworkImageCache.shared.image(for: $0) }) {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
+                            .opacity(0.42)
                     } else {
-                        ArtworkView(
-                            url: track.artworkURL,
-                            seed: track.title + track.artist
-                        )
+                        Color.black
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
-                .scaleEffect(1.24)
-                .blur(radius: 46)
-                .saturation(1.45)
+                .clipped()
                 .opacity(0.96)
-                .drawingGroup()
 
                 LinearGradient(
                     stops: [

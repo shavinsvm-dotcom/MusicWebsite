@@ -1,3 +1,4 @@
+import CoreImage
 import SwiftUI
 import UIKit
 
@@ -114,9 +115,10 @@ struct MotifPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
+            .brightness(configuration.isPressed ? -0.035 : 0)
             .opacity(configuration.isPressed ? opacity : 1)
             .animation(
-                .spring(response: 0.16, dampingFraction: 0.70),
+                .spring(response: 0.24, dampingFraction: 0.56),
                 value: configuration.isPressed
             )
     }
@@ -271,6 +273,102 @@ final class ArtworkImageCache {
     }
 }
 
+/// Pre-blurs the player backdrop once, so opening the player never pays for
+/// a full-screen live blur while the zoom transition is running.
+final class PlaybackBackdropCache {
+    static let shared = PlaybackBackdropCache()
+
+    private let cache = NSCache<NSURL, UIImage>()
+    private let context = CIContext(options: nil)
+    private let renderSize = CGSize(width: 180, height: 320)
+
+    private init() {
+        cache.countLimit = 32
+    }
+
+    func image(for url: URL) -> UIImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    @discardableResult
+    func prepare(for url: URL) async -> UIImage? {
+        if let cached = image(for: url) { return cached }
+
+        let artwork: UIImage?
+        if let cachedArtwork = ArtworkImageCache.shared.image(for: url) {
+            artwork = cachedArtwork
+        } else if url.isFileURL {
+            artwork = UIImage(contentsOfFile: url.path)
+        } else {
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else {
+                return nil
+            }
+            artwork = UIImage(data: data)
+        }
+
+        guard let artwork else { return nil }
+        ArtworkImageCache.shared.store(artwork, for: url)
+
+        let size = renderSize
+        let ciContext = context
+        let rendered = await Task.detached(priority: .utility) {
+            Self.render(artwork, size: size, context: ciContext)
+        }.value
+
+        guard let rendered else { return nil }
+        cache.setObject(rendered, forKey: url as NSURL)
+        return rendered
+    }
+
+    func preparedImage(for url: URL) -> UIImage? {
+        if let cached = image(for: url) { return cached }
+        guard let artwork = ArtworkImageCache.shared.image(for: url) else { return nil }
+        guard let rendered = Self.render(artwork, size: renderSize, context: context) else {
+            return nil
+        }
+        cache.setObject(rendered, forKey: url as NSURL)
+        return rendered
+    }
+
+    private static func render(_ image: UIImage, size: CGSize, context: CIContext) -> UIImage? {
+        guard image.size.width > 0, image.size.height > 0 else { return nil }
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        let scaled = renderer.image { _ in
+            let factor = max(size.width / image.size.width, size.height / image.size.height)
+            let drawSize = CGSize(
+                width: image.size.width * factor,
+                height: image.size.height * factor
+            )
+            image.draw(in: CGRect(
+                x: (size.width - drawSize.width) / 2,
+                y: (size.height - drawSize.height) / 2,
+                width: drawSize.width,
+                height: drawSize.height
+            ))
+        }
+
+        guard let cgImage = scaled.cgImage else { return nil }
+        let input = CIImage(cgImage: cgImage)
+        let blurred = input
+            .clampedToExtent()
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 16])
+            .applyingFilter("CIColorControls", parameters: [
+                kCIInputSaturationKey: 1.38,
+                kCIInputBrightnessKey: -0.055,
+                kCIInputContrastKey: 1.04
+            ])
+            .cropped(to: input.extent)
+
+        guard let output = context.createCGImage(blurred, from: input.extent) else {
+            return nil
+        }
+        return UIImage(cgImage: output)
+    }
+}
+
 struct SectionTitle: View {
     let title: String
 
@@ -287,6 +385,7 @@ struct TrackRow: View {
 
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
+    @State private var downloadPulse = 0
 
     var body: some View {
         let isDownloaded = track.isCloud && library.isDownloaded(track)
@@ -332,6 +431,7 @@ struct TrackRow: View {
             if track.isCloud {
                 Button {
                     guard !isDownloaded, !isDownloading else { return }
+                    downloadPulse += 1
                     Task { await library.download(track) }
                 } label: {
                     Group {
@@ -343,6 +443,9 @@ struct TrackRow: View {
                             Image(systemName: isDownloaded ? "checkmark.circle.fill" : "arrow.down.circle")
                                 .font(.body.weight(.semibold))
                                 .foregroundStyle(.secondary)
+                                .motifReplace()
+                                .motifBounce(tick: downloadPulse)
+                                .animation(.spring(response: 0.30, dampingFraction: 0.70), value: isDownloaded)
                         }
                     }
                     .frame(width: 32, height: 42)
