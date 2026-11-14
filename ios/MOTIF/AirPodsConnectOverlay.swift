@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct AirPodsConnectOverlay: View {
     @ObservedObject var monitor: AudioRouteMonitor
@@ -67,6 +68,7 @@ struct AirPodsConnectOverlay: View {
                     )
                 )
                 .onAppear {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
                     guard !reduceMotion else { return }
                     pulse = false
                     DispatchQueue.main.async {
