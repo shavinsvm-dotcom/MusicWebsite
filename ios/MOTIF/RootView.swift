@@ -50,8 +50,6 @@ struct RootView: View {
         }
         .toolbar(.hidden, for: .tabBar)
         .tint(.primary)
-        .environmentObject(library)
-        .environmentObject(player)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             BottomChrome(
                 selectedTab: $selectedTab,
@@ -59,6 +57,8 @@ struct RootView: View {
                 showSearch: $showSearch
             )
         }
+        .environmentObject(library)
+        .environmentObject(player)
         .fullScreenCover(isPresented: $showNowPlaying) {
             NowPlayingView()
                 .environmentObject(library)
@@ -77,7 +77,6 @@ struct RootView: View {
 }
 
 private struct BottomChrome: View {
-    @EnvironmentObject private var player: PlayerManager
     @Binding var selectedTab: AppTab
     @Binding var showNowPlaying: Bool
     @Binding var showSearch: Bool
