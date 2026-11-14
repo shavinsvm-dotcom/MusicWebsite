@@ -267,6 +267,10 @@ struct TrackRow: View {
     @EnvironmentObject private var player: PlayerManager
 
     var body: some View {
+        let isDownloaded = track.isCloud && library.isDownloaded(track)
+        let isDownloading = track.isCloud && library.isDownloading(track)
+        let isFavorite = library.isFavorite(track)
+
         HStack(spacing: 12) {
             Button {
                 player.play(track, queue: queue ?? [track])
@@ -289,19 +293,7 @@ struct TrackRow: View {
 
                     Spacer(minLength: 8)
 
-                    if track.isCloud {
-                        if library.isDownloading(track) {
-                            ProgressView()
-                                .controlSize(.small)
-                                .tint(.secondary)
-                        } else {
-                            Image(systemName: library.isDownloaded(track) ? "arrow.down.circle.fill" : "icloud")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if library.isFavorite(track) {
+                    if isFavorite {
                         Image(systemName: "heart.fill")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -314,6 +306,30 @@ struct TrackRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.99, opacity: 0.9))
+
+            if track.isCloud {
+                Button {
+                    guard !isDownloaded, !isDownloading else { return }
+                    Task { await library.download(track) }
+                } label: {
+                    Group {
+                        if isDownloading {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.secondary)
+                        } else {
+                            Image(systemName: isDownloaded ? "checkmark.circle.fill" : "arrow.down.circle")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(width: 32, height: 42)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.86))
+                .disabled(isDownloaded || isDownloading)
+                .accessibilityLabel(isDownloaded ? "Available offline" : "Download for offline")
+            }
 
             Menu {
                 Button {

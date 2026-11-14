@@ -3,6 +3,11 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
+    private enum LibraryFilter: Hashable {
+        case all
+        case downloads
+    }
+
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
@@ -11,9 +16,10 @@ struct LibraryView: View {
     @State private var showNewPlaylist = false
     @State private var newPlaylistName = ""
     @State private var importError: String?
+    @State private var filter: LibraryFilter = .all
 
-    private var downloadedCount: Int {
-        library.tracks.filter { library.isDownloaded($0) }.count
+    private var downloadedTracks: [Track] {
+        library.tracks.filter { library.isDownloaded($0) }
     }
 
     var body: some View {
@@ -22,20 +28,24 @@ struct LibraryView: View {
                 LazyVStack(alignment: .leading, spacing: 26) {
                     cloudStatus
 
-                    if downloadedCount > 0 {
-                        Label("\(downloadedCount) tracks available offline", systemImage: "arrow.down.circle")
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(.secondary)
+                    if !library.tracks.isEmpty {
+                        Picker("Library filter", selection: $filter) {
+                            Text("Songs").tag(LibraryFilter.all)
+                            Text("Downloads").tag(LibraryFilter.downloads)
+                        }
+                        .pickerStyle(.segmented)
                     }
 
                     if library.tracks.isEmpty {
                         emptyState
+                    } else if filter == .downloads {
+                        downloads
                     } else {
                         songs
-                    }
 
-                    if !library.favorites.isEmpty {
-                        favorites
+                        if !library.favorites.isEmpty {
+                            favorites
+                        }
                     }
 
                     playlists
@@ -221,6 +231,38 @@ struct LibraryView: View {
         }
     }
 
+    private var downloads: some View {
+        let tracks = downloadedTracks
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                SectionTitle(title: "Downloads")
+                Spacer()
+                if !tracks.isEmpty {
+                    Text("\(tracks.count)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if tracks.isEmpty {
+                Text("Tap the download button beside any cloud song to keep it available offline.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(tracks) { track in
+                        TrackRow(track: track, queue: tracks)
+                        if track.id != tracks.last?.id {
+                            Divider().opacity(0.35)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var favorites: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "Favorites")
@@ -258,41 +300,25 @@ struct LibraryView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                VStack(spacing: 8) {
-                    ForEach(library.playlists) { playlist in
-                        NavigationLink {
-                            PlaylistDetailView(
-                                playlistID: playlist.id,
-                                showNowPlaying: $showNowPlaying
-                            )
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "music.note.list")
-                                    .font(.system(size: 17, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 54, height: 54)
-                                    .background(Color.secondary.opacity(0.12), in: Circle())
-
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(playlist.name)
-                                        .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(.primary)
-                                    Text("\(playlist.trackIDs.count) tracks")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 14) {
+                        ForEach(library.playlists) { playlist in
+                            NavigationLink {
+                                PlaylistDetailView(
+                                    playlistID: playlist.id,
+                                    showNowPlaying: $showNowPlaying
+                                )
+                            } label: {
+                                PlaylistTile(
+                                    playlist: playlist,
+                                    tracks: library.tracks(in: playlist)
+                                )
+                                .frame(width: 146)
                             }
-                            .padding(10)
-                            .contentShape(Rectangle())
-                            .glassSurface(radius: 18)
+                            .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
                         }
-                        .buttonStyle(MotifPressStyle(scale: 0.97))
                     }
+                    .padding(.horizontal, 2)
                 }
             }
         }

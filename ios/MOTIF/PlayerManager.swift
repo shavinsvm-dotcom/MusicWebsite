@@ -5,6 +5,11 @@ import MediaPlayer
 import UIKit
 
 @MainActor
+final class PlaybackProgress: ObservableObject {
+    @Published var elapsed: Double = 0
+}
+
+@MainActor
 final class PlayerManager: ObservableObject {
     enum RepeatMode {
         case off
@@ -18,7 +23,10 @@ final class PlayerManager: ObservableObject {
     @Published private(set) var duration: Double = 0
     @Published private(set) var isShuffled = false
     @Published private(set) var repeatMode: RepeatMode = .off
-    @Published var elapsed: Double = 0
+
+    let progress = PlaybackProgress()
+
+    var elapsed: Double { progress.elapsed }
 
     var upNext: Track? {
         guard !isShuffled, repeatMode != .one,
@@ -120,13 +128,13 @@ final class PlayerManager: ObservableObject {
             toleranceBefore: .zero,
             toleranceAfter: .zero
         )
-        elapsed = clamped
+        progress.elapsed = clamped
         updateNowPlaying()
     }
 
     private func load(_ track: Track) {
         current = track
-        elapsed = 0
+        progress.elapsed = 0
         duration = max(track.duration, 0)
         isPlaying = false
 
@@ -203,8 +211,8 @@ final class PlayerManager: ObservableObject {
                 let seconds = CMTimeGetSeconds(time)
                 if seconds.isFinite {
                     let next = max(0, seconds)
-                    if abs(next - self.elapsed) > 0.01 {
-                        self.elapsed = next
+                    if abs(next - self.progress.elapsed) > 0.01 {
+                        self.progress.elapsed = next
                     }
                 }
 

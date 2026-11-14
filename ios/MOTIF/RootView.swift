@@ -21,6 +21,7 @@ enum AppTab: String, Hashable {
 struct RootView: View {
     @StateObject private var library = LibraryStore()
     @StateObject private var player = PlayerManager()
+    @StateObject private var routeMonitor = AudioRouteMonitor()
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .forYou
     @Namespace private var playerTransition
@@ -30,10 +31,18 @@ struct RootView: View {
             .tint(.primary)
             .environmentObject(library)
             .environmentObject(player)
+            .environmentObject(player.progress)
+            .overlay(alignment: .top) {
+                AirPodsConnectOverlay(monitor: routeMonitor)
+            }
             .fullScreenCover(isPresented: $showNowPlaying) {
                 NowPlayingView()
                     .environmentObject(library)
                     .environmentObject(player)
+                    .environmentObject(player.progress)
+                    .overlay(alignment: .top) {
+                        AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
+                    }
                     .modifier(
                         PlayerZoomDestination(
                             sourceID: playerTransitionID,
@@ -167,32 +176,16 @@ private struct MiniPlayerInset: ViewModifier {
 
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
-            MiniPlayer(showNowPlaying: $showNowPlaying)
-                .modifier(
-                    PlayerTransitionSource(
-                        sourceID: transitionSourceID,
-                        namespace: transitionNamespace
-                    )
-                )
+            MiniPlayer(
+                showNowPlaying: $showNowPlaying,
+                transitionSourceID: transitionSourceID,
+                transitionNamespace: transitionNamespace
+            )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(
                     .spring(response: 0.28, dampingFraction: 0.84),
                     value: currentID
                 )
-        }
-    }
-}
-
-private struct PlayerTransitionSource: ViewModifier {
-    let sourceID: String
-    let namespace: Namespace.ID
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.matchedTransitionSource(id: sourceID, in: namespace)
-        } else {
-            content
         }
     }
 }

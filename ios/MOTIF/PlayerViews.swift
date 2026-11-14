@@ -5,6 +5,8 @@ import UIKit
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
+    let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
 
@@ -19,6 +21,12 @@ struct MiniPlayer: View {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                                 .frame(width: 24, height: 24)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .modifier(
+                                    MiniArtworkTransitionSource(
+                                        sourceID: transitionSourceID,
+                                        namespace: transitionNamespace
+                                    )
+                                )
 
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(track.title)
@@ -91,7 +99,7 @@ struct MiniPlayer: View {
                 .padding(.trailing, 6)
                 .frame(height: 42)
 
-                progress
+                MiniPlayerProgress()
             }
             .nativeGlass(Capsule())
             .contentShape(Capsule())
@@ -105,11 +113,17 @@ struct MiniPlayer: View {
         }
     }
 
-    private var progress: some View {
+}
+
+private struct MiniPlayerProgress: View {
+    @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var progress: PlaybackProgress
+
+    var body: some View {
         GeometryReader { geometry in
             let width = max(geometry.size.width, 1)
             let fraction = player.duration > 0
-                ? min(max(player.elapsed / player.duration, 0), 1)
+                ? min(max(progress.elapsed / player.duration, 0), 1)
                 : 0
             let headX = min(max(width * fraction, 2.5), max(width - 2.5, 2.5))
 
@@ -148,11 +162,8 @@ struct NowPlayingView: View {
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
 
-    @State private var isScrubbing = false
-    @State private var scrubValue = 0.0
     @State private var backdropImage: UIImage?
     @State private var backdropColor = Color(red: 0.043, green: 0.047, blue: 0.063)
-    @State private var contentVisible = false
     @State private var playPulse = 0
     @State private var skipPulse = 0
 
@@ -163,9 +174,6 @@ struct NowPlayingView: View {
             if let track = player.current {
                 backdrop(track)
                 content(track)
-                    .opacity(contentVisible ? 1 : 0)
-                    .scaleEffect(contentVisible ? 1 : 0.985, anchor: .top)
-                    .offset(y: contentVisible ? 0 : 10)
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "music.note")
@@ -177,11 +185,6 @@ struct NowPlayingView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .onAppear {
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                contentVisible = true
-            }
-        }
         .task(id: player.current?.id) {
             await loadBackdropImage()
         }
@@ -235,6 +238,12 @@ struct NowPlayingView: View {
             return
         }
 
+        if let cached = ArtworkImageCache.shared.image(for: url) {
+            backdropImage = cached
+            await updateBackdropColor(for: cached)
+            return
+        }
+
         var image: UIImage?
         if url.isFileURL {
             image = UIImage(contentsOfFile: url.path)
@@ -247,12 +256,21 @@ struct NowPlayingView: View {
             }
         }
 
+        guard !Task.isCancelled, let image else { return }
+        ArtworkImageCache.shared.store(image, for: url)
+        backdropImage = image
+        await updateBackdropColor(for: image)
+    }
+
+    @MainActor
+    private func updateBackdropColor(for image: UIImage) async {
+        let sampled = await Task.detached(priority: .utility) {
+            image.motifAverageColor
+        }.value
+
         guard !Task.isCancelled else { return }
         withAnimation(.easeInOut(duration: 0.35)) {
-            backdropImage = image
-            if let image {
-                backdropColor = Color(uiColor: image.motifAverageColor)
-            }
+            backdropColor = Color(uiColor: sampled)
         }
     }
 
@@ -331,7 +349,7 @@ struct NowPlayingView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
 
-                    scrubber
+                    NowPlayingScrubber()
                         .padding(.horizontal, 24)
                         .padding(.top, 10)
 
@@ -385,6 +403,23 @@ struct NowPlayingView: View {
                             systemImage: library.isFavorite(track) ? "heart.slash" : "heart"
                         )
                     }
+
+                    if track.isCloud {
+                        if library.isDownloaded(track) {
+                            Button(role: .destructive) {
+                                library.removeDownload(track)
+                            } label: {
+                                Label("Remove download", systemImage: "icloud.slash")
+                            }
+                        } else {
+                            Button {
+                                Task { await library.download(track) }
+                            } label: {
+                                Label("Download for offline", systemImage: "arrow.down.circle")
+                            }
+                            .disabled(library.isDownloading(track))
+                        }
+                    }
                 } label: {
                     Image(systemName: "line.3.horizontal")
                         .font(.system(size: 19, weight: .medium))
@@ -402,63 +437,6 @@ struct NowPlayingView: View {
         }
         .padding(.horizontal, 24)
         .frame(height: 44)
-    }
-
-    private var scrubber: some View {
-        VStack(spacing: 8) {
-            GeometryReader { geometry in
-                let width = geometry.size.width
-                let duration = max(player.duration, 0)
-                let displayed = isScrubbing ? scrubValue : player.elapsed
-                let progress = duration > 0 ? CGFloat(min(max(displayed / duration, 0), 1)) : 0
-
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.24))
-                        .frame(height: 4)
-
-                    Capsule()
-                        .fill(Color.white)
-                        .frame(width: width * progress, height: 4)
-
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 9, height: 9)
-                        .position(
-                            x: min(max(width * progress, 4.5), max(width - 4.5, 4.5)),
-                            y: geometry.size.height / 2
-                        )
-                }
-                .frame(height: geometry.size.height)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            guard player.duration > 0 else { return }
-                            if !isScrubbing {
-                                scrubValue = player.elapsed
-                                isScrubbing = true
-                            }
-                            let fraction = min(max(value.location.x / width, 0), 1)
-                            scrubValue = fraction * player.duration
-                        }
-                        .onEnded { _ in
-                            guard player.duration > 0 else { return }
-                            player.seek(to: scrubValue)
-                            isScrubbing = false
-                        }
-                )
-            }
-            .frame(height: 18)
-
-            HStack {
-                Text(timeText(isScrubbing ? scrubValue : player.elapsed))
-                Spacer()
-                Text(timeText(max(player.duration - (isScrubbing ? scrubValue : player.elapsed), 0)))
-            }
-            .font(.system(size: 12, weight: .regular, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.54))
-        }
     }
 
     private func controls(_ track: Track) -> some View {
@@ -593,10 +571,96 @@ struct NowPlayingView: View {
         return "\(album) · \(year)"
     }
 
+}
+
+private struct NowPlayingScrubber: View {
+    @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var progress: PlaybackProgress
+
+    @State private var isScrubbing = false
+    @State private var scrubValue = 0.0
+
+    var body: some View {
+        VStack(spacing: 8) {
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                let duration = max(player.duration, 0)
+                let displayed = isScrubbing ? scrubValue : progress.elapsed
+                let fraction = duration > 0
+                    ? CGFloat(min(max(displayed / duration, 0), 1))
+                    : 0
+
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.24))
+                        .frame(height: 4)
+
+                    Capsule()
+                        .fill(Color.white)
+                        .frame(width: width * fraction, height: 4)
+
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 9, height: 9)
+                        .position(
+                            x: min(max(width * fraction, 4.5), max(width - 4.5, 4.5)),
+                            y: geometry.size.height / 2
+                        )
+                }
+                .frame(height: geometry.size.height)
+                .animation(
+                    isScrubbing ? nil : .linear(duration: 0.42),
+                    value: fraction
+                )
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            guard player.duration > 0 else { return }
+                            if !isScrubbing {
+                                scrubValue = progress.elapsed
+                                isScrubbing = true
+                            }
+                            let fraction = min(max(value.location.x / width, 0), 1)
+                            scrubValue = fraction * player.duration
+                        }
+                        .onEnded { _ in
+                            guard player.duration > 0 else { return }
+                            player.seek(to: scrubValue)
+                            isScrubbing = false
+                        }
+                )
+            }
+            .frame(height: 18)
+
+            HStack {
+                Text(timeText(isScrubbing ? scrubValue : progress.elapsed))
+                Spacer()
+                Text(timeText(max(player.duration - (isScrubbing ? scrubValue : progress.elapsed), 0)))
+            }
+            .font(.system(size: 12, weight: .regular, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.54))
+        }
+    }
+
     private func timeText(_ seconds: Double) -> String {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private struct MiniArtworkTransitionSource: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.matchedTransitionSource(id: sourceID, in: namespace)
+        } else {
+            content
+        }
     }
 }
 
