@@ -31,6 +31,7 @@ struct ForYouView: View {
                         }
                     }
                 }
+                .screenEntrance()
                 .padding(.horizontal, 20)
                 .padding(.top, 10)
                 .padding(.bottom, 120)

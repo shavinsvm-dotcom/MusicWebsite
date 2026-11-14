@@ -86,6 +86,10 @@ struct MiniPlayer: View {
             }
             .clipShape(Capsule())
             .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 8)
+            .transition(
+                .move(edge: .bottom)
+                    .combined(with: .opacity)
+            )
         }
     }
 
@@ -119,6 +123,7 @@ struct NowPlayingView: View {
     @State private var scrubValue = 0.0
     @State private var backdropImage: UIImage?
     @State private var backdropColor = Color(white: 0.10)
+    @State private var contentVisible = false
 
     var body: some View {
         ZStack {
@@ -127,6 +132,8 @@ struct NowPlayingView: View {
             if let track = player.current {
                 backdrop(track)
                 content(track)
+                    .opacity(contentVisible ? 1 : 0)
+                    .scaleEffect(contentVisible ? 1 : 0.985, anchor: .top)
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "music.note")
@@ -138,6 +145,11 @@ struct NowPlayingView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.48)) {
+                contentVisible = true
+            }
+        }
         .task(id: player.current?.id) {
             await loadBackdropImage()
         }
@@ -222,7 +234,7 @@ struct NowPlayingView: View {
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
-            let artSide = min(geometry.size.width - 84, geometry.size.height * 0.40)
+            let artSide = min(geometry.size.width - 48, geometry.size.height * 0.45)
             let bottomHeight: CGFloat = 243
             let gap = max(
                 42,
@@ -234,18 +246,28 @@ struct NowPlayingView: View {
 
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
-                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                        .frame(width: artSide, height: artSide)
-                        .clipShape(Rectangle())
-                        .overlay(alignment: .bottom) {
-                            LinearGradient(
-                                colors: [.clear, .black.opacity(0.16)],
-                                startPoint: .top,
-                                endPoint: .bottom
+                    ZStack {
+                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                            .frame(width: artSide * 1.13, height: artSide * 1.13)
+                            .blur(radius: 30)
+                            .opacity(0.82)
+
+                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                            .frame(width: artSide, height: artSide)
+                            .mask(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .black, location: 0),
+                                        .init(color: .black, location: 0.93),
+                                        .init(color: .clear, location: 1)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
                             )
-                            .frame(height: 52)
-                        }
-                        .padding(.top, 4)
+                    }
+                    .frame(width: artSide, height: artSide)
+                    .padding(.top, 4)
 
                     Spacer().frame(height: gap)
 
@@ -274,10 +296,10 @@ struct NowPlayingView: View {
                         .padding(.top, 2)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 30)
+                    .padding(.horizontal, 24)
 
                     scrubber
-                        .padding(.horizontal, 30)
+                        .padding(.horizontal, 24)
                         .padding(.top, 10)
 
                     controls(track)
@@ -558,10 +580,25 @@ private extension UIImage {
             colorSpace: CGColorSpaceCreateDeviceRGB()
         )
 
-        return UIColor(
+        let sampled = UIColor(
             red: CGFloat(bitmap[0]) / 255,
             green: CGFloat(bitmap[1]) / 255,
             blue: CGFloat(bitmap[2]) / 255,
+            alpha: 1
+        )
+
+        var hue: CGFloat = 0
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        var alpha: CGFloat = 0
+        guard sampled.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
+            return sampled
+        }
+
+        return UIColor(
+            hue: hue,
+            saturation: min(saturation * 1.12, 1),
+            brightness: min(brightness * 1.30 + 0.05, 0.92),
             alpha: 1
         )
     }

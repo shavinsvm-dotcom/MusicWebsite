@@ -52,6 +52,39 @@ extension View {
     }
 }
 
+extension View {
+    @ViewBuilder
+    func motifBounce(_ trigger: Bool) -> some View {
+        if #available(iOS 17.0, *) {
+            symbolEffect(.bounce, value: trigger)
+        } else {
+            self
+        }
+    }
+
+    func screenEntrance() -> some View {
+        modifier(ScreenEntrance())
+    }
+}
+
+private struct ScreenEntrance: ViewModifier {
+    @State private var appeared = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : 9)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.34)) {
+                    appeared = true
+                }
+            }
+            .onDisappear {
+                appeared = false
+            }
+    }
+}
+
 struct MotifPressStyle: ButtonStyle {
     var scale: CGFloat = 0.94
     var opacity: Double = 0.86

@@ -40,6 +40,7 @@ struct LibraryView: View {
 
                     playlists
                 }
+                .screenEntrance()
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 120)

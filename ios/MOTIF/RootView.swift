@@ -77,13 +77,19 @@ struct RootView: View {
 }
 
 private struct BottomChrome: View {
+    @EnvironmentObject private var player: PlayerManager
     @Binding var selectedTab: AppTab
     @Binding var showNowPlaying: Bool
     @Binding var showSearch: Bool
+    @Namespace private var tabIndicator
 
     var body: some View {
         VStack(spacing: 8) {
             MiniPlayer(showNowPlaying: $showNowPlaying)
+                .transition(
+                    .move(edge: .bottom)
+                        .combined(with: .opacity)
+                )
 
             HStack(spacing: 8) {
                 HStack(spacing: 2) {
@@ -94,7 +100,7 @@ private struct BottomChrome: View {
                 .padding(5)
                 .nativeGlass(Capsule())
                 .animation(
-                    .spring(response: 0.34, dampingFraction: 0.72),
+                    .spring(response: 0.38, dampingFraction: 0.78),
                     value: selectedTab
                 )
 
@@ -115,13 +121,17 @@ private struct BottomChrome: View {
         .padding(.horizontal, 12)
         .padding(.top, 4)
         .padding(.bottom, 6)
+        .animation(
+            .spring(response: 0.40, dampingFraction: 0.82),
+            value: player.current?.id
+        )
     }
 
     private func tabButton(_ tab: AppTab) -> some View {
         let isSelected = selectedTab == tab
 
         return Button {
-            withAnimation(.easeOut(duration: 0.18)) {
+            withAnimation(.spring(response: 0.38, dampingFraction: 0.76)) {
                 selectedTab = tab
             }
         } label: {
@@ -129,6 +139,7 @@ private struct BottomChrome: View {
                 Image(systemName: tab.icon(selected: isSelected))
                     .font(.system(size: 17, weight: .semibold))
                     .frame(height: 20)
+                    .motifBounce(isSelected)
 
                 Text(tab.title)
                     .font(.system(size: 9.5, weight: .semibold))
@@ -140,12 +151,14 @@ private struct BottomChrome: View {
             .padding(.vertical, 6)
             .background {
                 if isSelected {
-                    Capsule().fill(Color.primary.opacity(0.10))
+                    Capsule()
+                        .fill(Color.primary.opacity(0.10))
+                        .matchedGeometryEffect(id: "tabIndicator", in: tabIndicator)
                 }
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(MotifPressStyle(scale: 0.9))
+        .buttonStyle(MotifPressStyle(scale: 0.88))
         .accessibilityLabel(tab.title)
     }
 }
