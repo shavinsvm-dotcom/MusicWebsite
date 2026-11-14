@@ -2,6 +2,7 @@ import AVFoundation
 import Combine
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class LibraryStore: ObservableObject {
@@ -11,6 +12,7 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var recentTrackIDs: [UUID] = []
     @Published private(set) var isRefreshingCloud = false
     @Published private(set) var downloadingIDs: Set<UUID> = []
+    @Published private(set) var uploadingIDs: Set<UUID> = []
     @Published private(set) var cloudMessage: String?
     @Published var errorMessage: String?
 
@@ -80,6 +82,11 @@ final class LibraryStore: ObservableObject {
     func isDownloading(_ track: Track) -> Bool {
         guard let existing = canonicalTrack(for: track) else { return false }
         return downloadingIDs.contains(existing.id)
+    }
+
+    func isUploading(_ track: Track) -> Bool {
+        guard let existing = canonicalTrack(for: track) else { return false }
+        return uploadingIDs.contains(existing.id)
     }
 
     func refreshLocalMetadata() async {
@@ -230,6 +237,111 @@ final class LibraryStore: ObservableObject {
     func downloadAll(_ candidates: [Track]) async {
         for track in candidates where track.isCloud {
             await download(track)
+        }
+    }
+
+    func uploadToCloud(_ track: Track) async {
+        guard
+            let existing = canonicalTrack(for: track),
+            existing.source == .local,
+            existing.mediaURL.isFileURL,
+            !existing.isUploadedToCloud,
+            !uploadingIDs.contains(existing.id)
+        else { return }
+
+        let fileURL = existing.mediaURL
+        guard fileManager.fileExists(atPath: fileURL.path) else { return }
+
+        let fileSize = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard fileSize > 0 else {
+            errorMessage = "Couldn’t upload \(existing.title): the audio file is empty."
+            return
+        }
+        guard fileSize <= 100 * 1024 * 1024 else {
+            errorMessage = "Couldn’t upload \(existing.title): cloud songs are limited to 100 MB."
+            return
+        }
+
+        uploadingIDs.insert(existing.id)
+        defer { uploadingIDs.remove(existing.id) }
+
+        let id = "c-\(String(Int(Date().timeIntervalSince1970), radix: 36))-\(UUID().uuidString.prefix(8).lowercased())"
+        let rawExtension = fileURL.pathExtension.lowercased()
+        let safeExtension = rawExtension.filter { $0.isLetter || $0.isNumber }
+        let fileExtension = safeExtension.isEmpty ? "m4a" : String(safeExtension.prefix(8))
+        let storageKey = "\(id).\(fileExtension)"
+        let contentType = UTType(filenameExtension: fileExtension)?.preferredMIMEType
+            ?? "audio/mpeg"
+
+        do {
+            let remoteURL = try await TigrisAPI.uploadAudio(
+                fileURL: fileURL,
+                key: storageKey,
+                contentType: contentType
+            )
+
+            var document: [String: Any] = [
+                "id": id,
+                "name": fileURL.lastPathComponent,
+                "title": existing.title.isEmpty ? "Untitled" : existing.title,
+                "artist": existing.artist.isEmpty ? "Unknown artist" : existing.artist,
+                "albumArtist": existing.artist,
+                "album": existing.album,
+                "duration": existing.duration,
+                "url": remoteURL.absoluteString,
+                "storagePath": storageKey,
+                "uploadedAt": Int(Date().timeIntervalSince1970 * 1000),
+                "size": fileSize,
+                "mimeType": contentType
+            ]
+            if let year = existing.releaseYear {
+                document["year"] = year
+            }
+
+            try await TigrisAPI.addLibraryDocument(document)
+
+            if let artworkURL = existing.artworkURL,
+               artworkURL.isFileURL,
+               let artworkData = try? Data(contentsOf: artworkURL),
+               let artwork = UIImage(data: artworkData),
+               let jpeg = artwork.jpegData(compressionQuality: 0.82) {
+                let coverKey = "songs/covers/\(id).jpg"
+                if let coverURL = try? await TigrisAPI.uploadObject(
+                    data: jpeg,
+                    key: coverKey,
+                    contentType: "image/jpeg"
+                ) {
+                    try? await TigrisAPI.setCover(trackID: id, url: coverURL)
+                }
+            }
+
+            if let index = tracks.firstIndex(where: { $0.id == existing.id }) {
+                tracks[index].remoteID = id
+                tracks[index].streamURL = remoteURL
+                save()
+            }
+
+            cloudMessage = "Uploaded \(existing.title) to the cloud"
+        } catch {
+            errorMessage = "Couldn’t upload \(existing.title): \(error.localizedDescription)"
+        }
+    }
+
+    func uploadAllLocal() async {
+        let candidates = tracks.filter {
+            $0.source == .local
+                && $0.mediaURL.isFileURL
+                && !$0.isUploadedToCloud
+                && !uploadingIDs.contains($0.id)
+        }
+
+        guard !candidates.isEmpty else {
+            cloudMessage = "Every local song is already in the cloud."
+            return
+        }
+
+        for track in candidates {
+            await uploadToCloud(track)
         }
     }
 

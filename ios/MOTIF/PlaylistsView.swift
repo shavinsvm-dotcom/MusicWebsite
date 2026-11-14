@@ -842,6 +842,26 @@ private struct PlaylistTrackRow: View {
                     }
                 }
 
+                if track.source == .local && track.mediaURL.isFileURL {
+                    if track.isUploadedToCloud {
+                        Button {} label: {
+                            Label("Uploaded to cloud", systemImage: "checkmark.icloud")
+                        }
+                        .disabled(true)
+                    } else if library.isUploading(track) {
+                        Button {} label: {
+                            Label("Uploading…", systemImage: "icloud.and.arrow.up")
+                        }
+                        .disabled(true)
+                    } else {
+                        Button {
+                            Task { await library.uploadToCloud(track) }
+                        } label: {
+                            Label("Upload to cloud", systemImage: "icloud.and.arrow.up")
+                        }
+                    }
+                }
+
                 Divider()
 
                 Button(role: .destructive) {

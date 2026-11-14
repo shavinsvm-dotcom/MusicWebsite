@@ -462,6 +462,8 @@ struct TrackRow: View {
         let isDownloaded = track.isCloud && library.isDownloaded(track)
         let isDownloading = track.isCloud && library.isDownloading(track)
         let isFavorite = library.isFavorite(track)
+        let isUploaded = track.isUploadedToCloud
+        let isUploading = library.isUploading(track)
 
         HStack(spacing: 12) {
             Button {
@@ -487,6 +489,16 @@ struct TrackRow: View {
 
                     if isFavorite {
                         Image(systemName: "heart.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if isUploading {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.secondary)
+                    } else if isUploaded {
+                        Image(systemName: "cloud.fill")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -581,6 +593,26 @@ struct TrackRow: View {
                             Label("Download for offline", systemImage: "arrow.down.circle")
                         }
                         .disabled(library.isDownloading(track))
+                    }
+                }
+
+                if track.source == .local && track.mediaURL.isFileURL {
+                    if isUploaded {
+                        Button {} label: {
+                            Label("Uploaded to cloud", systemImage: "checkmark.icloud")
+                        }
+                        .disabled(true)
+                    } else if isUploading {
+                        Button {} label: {
+                            Label("Uploading…", systemImage: "icloud.and.arrow.up")
+                        }
+                        .disabled(true)
+                    } else {
+                        Button {
+                            Task { await library.uploadToCloud(track) }
+                        } label: {
+                            Label("Upload to cloud", systemImage: "icloud.and.arrow.up")
+                        }
                     }
                 }
 

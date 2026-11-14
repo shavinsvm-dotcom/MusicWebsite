@@ -24,6 +24,7 @@ struct Track: Identifiable, Codable, Hashable {
     var isPreview: Bool { source == .preview }
     var isCloud: Bool { source == .cloud }
     var isOffline: Bool { mediaURL.isFileURL }
+    var isUploadedToCloud: Bool { source == .local && remoteID != nil }
 
     var durationText: String {
         guard duration.isFinite, duration > 0 else { return "--:--" }

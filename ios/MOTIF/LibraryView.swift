@@ -78,6 +78,13 @@ struct LibraryView: View {
                         } label: {
                             Label("Refresh Tigris library", systemImage: "arrow.clockwise")
                         }
+
+                        Button {
+                            Task { await library.uploadAllLocal() }
+                        } label: {
+                            Label("Upload local songs", systemImage: "icloud.and.arrow.up")
+                        }
+                        .disabled(!library.uploadingIDs.isEmpty)
                     } label: {
                         Image(systemName: "plus.circle")
                             .font(.title3)
@@ -137,7 +144,9 @@ struct LibraryView: View {
             Text(
                 library.isRefreshingCloud
                     ? "Syncing the Tigris library…"
-                    : (library.cloudMessage ?? "Tigris library")
+                    : (!library.uploadingIDs.isEmpty
+                        ? "Uploading \(library.uploadingIDs.count) \(library.uploadingIDs.count == 1 ? "song" : "songs")…"
+                        : (library.cloudMessage ?? "Tigris library"))
             )
             .font(.footnote)
             .foregroundStyle(.secondary)

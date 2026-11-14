@@ -218,6 +218,7 @@ struct NowPlayingView: View {
         }
         .sheet(item: $lyricsTrack) { track in
             LyricsView(track: track)
+                .environmentObject(player.progress)
         }
         .sheet(item: $lyricsFinderTrack) { track in
             LyricsFinderView(track: track)
@@ -444,6 +445,26 @@ struct NowPlayingView: View {
                                 Label("Download for offline", systemImage: "arrow.down.circle")
                             }
                             .disabled(library.isDownloading(track))
+                        }
+                    }
+
+                    if track.source == .local && track.mediaURL.isFileURL {
+                        if track.isUploadedToCloud {
+                            Button {} label: {
+                                Label("Uploaded to cloud", systemImage: "checkmark.icloud")
+                            }
+                            .disabled(true)
+                        } else if library.isUploading(track) {
+                            Button {} label: {
+                                Label("Uploading…", systemImage: "icloud.and.arrow.up")
+                            }
+                            .disabled(true)
+                        } else {
+                            Button {
+                                Task { await library.uploadToCloud(track) }
+                            } label: {
+                                Label("Upload to cloud", systemImage: "icloud.and.arrow.up")
+                            }
                         }
                     }
 
@@ -872,75 +893,5 @@ private struct QueueRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 2)
-    }
-}
-
-struct LyricsView: View {
-    @Environment(\.dismiss) private var dismiss
-    let track: Track
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    HStack(spacing: 14) {
-                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                            .frame(width: 64, height: 64)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(track.title)
-                                .font(.headline)
-                                .lineLimit(2)
-                            Text(track.artist)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if let lyrics = displayLyrics {
-                        Text(lyrics)
-                            .font(.system(size: 24, weight: .semibold, design: .serif))
-                            .lineSpacing(9)
-                            .foregroundStyle(.primary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        VStack(spacing: 12) {
-                            Image(systemName: "quote.bubble")
-                                .font(.system(size: 30, weight: .light))
-                                .foregroundStyle(.tertiary)
-                            Text("Lyrics aren’t available for this track.")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 48)
-                    }
-                }
-                .padding(24)
-            }
-            .navigationTitle("Lyrics")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .preferredColorScheme(.dark)
-        .presentationDragIndicator(.visible)
-        .presentationDetents([.medium, .large])
-    }
-
-    private var displayLyrics: String? {
-        guard let lyrics = track.lyrics else { return nil }
-        let stripped = lyrics.replacingOccurrences(
-            of: "\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,2})?\\]",
-            with: "",
-            options: .regularExpression
-        )
-        let trimmed = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
     }
 }
