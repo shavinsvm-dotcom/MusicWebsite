@@ -5,6 +5,8 @@ import UIKit
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
+    @State private var playPulse = 0
+    @State private var skipPulse = 0
 
     var body: some View {
         if let track = player.current {
@@ -37,18 +39,23 @@ struct MiniPlayer: View {
                     .layoutPriority(1)
 
                     Button {
-                        player.previous()
+                        skipPulse += 1
+                        withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                            player.previous()
+                        }
                     } label: {
                         Image(systemName: "backward.fill")
                             .font(.system(size: 13, weight: .semibold))
                             .frame(width: 30, height: 30)
+                            .motifBounce(tick: skipPulse)
                             .contentShape(Circle())
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.8))
-                    .nativeGlass(Circle())
+                    .nativeGlass(Circle(), interactive: true)
                     .accessibilityLabel("Previous")
 
                     Button {
+                        playPulse += 1
                         withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
                             player.toggle()
                         }
@@ -58,22 +65,26 @@ struct MiniPlayer: View {
                             .frame(width: 34, height: 34)
                             .contentShape(Circle())
                             .motifReplace()
-                            .motifBounce(player.isPlaying)
+                            .motifBounce(tick: playPulse)
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.8))
-                    .nativeGlass(Circle())
+                    .nativeGlass(Circle(), interactive: true)
                     .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                     Button {
-                        player.next()
+                        skipPulse += 1
+                        withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                            player.next()
+                        }
                     } label: {
                         Image(systemName: "forward.fill")
                             .font(.system(size: 13, weight: .semibold))
                             .frame(width: 30, height: 30)
+                            .motifBounce(tick: skipPulse)
                             .contentShape(Circle())
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.8))
-                    .nativeGlass(Circle())
+                    .nativeGlass(Circle(), interactive: true)
                     .accessibilityLabel("Next")
                 }
                 .padding(.leading, 6)
@@ -84,7 +95,7 @@ struct MiniPlayer: View {
             .overlay(alignment: .bottom) {
                 progress
             }
-            .clipShape(Capsule())
+            .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
@@ -143,6 +154,7 @@ struct NowPlayingView: View {
     @State private var backdropImage: UIImage?
     @State private var backdropColor = Color(red: 0.043, green: 0.047, blue: 0.063)
     @State private var contentVisible = false
+    @State private var playPulse = 0
     @State private var skipPulse = 0
 
     var body: some View {
@@ -348,7 +360,7 @@ struct NowPlayingView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .nativeGlass(Circle())
+                        .nativeGlass(Circle(), interactive: true)
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("Close player")
@@ -379,7 +391,7 @@ struct NowPlayingView: View {
                         .font(.system(size: 19, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .nativeGlass(Circle())
+                        .nativeGlass(Circle(), interactive: true)
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("More options")
@@ -484,12 +496,13 @@ struct NowPlayingView: View {
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
                     .motifBounce(tick: skipPulse)
-                    .nativeGlass(Circle())
+                    .nativeGlass(Circle(), interactive: true)
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Previous")
 
             Button {
+                playPulse += 1
                 withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
                     player.toggle()
                 }
@@ -499,8 +512,8 @@ struct NowPlayingView: View {
                     .foregroundStyle(.white)
                     .frame(width: 68, height: 68)
                     .motifReplace()
-                    .motifBounce(player.isPlaying)
-                    .nativeGlass(Circle())
+                    .motifBounce(tick: playPulse)
+                    .nativeGlass(Circle(), interactive: true)
             }
             .buttonStyle(MotifPressStyle(scale: 0.9))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
@@ -516,7 +529,7 @@ struct NowPlayingView: View {
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
                     .motifBounce(tick: skipPulse)
-                    .nativeGlass(Circle())
+                    .nativeGlass(Circle(), interactive: true)
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Next")
@@ -535,7 +548,7 @@ struct NowPlayingView: View {
                 .frame(width: 42, height: 42)
                 .motifReplace()
                 .motifBounce(active)
-                .nativeGlass(Circle())
+                .nativeGlass(Circle(), interactive: true)
         }
         .buttonStyle(MotifPressStyle(scale: 0.88))
     }
@@ -560,7 +573,7 @@ struct NowPlayingView: View {
                 }
             }
             .frame(width: 42, height: 42)
-            .nativeGlass(Circle())
+            .nativeGlass(Circle(), interactive: true)
         }
         .buttonStyle(MotifPressStyle(scale: 0.88))
         .accessibilityLabel("Repeat")

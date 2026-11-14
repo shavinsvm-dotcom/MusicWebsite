@@ -21,6 +21,7 @@ struct RootView: View {
     @StateObject private var player = PlayerManager()
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .forYou
+    @Namespace private var playerTransition
 
     var body: some View {
         tabs
@@ -31,6 +32,12 @@ struct RootView: View {
                 NowPlayingView()
                     .environmentObject(library)
                     .environmentObject(player)
+                    .modifier(
+                        PlayerZoomDestination(
+                            sourceID: playerTransitionID,
+                            namespace: playerTransition
+                        )
+                    )
             }
             .task {
                 await library.refreshLocalMetadata()
@@ -84,6 +91,10 @@ struct RootView: View {
         }
     }
 
+    private var playerTransitionID: String {
+        "now-playing-\(selectedTab.rawValue)"
+    }
+
     private var forYouTab: some View {
         ForYouView(
             showNowPlaying: $showNowPlaying,
@@ -91,7 +102,9 @@ struct RootView: View {
         )
         .modifier(MiniPlayerInset(
             showNowPlaying: $showNowPlaying,
-            currentID: player.current?.id
+            currentID: player.current?.id,
+            transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)",
+            transitionNamespace: playerTransition
         ))
     }
 
@@ -99,7 +112,9 @@ struct RootView: View {
         HomeView(showNowPlaying: $showNowPlaying)
             .modifier(MiniPlayerInset(
                 showNowPlaying: $showNowPlaying,
-                currentID: player.current?.id
+                currentID: player.current?.id,
+                transitionSourceID: "now-playing-\(AppTab.home.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -107,7 +122,9 @@ struct RootView: View {
         LibraryView(showNowPlaying: $showNowPlaying)
             .modifier(MiniPlayerInset(
                 showNowPlaying: $showNowPlaying,
-                currentID: player.current?.id
+                currentID: player.current?.id,
+                transitionSourceID: "now-playing-\(AppTab.library.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -115,7 +132,9 @@ struct RootView: View {
         SearchView(showNowPlaying: $showNowPlaying)
             .modifier(MiniPlayerInset(
                 showNowPlaying: $showNowPlaying,
-                currentID: player.current?.id
+                currentID: player.current?.id,
+                transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 }
@@ -123,15 +142,51 @@ struct RootView: View {
 private struct MiniPlayerInset: ViewModifier {
     @Binding var showNowPlaying: Bool
     let currentID: UUID?
+    let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
 
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
             MiniPlayer(showNowPlaying: $showNowPlaying)
+                .modifier(
+                    PlayerTransitionSource(
+                        sourceID: transitionSourceID,
+                        namespace: transitionNamespace
+                    )
+                )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(
                     .spring(response: 0.28, dampingFraction: 0.84),
                     value: currentID
                 )
+        }
+    }
+}
+
+private struct PlayerTransitionSource: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.matchedTransitionSource(id: sourceID, in: namespace)
+        } else {
+            content
+        }
+    }
+}
+
+private struct PlayerZoomDestination: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            content
         }
     }
 }

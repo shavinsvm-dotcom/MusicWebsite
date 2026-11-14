@@ -34,10 +34,14 @@ extension View {
     /// material on earlier versions. The only hand-built glass in MOTIF is
     /// the closed mini player, which needs its own compact pill treatment.
     @ViewBuilder
-    func nativeGlass<S: Shape>(_ shape: S) -> some View {
+    func nativeGlass<S: Shape>(_ shape: S, interactive: Bool = false) -> some View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
-            glassEffect(.regular, in: shape)
+            if interactive {
+                glassEffect(.regular.interactive(), in: shape)
+            } else {
+                glassEffect(.regular, in: shape)
+            }
         } else {
             glassFallback(shape)
         }
