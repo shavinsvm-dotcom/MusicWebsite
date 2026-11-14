@@ -49,12 +49,15 @@ struct MiniPlayer: View {
                     .accessibilityLabel("Previous")
 
                     Button {
-                        player.toggle()
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.66)) {
+                            player.toggle()
+                        }
                     } label: {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 16, weight: .semibold))
                             .frame(width: 34, height: 34)
                             .contentShape(Circle())
+                            .motifReplace()
                             .motifBounce(player.isPlaying)
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.8))
@@ -107,6 +110,7 @@ struct MiniPlayer: View {
                 Capsule()
                     .fill(Color.white.opacity(0.72))
                     .frame(width: geometry.size.width * fraction)
+                    .animation(.linear(duration: 0.25), value: player.elapsed)
             }
             .padding(.horizontal, 10)
         }
@@ -160,41 +164,64 @@ struct NowPlayingView: View {
     private func backdrop(_ track: Track) -> some View {
         GeometryReader { geometry in
             ZStack {
-                backdropColor
+                Color.black
 
                 if let image = backdropImage {
                     Image(uiImage: image)
                         .resizable()
                         .scaledToFill()
                         .frame(
-                            width: geometry.size.width * 1.35,
+                            width: geometry.size.width * 1.25,
                             height: geometry.size.height * 1.25
                         )
-                        .blur(radius: 64)
-                        .opacity(0.56)
+                        .blur(radius: 72)
+                        .opacity(0.34)
                         .blendMode(.screen)
-                        .offset(y: -geometry.size.height * 0.10)
+                        .offset(y: -geometry.size.height * 0.08)
+                        .mask(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .black, location: 0),
+                                    .init(color: .black, location: 0.30),
+                                    .init(color: .clear, location: 0.62)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
                 } else {
                     ArtworkView(
                         url: track.artworkURL,
                         seed: track.title + track.artist
                     )
                     .frame(
-                        width: geometry.size.width * 1.35,
+                        width: geometry.size.width * 1.25,
                         height: geometry.size.height * 1.25
                     )
-                    .blur(radius: 52)
-                    .opacity(0.46)
+                    .blur(radius: 58)
+                    .opacity(0.30)
                     .blendMode(.screen)
-                    .offset(y: -geometry.size.height * 0.10)
+                    .offset(y: -geometry.size.height * 0.08)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 0.30),
+                                .init(color: .clear, location: 0.62)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                 }
 
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.03), location: 0),
-                        .init(color: .black.opacity(0.18), location: 0.32),
-                        .init(color: .black.opacity(0.72), location: 0.64),
-                        .init(color: .black.opacity(0.97), location: 1)
+                        .init(color: backdropColor.opacity(0.82), location: 0),
+                        .init(color: backdropColor.opacity(0.64), location: 0.40),
+                        .init(color: backdropColor.opacity(0.26), location: 0.53),
+                        .init(color: .black.opacity(0.93), location: 0.70),
+                        .init(color: .black, location: 0.82)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -305,6 +332,19 @@ struct NowPlayingView: View {
                     Spacer(minLength: 0)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
+
+                LinearGradient(
+                    colors: [
+                        .black.opacity(0.34),
+                        .black.opacity(0.10),
+                        .clear
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 156)
+                .frame(maxHeight: .infinity, alignment: .top)
+                .allowsHitTesting(false)
 
                 topBar(track)
                     .padding(.top, 4)
@@ -430,12 +470,16 @@ struct NowPlayingView: View {
                 icon: library.isFavorite(track) ? "heart.fill" : "heart",
                 active: library.isFavorite(track)
             ) {
-                library.toggleFavorite(track)
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.58)) {
+                    library.toggleFavorite(track)
+                }
             }
             .accessibilityLabel(library.isFavorite(track) ? "Remove favorite" : "Favorite")
 
             circularButton(icon: "shuffle", active: player.isShuffled) {
-                player.toggleShuffle()
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.58)) {
+                    player.toggleShuffle()
+                }
             }
             .accessibilityLabel(player.isShuffled ? "Turn shuffle off" : "Shuffle")
 
@@ -455,15 +499,18 @@ struct NowPlayingView: View {
             .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Previous")
 
-            Button {
-                player.toggle()
+                        Button {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.66)) {
+                    player.toggle()
+                }
             } label: {
-                                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 78, height: 78)
-                        .motifBounce(player.isPlaying)
-                        .nativeGlass(Circle())
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 78, height: 78)
+                    .motifReplace()
+                    .motifBounce(player.isPlaying)
+                    .nativeGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.9))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
@@ -492,6 +539,8 @@ struct NowPlayingView: View {
                 .font(.system(size: 19, weight: .semibold))
                 .foregroundStyle(active ? Color.white : Color.white.opacity(0.62))
                 .frame(width: 48, height: 48)
+                .motifReplace()
+                .motifBounce(active)
                 .nativeGlass(Circle())
         }
         .buttonStyle(MotifPressStyle(scale: 0.88))
@@ -499,12 +548,15 @@ struct NowPlayingView: View {
 
     private var repeatButton: some View {
         Button {
-            player.cycleRepeat()
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.58)) {
+                player.cycleRepeat()
+            }
         } label: {
             ZStack(alignment: .bottom) {
                 Image(systemName: "repeat")
                     .font(.system(size: 19, weight: .semibold))
                     .foregroundStyle(player.repeatMode == .off ? Color.white.opacity(0.62) : Color.white)
+                    .motifBounce(player.repeatMode != .off)
 
                 if player.repeatMode != .off {
                     Circle()
@@ -594,8 +646,8 @@ private extension UIImage {
 
         return UIColor(
             hue: hue,
-            saturation: min(saturation * 1.12, 1),
-            brightness: min(brightness * 1.30 + 0.05, 0.92),
+            saturation: min(saturation * 1.08, 1),
+            brightness: min(brightness * 1.12 + 0.02, 0.88),
             alpha: 1
         )
     }

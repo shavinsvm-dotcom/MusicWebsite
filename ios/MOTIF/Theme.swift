@@ -65,6 +65,15 @@ extension View {
     func screenEntrance() -> some View {
         modifier(ScreenEntrance())
     }
+
+    @ViewBuilder
+    func motifReplace() -> some View {
+        if #available(iOS 17.0, *) {
+            contentTransition(.symbolEffect(.replace))
+        } else {
+            self
+        }
+    }
 }
 
 private struct ScreenEntrance: ViewModifier {
