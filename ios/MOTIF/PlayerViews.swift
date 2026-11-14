@@ -4,8 +4,8 @@ import UIKit
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
-    let heroID: String
-    let heroNamespace: Namespace.ID
+    let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
 
@@ -20,7 +20,12 @@ struct MiniPlayer: View {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                                 .frame(width: 24, height: 24)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .matchedGeometryEffect(id: heroID, in: heroNamespace, isSource: true)
+                                .modifier(
+                                    MiniArtworkTransitionSource(
+                                        sourceID: transitionSourceID,
+                                        namespace: transitionNamespace
+                                    )
+                                )
 
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(track.title)
@@ -154,12 +159,8 @@ private struct MiniPlayerProgress: View {
 struct NowPlayingView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var library: LibraryStore
+    @Environment(\.dismiss) private var dismiss
 
-    let heroNamespace: Namespace.ID
-    let heroID: String
-    let onClose: () -> Void
-
-    @State private var backdropImage: UIImage?
     @State private var playPulse = 0
     @State private var skipPulse = 0
 
@@ -181,9 +182,6 @@ struct NowPlayingView: View {
             }
         }
         .preferredColorScheme(.dark)
-        .task(id: player.current?.id) {
-            await loadBackdropImage()
-        }
     }
 
     private func backdrop(_ track: Track) -> some View {
@@ -192,7 +190,7 @@ struct NowPlayingView: View {
                 Color.black
 
                 Group {
-                    if let image = backdropImage {
+                    if let image = track.artworkURL.flatMap({ ArtworkImageCache.shared.image(for: $0) }) {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
@@ -208,6 +206,7 @@ struct NowPlayingView: View {
                 .blur(radius: 46)
                 .saturation(1.45)
                 .opacity(0.96)
+                .drawingGroup()
 
                 LinearGradient(
                     stops: [
@@ -224,35 +223,6 @@ struct NowPlayingView: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .ignoresSafeArea()
-    }
-
-    @MainActor
-    private func loadBackdropImage() async {
-        guard let url = player.current?.artworkURL else {
-            backdropImage = nil
-            return
-        }
-
-        if let cached = ArtworkImageCache.shared.image(for: url) {
-            backdropImage = cached
-            return
-        }
-
-        var image: UIImage?
-        if url.isFileURL {
-            image = UIImage(contentsOfFile: url.path)
-        } else {
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                image = UIImage(data: data)
-            } catch {
-                image = nil
-            }
-        }
-
-        guard !Task.isCancelled, let image else { return }
-        ArtworkImageCache.shared.store(image, for: url)
-        backdropImage = image
     }
 
     private func content(_ track: Track) -> some View {
@@ -299,7 +269,6 @@ struct NowPlayingView: View {
                                 endPoint: .trailing
                             )
                         )
-                        .matchedGeometryEffect(id: heroID, in: heroNamespace)
                         .padding(.top, 4)
 
                     Spacer().frame(height: gap)
@@ -353,7 +322,7 @@ struct NowPlayingView: View {
         ZStack {
             HStack {
                 Button {
-                    onClose()
+                    dismiss()
                 } label: {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 17, weight: .semibold))
@@ -632,3 +601,16 @@ private struct NowPlayingScrubber: View {
     }
 }
 
+private struct MiniArtworkTransitionSource: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.matchedTransitionSource(id: sourceID, in: namespace)
+        } else {
+            content
+        }
+    }
+}

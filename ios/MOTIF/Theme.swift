@@ -145,6 +145,12 @@ struct ArtworkView: View {
     @State private var image: UIImage?
     @State private var failed = false
 
+    init(url: URL?, seed: String) {
+        self.url = url
+        self.seed = seed
+        _image = State(initialValue: url.flatMap { ArtworkImageCache.shared.image(for: $0) })
+    }
+
     private var resolvedImage: UIImage? {
         if let image { return image }
         guard let url else { return nil }
@@ -172,6 +178,13 @@ struct ArtworkView: View {
         }
         .clipped()
         .task(id: url) {
+            if let url, let cached = ArtworkImageCache.shared.image(for: url) {
+                if image !== cached {
+                    image = cached
+                }
+                failed = false
+                return
+            }
             await loadImage()
         }
     }

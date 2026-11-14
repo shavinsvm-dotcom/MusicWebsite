@@ -24,47 +24,38 @@ struct RootView: View {
     @StateObject private var routeMonitor = AudioRouteMonitor()
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .forYou
-    @Namespace private var playerHero
+    @Namespace private var playerTransition
 
     var body: some View {
-        ZStack {
-            tabs
-                .tint(.primary)
-                .overlay(alignment: .top) {
-                    if !showNowPlaying {
-                        AirPodsConnectOverlay(monitor: routeMonitor)
-                    }
+        tabs
+            .tint(.primary)
+            .environmentObject(library)
+            .environmentObject(player)
+            .environmentObject(player.progress)
+            .overlay(alignment: .top) {
+                if !showNowPlaying {
+                    AirPodsConnectOverlay(monitor: routeMonitor)
                 }
-
-            if showNowPlaying {
-                ZStack {
-                    Color.black.ignoresSafeArea()
-
-                    NowPlayingView(
-                        heroNamespace: playerHero,
-                        heroID: playerHeroID,
-                        onClose: closePlayer
-                    )
+            }
+            .fullScreenCover(isPresented: $showNowPlaying) {
+                NowPlayingView()
+                    .environmentObject(library)
+                    .environmentObject(player)
+                    .environmentObject(player.progress)
                     .overlay(alignment: .top) {
                         AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
                     }
-                }
-                .zIndex(20)
-                .transition(.opacity)
+                    .modifier(
+                        PlayerZoomDestination(
+                            sourceID: playerTransitionID,
+                            namespace: playerTransition
+                        )
+                    )
             }
-        }
-        .environmentObject(library)
-        .environmentObject(player)
-        .environmentObject(player.progress)
-        .animation(.spring(response: 0.46, dampingFraction: 0.90), value: showNowPlaying)
-        .task {
-            await library.refreshLocalMetadata()
-            await library.refreshCloud()
-        }
-    }
-
-    private func closePlayer() {
-        showNowPlaying = false
+            .task {
+                await library.refreshLocalMetadata()
+                await library.refreshCloud()
+            }
     }
 
     @ViewBuilder
@@ -121,8 +112,8 @@ struct RootView: View {
         }
     }
 
-    private var playerHeroID: String {
-        "player-cover-\(selectedTab.rawValue)"
+    private var playerTransitionID: String {
+        "now-playing-\(selectedTab.rawValue)"
     }
 
     private var forYouTab: some View {
@@ -133,8 +124,8 @@ struct RootView: View {
         .modifier(MiniPlayerInset(
             showNowPlaying: $showNowPlaying,
             currentID: player.current?.id,
-            heroID: "player-cover-\(AppTab.forYou.rawValue)",
-            heroNamespace: playerHero
+            transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)",
+            transitionNamespace: playerTransition
         ))
     }
 
@@ -143,8 +134,8 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: $showNowPlaying,
                 currentID: player.current?.id,
-                heroID: "player-cover-\(AppTab.home.rawValue)",
-                heroNamespace: playerHero
+                transitionSourceID: "now-playing-\(AppTab.home.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -153,8 +144,8 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: $showNowPlaying,
                 currentID: player.current?.id,
-                heroID: "player-cover-\(AppTab.library.rawValue)",
-                heroNamespace: playerHero
+                transitionSourceID: "now-playing-\(AppTab.library.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -163,8 +154,8 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: $showNowPlaying,
                 currentID: player.current?.id,
-                heroID: "player-cover-\(AppTab.playlists.rawValue)",
-                heroNamespace: playerHero
+                transitionSourceID: "now-playing-\(AppTab.playlists.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -173,8 +164,8 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: $showNowPlaying,
                 currentID: player.current?.id,
-                heroID: "player-cover-\(AppTab.search.rawValue)",
-                heroNamespace: playerHero
+                transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 }
@@ -182,15 +173,15 @@ struct RootView: View {
 private struct MiniPlayerInset: ViewModifier {
     @Binding var showNowPlaying: Bool
     let currentID: UUID?
-    let heroID: String
-    let heroNamespace: Namespace.ID
+    let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
 
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
             MiniPlayer(
                 showNowPlaying: $showNowPlaying,
-                heroID: heroID,
-                heroNamespace: heroNamespace
+                transitionSourceID: transitionSourceID,
+                transitionNamespace: transitionNamespace
             )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(
@@ -201,3 +192,16 @@ private struct MiniPlayerInset: ViewModifier {
     }
 }
 
+private struct PlayerZoomDestination: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            content
+        }
+    }
+}
