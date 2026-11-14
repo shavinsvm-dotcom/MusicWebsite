@@ -20,6 +20,18 @@ final class PlayerManager: ObservableObject {
     @Published private(set) var repeatMode: RepeatMode = .off
     @Published var elapsed: Double = 0
 
+    var upNext: Track? {
+        guard !isShuffled, repeatMode != .one,
+              let current,
+              let index = queue.firstIndex(where: { $0.id == current.id })
+        else { return nil }
+
+        if index + 1 < queue.count {
+            return queue[index + 1]
+        }
+        return repeatMode == .all ? queue.first : nil
+    }
+
     private let player = AVPlayer()
     private var currentIndex = 0
     private var timeObserver: Any?

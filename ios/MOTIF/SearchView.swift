@@ -3,6 +3,7 @@ import SwiftUI
 struct SearchView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
+    @Environment(\.dismiss) private var dismiss
     @Binding var showNowPlaying: Bool
 
     @State private var query = ""
@@ -101,6 +102,14 @@ struct SearchView: View {
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Songs, artists, albums"
             )
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
             .task(id: query) {
                 await runSearch()
             }

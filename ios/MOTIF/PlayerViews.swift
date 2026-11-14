@@ -6,61 +6,105 @@ struct MiniPlayer: View {
 
     var body: some View {
         if let track = player.current {
-            HStack(spacing: 10) {
-                Button {
-                    showNowPlaying = true
-                } label: {
-                    HStack(spacing: 10) {
-                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                            .frame(width: 42, height: 42)
-                            .clipShape(Circle())
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Button {
+                        showNowPlaying = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                                .frame(width: 24, height: 24)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(track.title)
-                                .font(.subheadline.weight(.semibold))
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(track.title)
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                Text(track.artist)
+                                    .font(.system(size: 10, weight: .regular))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .layoutPriority(1)
+
+                    if let next = player.upNext {
+                        VStack(alignment: .trailing, spacing: 1) {
+                            Text(next.title)
+                                .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.primary)
                                 .lineLimit(1)
-                            Text(track.artist)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            Text(next.artist)
+                                .font(.system(size: 10, weight: .regular))
+                                .foregroundStyle(.tertiary)
                                 .lineLimit(1)
                         }
-
-                        Spacer(minLength: 4)
+                        .frame(maxWidth: 112, alignment: .trailing)
+                        .padding(.leading, 2)
                     }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
 
-                Button {
-                    player.toggle()
-                } label: {
-                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .frame(width: 38, height: 38)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                    Button {
+                        player.toggle()
+                    } label: {
+                        Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 17, weight: .semibold))
+                            .frame(width: 28, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
-                Button {
-                    player.next()
-                } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .frame(width: 34, height: 38)
-                        .contentShape(Rectangle())
+                    Button {
+                        player.next()
+                    } label: {
+                        Image(systemName: "forward.end.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .frame(width: 28, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Next")
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Next")
+                .padding(.leading, 6)
+                .padding(.trailing, 8)
+                .frame(height: 46)
             }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 7)
-            .glassSurface(radius: 22)
-            .padding(.horizontal, 12)
-            .padding(.top, 6)
-            .padding(.bottom, 6)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
+            }
+            .overlay(alignment: .bottom) {
+                progress
+            }
+            .clipShape(Capsule())
+            .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 8)
         }
+    }
+
+    private var progress: some View {
+        GeometryReader { geometry in
+            let fraction = player.duration > 0
+                ? min(max(player.elapsed / player.duration, 0), 1)
+                : 0
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.16))
+                Capsule()
+                    .fill(Color.white.opacity(0.72))
+                    .frame(width: geometry.size.width * fraction)
+            }
+            .padding(.horizontal, 10)
+        }
+        .frame(height: 2)
+        .padding(.bottom, 1)
+        .allowsHitTesting(false)
     }
 }
 
