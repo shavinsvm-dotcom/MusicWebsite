@@ -464,6 +464,7 @@ struct TrackRow: View {
         let isFavorite = library.isFavorite(track)
         let isUploaded = track.isUploadedToCloud
         let isUploading = library.isUploading(track)
+        let isEnriching = library.isEnriching(track)
 
         HStack(spacing: 12) {
             Button {
@@ -493,7 +494,7 @@ struct TrackRow: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if isUploading {
+                    if isUploading || isEnriching {
                         ProgressView()
                             .controlSize(.small)
                             .tint(.secondary)
@@ -597,6 +598,22 @@ struct TrackRow: View {
                 }
 
                 if track.source == .local && track.mediaURL.isFileURL {
+                    if !isUploaded {
+                        if isEnriching {
+                            Button {} label: {
+                                Label("Identifying & finding cover…", systemImage: "sparkles")
+                            }
+                            .disabled(true)
+                        } else {
+                            Button {
+                                Task { await library.enrichTrack(track) }
+                            } label: {
+                                Label("Identify & find cover", systemImage: "wand.and.stars")
+                            }
+                            .disabled(isUploading)
+                        }
+                    }
+
                     if isUploaded {
                         Button {} label: {
                             Label("Uploaded to cloud", systemImage: "checkmark.icloud")

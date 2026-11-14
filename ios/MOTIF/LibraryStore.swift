@@ -13,6 +13,8 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var isRefreshingCloud = false
     @Published private(set) var downloadingIDs: Set<UUID> = []
     @Published private(set) var uploadingIDs: Set<UUID> = []
+    @Published private(set) var enrichingIDs: Set<UUID> = []
+    @Published private(set) var enrichmentMessage: String?
     @Published private(set) var cloudMessage: String?
     @Published var errorMessage: String?
 
@@ -89,6 +91,11 @@ final class LibraryStore: ObservableObject {
         return uploadingIDs.contains(existing.id)
     }
 
+    func isEnriching(_ track: Track) -> Bool {
+        guard let existing = canonicalTrack(for: track) else { return false }
+        return enrichingIDs.contains(existing.id)
+    }
+
     func refreshLocalMetadata() async {
         var changed = false
 
@@ -98,15 +105,22 @@ final class LibraryStore: ObservableObject {
             let items = (try? await asset.load(.commonMetadata)) ?? []
             let allItems = (try? await asset.load(.metadata)) ?? items
             var updated = track
+            var sawTag = false
 
             if let title = await metadataString(in: items, key: .commonKeyTitle) {
                 updated.title = title
+                sawTag = true
             }
             if let artist = await metadataString(in: items, key: .commonKeyArtist) {
                 updated.artist = artist
+                sawTag = true
             }
             if let album = await metadataString(in: items, key: .commonKeyAlbumName) {
                 updated.album = album
+                sawTag = true
+            }
+            if sawTag, updated.metadataSource != "ai" {
+                updated.metadataSource = "tags"
             }
             if updated.artist == "Imported", updated.title.contains(" - ") {
                 let fallback = fallbackMetadata(from: updated.title)
@@ -127,6 +141,19 @@ final class LibraryStore: ObservableObject {
         }
 
         if changed { save() }
+
+        // Existing local imports should get the same cover treatment as new
+        // ones. Identification is left out here so a cold launch cannot burn
+        // through the recognition quota; it runs on import, upload, or when
+        // the user explicitly asks for it.
+        let missingArtwork = tracks.filter {
+            $0.source == .local && $0.artworkURL == nil && !enrichingIDs.contains($0.id)
+        }
+        Task {
+            for track in missingArtwork {
+                _ = await enrich(track, allowIdentification: false)
+            }
+        }
     }
 
     func refreshCloud() async {
@@ -249,21 +276,22 @@ final class LibraryStore: ObservableObject {
             !uploadingIDs.contains(existing.id)
         else { return }
 
-        let fileURL = existing.mediaURL
+        uploadingIDs.insert(existing.id)
+        defer { uploadingIDs.remove(existing.id) }
+
+        let prepared = await enrich(existing) ?? existing
+        let fileURL = prepared.mediaURL
         guard fileManager.fileExists(atPath: fileURL.path) else { return }
 
         let fileSize = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
         guard fileSize > 0 else {
-            errorMessage = "Couldn’t upload \(existing.title): the audio file is empty."
+            errorMessage = "Couldn’t upload \(prepared.title): the audio file is empty."
             return
         }
         guard fileSize <= 100 * 1024 * 1024 else {
-            errorMessage = "Couldn’t upload \(existing.title): cloud songs are limited to 100 MB."
+            errorMessage = "Couldn’t upload \(prepared.title): cloud songs are limited to 100 MB."
             return
         }
-
-        uploadingIDs.insert(existing.id)
-        defer { uploadingIDs.remove(existing.id) }
 
         let id = "c-\(String(Int(Date().timeIntervalSince1970), radix: 36))-\(UUID().uuidString.prefix(8).lowercased())"
         let rawExtension = fileURL.pathExtension.lowercased()
@@ -283,24 +311,24 @@ final class LibraryStore: ObservableObject {
             var document: [String: Any] = [
                 "id": id,
                 "name": fileURL.lastPathComponent,
-                "title": existing.title.isEmpty ? "Untitled" : existing.title,
-                "artist": existing.artist.isEmpty ? "Unknown artist" : existing.artist,
-                "albumArtist": existing.artist,
-                "album": existing.album,
-                "duration": existing.duration.isFinite ? max(0, existing.duration) : 0,
+                "title": prepared.title.isEmpty ? "Untitled" : prepared.title,
+                "artist": prepared.artist.isEmpty ? "Unknown artist" : prepared.artist,
+                "albumArtist": prepared.artist,
+                "album": prepared.album,
+                "duration": prepared.duration.isFinite ? max(0, prepared.duration) : 0,
                 "url": remoteURL.absoluteString,
                 "storagePath": storageKey,
                 "uploadedAt": Int(Date().timeIntervalSince1970 * 1000),
                 "size": fileSize,
                 "mimeType": contentType
             ]
-            if let year = existing.releaseYear {
+            if let year = prepared.releaseYear {
                 document["year"] = year
             }
 
             try await TigrisAPI.addLibraryDocument(document)
 
-            if let artworkURL = existing.artworkURL,
+            if let artworkURL = prepared.artworkURL,
                artworkURL.isFileURL,
                let artworkData = try? Data(contentsOf: artworkURL),
                let artwork = UIImage(data: artworkData),
@@ -315,15 +343,108 @@ final class LibraryStore: ObservableObject {
                 }
             }
 
-            if let index = tracks.firstIndex(where: { $0.id == existing.id }) {
+            if let index = tracks.firstIndex(where: { $0.id == prepared.id }) {
                 tracks[index].remoteID = id
                 tracks[index].streamURL = remoteURL
                 save()
             }
 
-            cloudMessage = "Uploaded \(existing.title) to the cloud"
+            cloudMessage = "Uploaded \(prepared.title) to the cloud"
         } catch {
-            errorMessage = "Couldn’t upload \(existing.title): \(error.localizedDescription)"
+            errorMessage = "Couldn’t upload \(prepared.title): \(error.localizedDescription)"
+        }
+    }
+
+    func enrichTrack(_ track: Track) async {
+        _ = await enrich(track, forceIdentification: true)
+    }
+
+    /// Identify an untagged local file, then find an official cover. Both steps
+    /// are best effort: a failed lookup never blocks an import or an upload.
+    private func enrich(
+        _ track: Track,
+        allowIdentification: Bool = true,
+        forceIdentification: Bool = false
+    ) async -> Track? {
+        guard
+            var current = canonicalTrack(for: track),
+            current.source == .local,
+            current.mediaURL.isFileURL,
+            !enrichingIDs.contains(current.id)
+        else { return canonicalTrack(for: track) }
+
+        enrichingIDs.insert(current.id)
+        defer {
+            enrichingIDs.remove(current.id)
+            if enrichingIDs.isEmpty { enrichmentMessage = nil }
+        }
+
+        var changed = false
+        var identifiedCoverURL: URL?
+
+        if allowIdentification, forceIdentification || current.needsRecognition {
+            enrichmentMessage = "Identifying \(current.title)…"
+            do {
+                if let match = try await MusicIdentifier.identify(fileURL: current.mediaURL) {
+                    current.title = match.title
+                    if !match.artist.isEmpty { current.artist = match.artist }
+                    if !match.album.isEmpty { current.album = match.album }
+                    if let year = match.year { current.releaseYear = year }
+                    current.metadataSource = "ai"
+                    identifiedCoverURL = match.coverURL
+                    changed = true
+                }
+            } catch {
+                // Auto-enrichment is best effort; the upload still proceeds
+                // with whatever tags the file already has.
+            }
+        }
+
+        if current.artworkURL == nil {
+            enrichmentMessage = "Finding artwork for \(current.title)…"
+            var artworkData: Data?
+
+            if let match = await ArtworkFinder.find(
+                title: current.title,
+                artist: current.artist,
+                album: current.album
+            ) {
+                artworkData = await ArtworkFinder.imageData(from: match.artworkURL)
+            }
+
+            // Shazam often supplies a usable cover even when the catalogue
+            // match is ambiguous. Prefer the iTunes artwork above, but never
+            // leave a newly identified track with an empty square.
+            if artworkData == nil, let identifiedCoverURL {
+                artworkData = await ArtworkFinder.imageData(from: identifiedCoverURL)
+            }
+
+            if let artworkData, let saved = storeArtwork(artworkData, for: current.id) {
+                current.artworkURL = saved
+                changed = true
+            }
+        }
+
+        if changed, let index = tracks.firstIndex(where: { $0.id == current.id }) {
+            tracks[index] = current
+            save()
+        }
+        return current
+    }
+
+    private func storeArtwork(_ data: Data, for trackID: UUID) -> URL? {
+        guard
+            let image = UIImage(data: data),
+            let jpeg = image.jpegData(compressionQuality: 0.9)
+        else { return nil }
+
+        let destination = artworkDirectory
+            .appendingPathComponent("track-\(trackID.uuidString).jpg")
+        do {
+            try jpeg.write(to: destination, options: .atomic)
+            return destination
+        } catch {
+            return nil
         }
     }
 
@@ -555,7 +676,10 @@ final class LibraryStore: ObservableObject {
                     mediaURL: destination,
                     duration: seconds.isFinite && seconds > 0 ? seconds : 0,
                     source: .local,
-                    remoteID: nil
+                    remoteID: nil,
+                    metadataSource: (metaTitle != nil || metaArtist != nil || metaAlbum != nil)
+                        ? "tags"
+                        : "filename"
                 ))
             } catch {
                 errorMessage = "Couldn’t import \(url.lastPathComponent): \(error.localizedDescription)"
@@ -563,6 +687,13 @@ final class LibraryStore: ObservableObject {
         }
 
         if !imported.isEmpty { add(imported) }
+
+        // Imported files are usable immediately; metadata and artwork are
+        // improved in the background of this import task for untagged files
+        // and files that arrived without a cover.
+        for track in imported where track.artworkURL == nil || track.needsRecognition {
+            _ = await enrich(track)
+        }
     }
 
     private func cleaned(_ value: String?) -> String? {

@@ -144,9 +144,11 @@ struct LibraryView: View {
             Text(
                 library.isRefreshingCloud
                     ? "Syncing the Tigris library…"
-                    : (!library.uploadingIDs.isEmpty
-                        ? "Uploading \(library.uploadingIDs.count) \(library.uploadingIDs.count == 1 ? "song" : "songs")…"
-                        : (library.cloudMessage ?? "Tigris library"))
+                    : (!library.enrichingIDs.isEmpty
+                        ? (library.enrichmentMessage ?? "Updating song details…")
+                        : (!library.uploadingIDs.isEmpty
+                            ? "Uploading \(library.uploadingIDs.count) \(library.uploadingIDs.count == 1 ? "song" : "songs")…"
+                            : (library.cloudMessage ?? "Tigris library")))
             )
             .font(.footnote)
             .foregroundStyle(.secondary)

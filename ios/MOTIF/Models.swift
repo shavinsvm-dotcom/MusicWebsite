@@ -20,11 +20,28 @@ struct Track: Identifiable, Codable, Hashable {
     var streamURL: URL? = nil
     var addedAt: Date = Date()
     var lyrics: String? = nil
+    /// "tags", "filename", or "ai". Optional so older library.json files decode.
+    var metadataSource: String? = nil
 
     var isPreview: Bool { source == .preview }
     var isCloud: Bool { source == .cloud }
     var isOffline: Bool { mediaURL.isFileURL }
     var isUploadedToCloud: Bool { source == .local && remoteID != nil }
+
+    var needsRecognition: Bool {
+        guard source == .local else { return false }
+        if metadataSource == "ai" { return false }
+        if metadataSource == "filename" { return true }
+
+        let artistKey = artist
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if ["", "imported", "unknown", "unknown artist", "various", "various artists", "va"]
+            .contains(artistKey) {
+            return true
+        }
+        return false
+    }
 
     var durationText: String {
         guard duration.isFinite, duration > 0 else { return "--:--" }

@@ -8,6 +8,8 @@
 const API_PREFIX = '/api/tigris';
 const DEFAULT_ENDPOINT = 'https://t3.storage.dev';
 const DEFAULT_BUCKET = 'musicapp';
+const SHAZAM_ENDPOINT = 'https://shazam.p.rapidapi.com/songs/v2/detect';
+const SHAZAM_HOST = 'shazam.p.rapidapi.com';
 const encoder = new TextEncoder();
 
 const json = (value, status = 200) =>
@@ -43,6 +45,15 @@ const hex = (bytes) =>
   Array.from(new Uint8Array(bytes))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+
+function base64FromBytes(bytes) {
+  let binary = '';
+  const chunkSize = 0x4000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
 
 async function sha256(bytes) {
   return hex(await crypto.subtle.digest('SHA-256', bytes));
@@ -166,6 +177,98 @@ async function readBody(request) {
   return new Uint8Array(buffer);
 }
 
+function shazamMetadata(track, title) {
+  const sections = Array.isArray(track?.sections) ? track.sections : [];
+  for (const section of sections) {
+    const metadata = Array.isArray(section?.metadata) ? section.metadata : [];
+    const item = metadata.find(
+      (entry) => String(entry?.title || '').toLowerCase() === String(title).toLowerCase(),
+    );
+    const text = String(item?.text || '').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+async function handleIdentify(request, env) {
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    return json({ enabled: Boolean(env.RAPIDAPI_KEY), provider: 'shazam' });
+  }
+  if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
+  if (!env.RAPIDAPI_KEY) {
+    return json({ error: 'Music identification is not configured.' }, 503);
+  }
+
+  const bytes = await readBody(request);
+  if (bytes.byteLength < 44_100) {
+    return json({ error: 'Send a longer raw PCM clip.' }, 400);
+  }
+  if (bytes.byteLength > 512_000) {
+    return json({ error: 'The recognition clip is too large.' }, 413);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20_000);
+  try {
+    const upstream = await fetch(SHAZAM_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'content-type': 'text/plain',
+        'x-rapidapi-host': SHAZAM_HOST,
+        'x-rapidapi-key': env.RAPIDAPI_KEY,
+      },
+      body: base64FromBytes(bytes),
+      signal: controller.signal,
+    });
+
+    const raw = await upstream.text();
+    let data = null;
+    try {
+      data = raw ? JSON.parse(raw) : null;
+    } catch {
+      return json({ error: 'Shazam returned an unreadable response.' }, 502);
+    }
+
+    if (!upstream.ok) {
+      const status = upstream.status === 429 ? 429 : 502;
+      return json(
+        {
+          error:
+            upstream.status === 429
+              ? 'Shazam recognition quota is exhausted.'
+              : `Shazam recognition failed (${upstream.status}).`,
+        },
+        status,
+      );
+    }
+
+    const track = data?.track || null;
+    if (!track) return json({ ok: true, match: null });
+
+    const released = shazamMetadata(track, 'Released');
+    const yearMatch = released.match(/(?:19|20)\d{2}/);
+    return json({
+      ok: true,
+      match: {
+        title: String(track.title || ''),
+        artist: String(track.subtitle || ''),
+        album: shazamMetadata(track, 'Album'),
+        coverURL: String(track.share?.image || ''),
+        shazamURL: String(track.url || track.share?.href || ''),
+        year: yearMatch ? Number(yearMatch[0]) : null,
+      },
+    });
+  } catch (error) {
+    const timedOut = error?.name === 'AbortError';
+    return json(
+      { error: timedOut ? 'Shazam recognition timed out.' : 'Could not reach Shazam recognition.' },
+      timedOut ? 504 : 502,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function handleApi(request, env, url) {
   if (url.pathname === `${API_PREFIX}/health`) {
     const config = storageConfig(env);
@@ -181,6 +284,8 @@ async function handleApi(request, env, url) {
   const key = url.searchParams.get('key') || '';
   const method = request.method;
   const isRead = method === 'GET' || method === 'HEAD';
+
+  if (route === '/identify') return handleIdentify(request, env);
 
   if (route === '/library') {
     if (isRead) {
