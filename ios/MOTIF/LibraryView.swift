@@ -85,6 +85,13 @@ struct LibraryView: View {
                             Label("Upload local songs", systemImage: "icloud.and.arrow.up")
                         }
                         .disabled(!library.uploadingIDs.isEmpty)
+
+                        Button {
+                            Task { await library.repairMissingCovers() }
+                        } label: {
+                            Label("Find missing covers", systemImage: "photo.badge.magnifyingglass")
+                        }
+                        .disabled(!library.enrichingIDs.isEmpty)
                     } label: {
                         Image(systemName: "plus.circle")
                             .font(.title3)

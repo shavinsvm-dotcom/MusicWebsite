@@ -143,15 +143,14 @@ final class LibraryStore: ObservableObject {
         if changed { save() }
 
         // Existing local imports should get the same cover treatment as new
-        // ones. Identification is left out here so a cold launch cannot burn
-        // through the recognition quota; it runs on import, upload, or when
-        // the user explicitly asks for it.
+        // ones. Untagged files need identification first, otherwise a strict
+        // artwork lookup has no artist to match against.
         let missingArtwork = tracks.filter {
             $0.source == .local && $0.artworkURL == nil && !enrichingIDs.contains($0.id)
         }
         Task {
             for track in missingArtwork {
-                _ = await enrich(track, allowIdentification: false)
+                _ = await enrich(track)
             }
         }
     }
@@ -190,6 +189,30 @@ final class LibraryStore: ObservableObject {
             }
 
             add(incoming)
+
+            // `add` skips rows that already exist. Covers are written after the
+            // manifest upload, so a track added before its cover was published
+            // stayed blank forever. Merge those updates back into local rows.
+            var merged = false
+            for remote in incoming {
+                guard
+                    let remoteID = remote.remoteID,
+                    let index = tracks.firstIndex(where: { $0.remoteID == remoteID }),
+                    let artworkURL = remote.artworkURL
+                else { continue }
+
+                let current = tracks[index].artworkURL
+                if current == nil
+                    || (tracks[index].source == .cloud
+                        && current?.isFileURL == false
+                        && current != artworkURL) {
+                    tracks[index].artworkURL = artworkURL
+                    merged = true
+                }
+            }
+            if merged { save() }
+
+            await repairMissingCloudCovers()
             cloudMessage = remoteTracks.isEmpty
                 ? "No tracks in the Tigris library yet."
                 : "\(remoteTracks.count) tracks in the Tigris library"
@@ -357,6 +380,75 @@ final class LibraryStore: ObservableObject {
 
     func enrichTrack(_ track: Track) async {
         _ = await enrich(track, forceIdentification: true)
+    }
+
+    /// Fill every empty cover. Local untagged files are identified first;
+    /// well-tagged files go straight to the iTunes lookup. Cloud rows also get
+    /// their cover written back to Tigris so every device sees it.
+    func repairMissingCovers() async {
+        let local = tracks.filter {
+            $0.source == .local
+                && $0.mediaURL.isFileURL
+                && $0.artworkURL == nil
+                && !enrichingIDs.contains($0.id)
+        }
+        for track in local {
+            _ = await enrich(track)
+        }
+        await repairMissingCloudCovers()
+    }
+
+    private func repairMissingCloudCovers() async {
+        let missing = tracks.filter {
+            $0.isCloud
+                && $0.remoteID != nil
+                && $0.artworkURL == nil
+                && !enrichingIDs.contains($0.id)
+        }
+        for track in missing {
+            await repairCloudCover(track)
+        }
+    }
+
+    private func repairCloudCover(_ track: Track) async {
+        guard
+            let current = canonicalTrack(for: track),
+            current.isCloud,
+            let remoteID = current.remoteID,
+            current.artworkURL == nil,
+            !enrichingIDs.contains(current.id)
+        else { return }
+
+        enrichingIDs.insert(current.id)
+        defer {
+            enrichingIDs.remove(current.id)
+            if enrichingIDs.isEmpty { enrichmentMessage = nil }
+        }
+        enrichmentMessage = "Finding artwork for \(current.title)…"
+
+        guard
+            let match = await ArtworkFinder.find(
+                title: current.title,
+                artist: current.artist,
+                album: current.album
+            ),
+            let data = await ArtworkFinder.imageData(from: match.artworkURL),
+            let image = UIImage(data: data),
+            let jpeg = image.jpegData(compressionQuality: 0.85)
+        else { return }
+
+        let coverKey = "songs/covers/\(remoteID).jpg"
+        guard let coverURL = try? await TigrisAPI.uploadObject(
+            data: jpeg,
+            key: coverKey,
+            contentType: "image/jpeg"
+        ) else { return }
+
+        try? await TigrisAPI.setCover(trackID: remoteID, url: coverURL)
+        if let index = tracks.firstIndex(where: { $0.remoteID == remoteID }) {
+            tracks[index].artworkURL = coverURL
+            save()
+        }
     }
 
     /// Identify an untagged local file, then find an official cover. Both steps
