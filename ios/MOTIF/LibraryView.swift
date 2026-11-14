@@ -31,7 +31,7 @@ struct LibraryView: View {
                     if !library.tracks.isEmpty {
                         Picker("Library filter", selection: $filter) {
                             Text("Songs").tag(LibraryFilter.all)
-                            Text("Downloads").tag(LibraryFilter.downloads)
+                            Text("Downloaded").tag(LibraryFilter.downloads)
                         }
                         .pickerStyle(.segmented)
                     }
@@ -204,10 +204,25 @@ struct LibraryView: View {
     }
 
     private var songs: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
+        let pendingDownloads = library.tracks.filter { $0.isCloud && !library.isDownloaded($0) }
+
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 14) {
                 SectionTitle(title: "Songs")
                 Spacer()
+
+                if !pendingDownloads.isEmpty {
+                    Button {
+                        Task { await library.downloadAll(pendingDownloads) }
+                    } label: {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.body.weight(.semibold))
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.9))
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Download all songs")
+                }
+
                 Button {
                     guard let first = library.tracks.first else { return }
                     player.play(first, queue: library.tracks)
@@ -234,11 +249,22 @@ struct LibraryView: View {
     private var downloads: some View {
         let tracks = downloadedTracks
 
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                SectionTitle(title: "Downloads")
+                SectionTitle(title: "Downloaded")
                 Spacer()
                 if !tracks.isEmpty {
+                    Button {
+                        guard let first = tracks.first else { return }
+                        player.play(first, queue: tracks)
+                        showNowPlaying = true
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.92))
+                    .foregroundStyle(.secondary)
+
                     Text("\(tracks.count)")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
@@ -246,11 +272,33 @@ struct LibraryView: View {
             }
 
             if tracks.isEmpty {
-                Text("Tap the download button beside any cloud song to keep it available offline.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 10) {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(.tertiary)
+
+                    Text("No downloads yet")
+                        .font(.subheadline.weight(.semibold))
+
+                    Text("Download a cloud song and it will stay on this iPhone, ready without a connection.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button("Browse songs") {
+                        filter = .all
+                    }
+                    .font(.footnote.weight(.semibold))
+                    .padding(.top, 2)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 30)
             } else {
+                Text("Available without a connection")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
                 LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in
                         TrackRow(track: track, queue: tracks)

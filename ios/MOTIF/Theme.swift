@@ -286,8 +286,8 @@ struct TrackRow: View {
             } label: {
                 HStack(spacing: 12) {
                     ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                        .frame(width: 54, height: 54)
-                        .clipShape(Circle())
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(track.title)

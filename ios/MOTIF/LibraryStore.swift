@@ -192,6 +192,12 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    func downloadAll(_ candidates: [Track]) async {
+        for track in candidates where track.isCloud {
+            await download(track)
+        }
+    }
+
     func removeDownload(_ track: Track) {
         guard
             let existing = canonicalTrack(for: track),
