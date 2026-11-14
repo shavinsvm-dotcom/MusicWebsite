@@ -1,4 +1,3 @@
-import CoreImage
 import SwiftUI
 import UIKit
 
@@ -49,7 +48,7 @@ struct MiniPlayer: View {
                     .accessibilityLabel("Previous")
 
                     Button {
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.66)) {
+                        withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
                             player.toggle()
                         }
                     } label: {
@@ -80,15 +79,12 @@ struct MiniPlayer: View {
                 .padding(.trailing, 6)
                 .frame(height: 46)
             }
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay {
-                Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-            }
+            .nativeGlass(Capsule())
             .overlay(alignment: .bottom) {
                 progress
             }
             .clipShape(Capsule())
-            .shadow(color: .black.opacity(0.22), radius: 18, x: 0, y: 8)
+            .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
             .transition(
@@ -128,7 +124,6 @@ struct NowPlayingView: View {
     @State private var isScrubbing = false
     @State private var scrubValue = 0.0
     @State private var backdropImage: UIImage?
-    @State private var backdropColor = Color(white: 0.10)
     @State private var contentVisible = false
 
     var body: some View {
@@ -152,7 +147,7 @@ struct NowPlayingView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.48)) {
+            withAnimation(.easeOut(duration: 0.22)) {
                 contentVisible = true
             }
         }
@@ -164,64 +159,35 @@ struct NowPlayingView: View {
     private func backdrop(_ track: Track) -> some View {
         GeometryReader { geometry in
             ZStack {
-                Color.black
+                Color(red: 0.043, green: 0.047, blue: 0.063)
 
-                if let image = backdropImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(
-                            width: geometry.size.width * 1.25,
-                            height: geometry.size.height * 1.25
+                Group {
+                    if let image = backdropImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        ArtworkView(
+                            url: track.artworkURL,
+                            seed: track.title + track.artist
                         )
-                        .blur(radius: 72)
-                        .opacity(0.34)
-                        .blendMode(.screen)
-                        .offset(y: -geometry.size.height * 0.08)
-                        .mask(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .black, location: 0),
-                                    .init(color: .black, location: 0.30),
-                                    .init(color: .clear, location: 0.62)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                } else {
-                    ArtworkView(
-                        url: track.artworkURL,
-                        seed: track.title + track.artist
-                    )
-                    .frame(
-                        width: geometry.size.width * 1.25,
-                        height: geometry.size.height * 1.25
-                    )
-                    .blur(radius: 58)
-                    .opacity(0.30)
-                    .blendMode(.screen)
-                    .offset(y: -geometry.size.height * 0.08)
-                    .mask(
-                        LinearGradient(
-                            stops: [
-                                .init(color: .black, location: 0),
-                                .init(color: .black, location: 0.30),
-                                .init(color: .clear, location: 0.62)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    }
                 }
+                .frame(
+                    width: geometry.size.width * 1.24,
+                    height: geometry.size.height * 1.24
+                )
+                .blur(radius: 46)
+                .saturation(1.45)
+                .opacity(0.96)
 
                 LinearGradient(
                     stops: [
-                        .init(color: backdropColor.opacity(0.82), location: 0),
-                        .init(color: backdropColor.opacity(0.64), location: 0.40),
-                        .init(color: backdropColor.opacity(0.26), location: 0.53),
-                        .init(color: .black.opacity(0.93), location: 0.70),
-                        .init(color: .black, location: 0.82)
+                        .init(color: .black.opacity(0.68), location: 0),
+                        .init(color: .black.opacity(0.22), location: 0.30),
+                        .init(color: .black.opacity(0.34), location: 0.62),
+                        .init(color: .black.opacity(0.82), location: 0.90),
+                        .init(color: .black, location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -237,7 +203,6 @@ struct NowPlayingView: View {
     private func loadBackdropImage() async {
         guard let url = player.current?.artworkURL else {
             backdropImage = nil
-            backdropColor = Color(white: 0.10)
             return
         }
 
@@ -255,39 +220,50 @@ struct NowPlayingView: View {
 
         guard !Task.isCancelled else { return }
         backdropImage = image
-        if let image {
-            backdropColor = Color(uiColor: image.motifAverageColor)
-        } else {
-            backdropColor = Color(white: 0.10)
-        }
     }
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
-            let artSide = min(geometry.size.width, geometry.size.height * 0.50)
+            let artHeight = min(
+                geometry.size.height * 0.60,
+                geometry.size.width * 1.28
+            )
             let bottomHeight: CGFloat = 243
             let gap = max(
                 42,
                 min(
                     geometry.size.height * 0.28,
-                    geometry.size.height - artSide - bottomHeight - 6
+                    geometry.size.height - artHeight - bottomHeight - 6
                 )
             )
 
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
                     ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                        .frame(width: artSide, height: artSide)
+                        .frame(width: geometry.size.width, height: artHeight)
                         .mask(
                             LinearGradient(
                                 stops: [
                                     .init(color: .clear, location: 0),
-                                    .init(color: .black, location: 0.035),
-                                    .init(color: .black, location: 0.925),
+                                    .init(color: .black, location: 0.16),
+                                    .init(color: .black, location: 0.64),
+                                    .init(color: .black.opacity(0.5), location: 0.84),
                                     .init(color: .clear, location: 1)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
+                            )
+                        )
+                        .mask(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: .black, location: 0.11),
+                                    .init(color: .black, location: 0.89),
+                                    .init(color: .clear, location: 1)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
                             )
                         )
                         .padding(.top, 4)
@@ -332,19 +308,6 @@ struct NowPlayingView: View {
                     Spacer(minLength: 0)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
-
-                LinearGradient(
-                    colors: [
-                        .black.opacity(0.34),
-                        .black.opacity(0.10),
-                        .clear
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: 156)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .allowsHitTesting(false)
 
                 topBar(track)
                     .padding(.top, 4)
@@ -470,14 +433,14 @@ struct NowPlayingView: View {
                 icon: library.isFavorite(track) ? "heart.fill" : "heart",
                 active: library.isFavorite(track)
             ) {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.58)) {
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
                     library.toggleFavorite(track)
                 }
             }
             .accessibilityLabel(library.isFavorite(track) ? "Remove favorite" : "Favorite")
 
             circularButton(icon: "shuffle", active: player.isShuffled) {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.58)) {
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
                     player.toggleShuffle()
                 }
             }
@@ -500,7 +463,7 @@ struct NowPlayingView: View {
             .accessibilityLabel("Previous")
 
                         Button {
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.66)) {
+                withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
                     player.toggle()
                 }
             } label: {
@@ -548,7 +511,7 @@ struct NowPlayingView: View {
 
     private var repeatButton: some View {
         Button {
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.58)) {
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
                 player.cycleRepeat()
             }
         } label: {
@@ -591,64 +554,5 @@ struct NowPlayingView: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
-private extension UIImage {
-    var motifAverageColor: UIColor {
-        guard let cgImage else {
-            return UIColor(white: 0.10, alpha: 1)
-        }
-
-        let input = CIImage(cgImage: cgImage)
-        guard let filter = CIFilter(name: "CIAreaAverage") else {
-            return UIColor(white: 0.10, alpha: 1)
-        }
-
-        let extent = input.extent
-        let upperHalf = CGRect(
-            x: extent.minX,
-            y: extent.midY,
-            width: extent.width,
-            height: extent.height * 0.55
-        )
-        filter.setValue(input, forKey: kCIInputImageKey)
-        filter.setValue(CIVector(cgRect: upperHalf), forKey: kCIInputExtentKey)
-
-        guard let output = filter.outputImage else {
-            return UIColor(white: 0.10, alpha: 1)
-        }
-
-        var bitmap = [UInt8](repeating: 0, count: 4)
-        CIContext().render(
-            output,
-            toBitmap: &bitmap,
-            rowBytes: 4,
-            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-            format: .RGBA8,
-            colorSpace: CGColorSpaceCreateDeviceRGB()
-        )
-
-        let sampled = UIColor(
-            red: CGFloat(bitmap[0]) / 255,
-            green: CGFloat(bitmap[1]) / 255,
-            blue: CGFloat(bitmap[2]) / 255,
-            alpha: 1
-        )
-
-        var hue: CGFloat = 0
-        var saturation: CGFloat = 0
-        var brightness: CGFloat = 0
-        var alpha: CGFloat = 0
-        guard sampled.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
-            return sampled
-        }
-
-        return UIColor(
-            hue: hue,
-            saturation: min(saturation * 1.08, 1),
-            brightness: min(brightness * 1.12 + 0.02, 0.88),
-            alpha: 1
-        )
     }
 }

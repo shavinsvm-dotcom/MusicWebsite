@@ -129,7 +129,7 @@ private struct MiniPlayerInset: ViewModifier {
             MiniPlayer(showNowPlaying: $showNowPlaying)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(
-                    .spring(response: 0.40, dampingFraction: 0.82),
+                    .spring(response: 0.28, dampingFraction: 0.84),
                     value: currentID
                 )
         }

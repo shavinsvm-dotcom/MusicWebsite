@@ -82,9 +82,9 @@ private struct ScreenEntrance: ViewModifier {
     func body(content: Content) -> some View {
         content
             .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 9)
+            .offset(y: appeared ? 0 : 7)
             .onAppear {
-                withAnimation(.easeOut(duration: 0.34)) {
+                withAnimation(.easeOut(duration: 0.14)) {
                     appeared = true
                 }
             }
@@ -103,7 +103,7 @@ struct MotifPressStyle: ButtonStyle {
             .scaleEffect(configuration.isPressed ? scale : 1)
             .opacity(configuration.isPressed ? opacity : 1)
             .animation(
-                .spring(response: 0.28, dampingFraction: 0.62),
+                .spring(response: 0.16, dampingFraction: 0.70),
                 value: configuration.isPressed
             )
     }
