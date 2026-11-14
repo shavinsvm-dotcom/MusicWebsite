@@ -170,8 +170,21 @@ final class LibraryStore: ObservableObject {
             }
             try fileManager.moveItem(at: temporaryURL, to: destination)
 
+            var localArtwork: URL?
+            if let remoteArtwork = existing.artworkURL, !remoteArtwork.isFileURL,
+               let (artworkData, _) = try? await URLSession.shared.data(from: remoteArtwork) {
+                let artworkDestination = artworkDirectory
+                    .appendingPathComponent(filename + "-cover")
+                if (try? artworkData.write(to: artworkDestination, options: .atomic)) != nil {
+                    localArtwork = artworkDestination
+                }
+            }
+
             if let index = tracks.firstIndex(where: { $0.id == existing.id }) {
                 tracks[index].mediaURL = destination
+                if let localArtwork {
+                    tracks[index].artworkURL = localArtwork
+                }
             }
             save()
         } catch {

@@ -143,6 +143,7 @@ struct ArtworkView: View {
     let seed: String
 
     @State private var image: UIImage?
+    @State private var failed = false
 
     private var resolvedImage: UIImage? {
         if let image { return image }
@@ -162,7 +163,7 @@ struct ArtworkView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-            } else if url != nil {
+            } else if url != nil, !failed {
                 ProgressView()
                     .tint(.white)
             } else {
@@ -179,20 +180,25 @@ struct ArtworkView: View {
     private func loadImage() async {
         guard let url else {
             image = nil
+            failed = false
             return
         }
 
         if let cached = ArtworkImageCache.shared.image(for: url) {
             image = cached
+            failed = false
             return
         }
 
         image = nil
+        failed = false
 
         if url.isFileURL {
             if let local = UIImage(contentsOfFile: url.path) {
                 ArtworkImageCache.shared.store(local, for: url)
                 image = local
+            } else {
+                failed = true
             }
             return
         }
@@ -200,7 +206,10 @@ struct ArtworkView: View {
         guard let (data, _) = try? await URLSession.shared.data(from: url),
               !Task.isCancelled,
               let remote = UIImage(data: data)
-        else { return }
+        else {
+            if !Task.isCancelled { failed = true }
+            return
+        }
 
         ArtworkImageCache.shared.store(remote, for: url)
         image = remote
