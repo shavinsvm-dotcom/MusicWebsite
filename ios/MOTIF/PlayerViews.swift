@@ -96,23 +96,39 @@ struct MiniPlayer: View {
 
     private var progress: some View {
         GeometryReader { geometry in
+            let width = max(geometry.size.width - 36, 1)
             let fraction = player.duration > 0
                 ? min(max(player.elapsed / player.duration, 0), 1)
                 : 0
+            let headX = min(max(width * fraction, 2.5), max(width - 2.5, 2.5))
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.white.opacity(0.16))
+                    .fill(Color.white.opacity(0.15))
+                    .frame(width: width, height: 3)
+
                 Capsule()
-                    .fill(Color.white.opacity(0.72))
-                    .frame(width: geometry.size.width * fraction)
-                    .animation(.linear(duration: 0.25), value: player.elapsed)
+                    .fill(Color.white.opacity(0.88))
+                    .frame(width: max(width * fraction, 3), height: 3)
+
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 5, height: 5)
+                    .position(x: headX, y: 1.5)
+                    .shadow(color: .black.opacity(0.24), radius: 2, y: 1)
             }
-            .padding(.horizontal, 10)
+            .frame(width: width, height: 3)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .animation(
+                .linear(duration: player.isPlaying ? 0.90 : 0.20),
+                value: fraction
+            )
         }
-        .frame(height: 2)
-        .padding(.bottom, 1)
+        .frame(height: 3)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 4)
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
@@ -125,6 +141,7 @@ struct NowPlayingView: View {
     @State private var scrubValue = 0.0
     @State private var backdropImage: UIImage?
     @State private var contentVisible = false
+    @State private var skipPulse = 0
 
     var body: some View {
         ZStack {
@@ -135,6 +152,7 @@ struct NowPlayingView: View {
                 content(track)
                     .opacity(contentVisible ? 1 : 0)
                     .scaleEffect(contentVisible ? 1 : 0.985, anchor: .top)
+                    .offset(y: contentVisible ? 0 : 10)
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "music.note")
@@ -147,7 +165,7 @@ struct NowPlayingView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            withAnimation(.easeOut(duration: 0.22)) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
                 contentVisible = true
             }
         }
@@ -173,10 +191,8 @@ struct NowPlayingView: View {
                         )
                     }
                 }
-                .frame(
-                    width: geometry.size.width * 1.24,
-                    height: geometry.size.height * 1.24
-                )
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .scaleEffect(1.24)
                 .blur(radius: 46)
                 .saturation(1.45)
                 .opacity(0.96)
@@ -194,9 +210,8 @@ struct NowPlayingView: View {
                 )
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
-            .clipped()
-            .ignoresSafeArea()
         }
+        .ignoresSafeArea()
     }
 
     @MainActor
@@ -353,10 +368,10 @@ struct NowPlayingView: View {
                     }
                 } label: {
                     Image(systemName: "line.3.horizontal")
-                        .font(.system(size: 21, weight: .medium))
+                        .font(.system(size: 19, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .contentShape(Rectangle())
+                        .nativeGlass(Circle())
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("More options")
@@ -428,7 +443,7 @@ struct NowPlayingView: View {
     }
 
     private func controls(_ track: Track) -> some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             circularButton(
                 icon: library.isFavorite(track) ? "heart.fill" : "heart",
                 active: library.isFavorite(track)
@@ -448,29 +463,33 @@ struct NowPlayingView: View {
 
             repeatButton
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
 
             Button {
-                player.previous()
+                skipPulse += 1
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.74)) {
+                    player.previous()
+                }
             } label: {
                 Image(systemName: "backward.end.fill")
-                    .font(.system(size: 25, weight: .medium))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 32, height: 48)
-                    .contentShape(Rectangle())
+                    .frame(width: 42, height: 42)
+                    .symbolEffect(.bounce, options: .speed(1.6), value: skipPulse)
+                    .nativeGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Previous")
 
-                        Button {
+            Button {
                 withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
                     player.toggle()
                 }
             } label: {
                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 28, weight: .bold))
+                    .font(.system(size: 25, weight: .bold))
                     .foregroundStyle(.white)
-                    .frame(width: 78, height: 78)
+                    .frame(width: 68, height: 68)
                     .motifReplace()
                     .motifBounce(player.isPlaying)
                     .nativeGlass(Circle())
@@ -479,13 +498,17 @@ struct NowPlayingView: View {
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
-                player.next()
+                skipPulse += 1
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.74)) {
+                    player.next()
+                }
             } label: {
                 Image(systemName: "forward.end.fill")
-                    .font(.system(size: 25, weight: .medium))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 32, height: 48)
-                    .contentShape(Rectangle())
+                    .frame(width: 42, height: 42)
+                    .symbolEffect(.bounce, options: .speed(1.6), value: skipPulse)
+                    .nativeGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Next")
@@ -499,9 +522,9 @@ struct NowPlayingView: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: 19, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(active ? Color.white : Color.white.opacity(0.62))
-                .frame(width: 48, height: 48)
+                .frame(width: 42, height: 42)
                 .motifReplace()
                 .motifBounce(active)
                 .nativeGlass(Circle())
@@ -517,7 +540,7 @@ struct NowPlayingView: View {
         } label: {
             ZStack(alignment: .bottom) {
                 Image(systemName: "repeat")
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(player.repeatMode == .off ? Color.white.opacity(0.62) : Color.white)
                     .motifBounce(player.repeatMode != .off)
 
@@ -528,7 +551,7 @@ struct NowPlayingView: View {
                         .offset(y: 2)
                 }
             }
-            .frame(width: 48, height: 48)
+            .frame(width: 42, height: 42)
             .nativeGlass(Circle())
         }
         .buttonStyle(MotifPressStyle(scale: 0.88))
