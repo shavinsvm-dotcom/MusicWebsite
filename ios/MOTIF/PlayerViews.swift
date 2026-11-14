@@ -107,7 +107,7 @@ struct MiniPlayer: View {
 
     private var progress: some View {
         GeometryReader { geometry in
-            let width = max(geometry.size.width - 36, 1)
+            let width = max(geometry.size.width, 1)
             let fraction = player.duration > 0
                 ? min(max(player.elapsed / player.duration, 0), 1)
                 : 0
