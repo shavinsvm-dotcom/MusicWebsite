@@ -1,12 +1,11 @@
-import CoreImage
 import SwiftUI
 import UIKit
 
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
-    let transitionSourceID: String
-    let transitionNamespace: Namespace.ID
+    let heroID: String
+    let heroNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
 
@@ -21,12 +20,7 @@ struct MiniPlayer: View {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                                 .frame(width: 24, height: 24)
                                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                                .modifier(
-                                    MiniArtworkTransitionSource(
-                                        sourceID: transitionSourceID,
-                                        namespace: transitionNamespace
-                                    )
-                                )
+                                .matchedGeometryEffect(id: heroID, in: heroNamespace, isSource: true)
 
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(track.title)
@@ -160,10 +154,12 @@ private struct MiniPlayerProgress: View {
 struct NowPlayingView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var library: LibraryStore
-    @Environment(\.dismiss) private var dismiss
+
+    let heroNamespace: Namespace.ID
+    let heroID: String
+    let onClose: () -> Void
 
     @State private var backdropImage: UIImage?
-    @State private var backdropColor = Color(red: 0.043, green: 0.047, blue: 0.063)
     @State private var playPulse = 0
     @State private var skipPulse = 0
 
@@ -193,7 +189,7 @@ struct NowPlayingView: View {
     private func backdrop(_ track: Track) -> some View {
         GeometryReader { geometry in
             ZStack {
-                backdropColor
+                Color.black
 
                 Group {
                     if let image = backdropImage {
@@ -234,13 +230,11 @@ struct NowPlayingView: View {
     private func loadBackdropImage() async {
         guard let url = player.current?.artworkURL else {
             backdropImage = nil
-            backdropColor = Color(red: 0.043, green: 0.047, blue: 0.063)
             return
         }
 
         if let cached = ArtworkImageCache.shared.image(for: url) {
             backdropImage = cached
-            await updateBackdropColor(for: cached)
             return
         }
 
@@ -259,19 +253,6 @@ struct NowPlayingView: View {
         guard !Task.isCancelled, let image else { return }
         ArtworkImageCache.shared.store(image, for: url)
         backdropImage = image
-        await updateBackdropColor(for: image)
-    }
-
-    @MainActor
-    private func updateBackdropColor(for image: UIImage) async {
-        let sampled = await Task.detached(priority: .utility) {
-            image.motifAverageColor
-        }.value
-
-        guard !Task.isCancelled else { return }
-        withAnimation(.easeInOut(duration: 0.35)) {
-            backdropColor = Color(uiColor: sampled)
-        }
     }
 
     private func content(_ track: Track) -> some View {
@@ -318,6 +299,7 @@ struct NowPlayingView: View {
                                 endPoint: .trailing
                             )
                         )
+                        .matchedGeometryEffect(id: heroID, in: heroNamespace)
                         .padding(.top, 4)
 
                     Spacer().frame(height: gap)
@@ -371,7 +353,7 @@ struct NowPlayingView: View {
         ZStack {
             HStack {
                 Button {
-                    dismiss()
+                    onClose()
                 } label: {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 17, weight: .semibold))
@@ -650,75 +632,3 @@ private struct NowPlayingScrubber: View {
     }
 }
 
-private struct MiniArtworkTransitionSource: ViewModifier {
-    let sourceID: String
-    let namespace: Namespace.ID
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.matchedTransitionSource(id: sourceID, in: namespace)
-        } else {
-            content
-        }
-    }
-}
-
-private extension UIImage {
-    var motifAverageColor: UIColor {
-        guard let cgImage else {
-            return UIColor(white: 0.10, alpha: 1)
-        }
-
-        let input = CIImage(cgImage: cgImage)
-        guard let filter = CIFilter(name: "CIAreaAverage") else {
-            return UIColor(white: 0.10, alpha: 1)
-        }
-
-        let extent = input.extent
-        let upperHalf = CGRect(
-            x: extent.minX,
-            y: extent.midY,
-            width: extent.width,
-            height: extent.height * 0.55
-        )
-        filter.setValue(input, forKey: kCIInputImageKey)
-        filter.setValue(CIVector(cgRect: upperHalf), forKey: kCIInputExtentKey)
-
-        guard let output = filter.outputImage else {
-            return UIColor(white: 0.10, alpha: 1)
-        }
-
-        var bitmap = [UInt8](repeating: 0, count: 4)
-        CIContext().render(
-            output,
-            toBitmap: &bitmap,
-            rowBytes: 4,
-            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-            format: .RGBA8,
-            colorSpace: CGColorSpaceCreateDeviceRGB()
-        )
-
-        let sampled = UIColor(
-            red: CGFloat(bitmap[0]) / 255,
-            green: CGFloat(bitmap[1]) / 255,
-            blue: CGFloat(bitmap[2]) / 255,
-            alpha: 1
-        )
-
-        var hue: CGFloat = 0
-        var saturation: CGFloat = 0
-        var brightness: CGFloat = 0
-        var alpha: CGFloat = 0
-        guard sampled.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha) else {
-            return sampled
-        }
-
-        return UIColor(
-            hue: hue,
-            saturation: min(saturation * 1.05, 1),
-            brightness: min(brightness * 1.05 + 0.01, 0.82),
-            alpha: 1
-        )
-    }
-}
