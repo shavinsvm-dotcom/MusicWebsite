@@ -172,11 +172,16 @@ struct NowPlayingView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let backdropImage: UIImage?
 
+    @StateObject private var spatialAudio = SpatialAudioMonitor()
     @State private var playPulse = 0
     @State private var skipPulse = 0
+    @State private var showQueue = false
+    @State private var lyricsTrack: Track?
+    @State private var transitionSettled = false
 
     var body: some View {
         ZStack {
@@ -196,6 +201,24 @@ struct NowPlayingView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .task {
+            if reduceMotion {
+                transitionSettled = true
+                return
+            }
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.28)) {
+                transitionSettled = true
+            }
+        }
+        .sheet(isPresented: $showQueue) {
+            UpNextView()
+                .environmentObject(player)
+        }
+        .sheet(item: $lyricsTrack) { track in
+            LyricsView(track: track)
+        }
     }
 
     private func backdrop(_ track: Track) -> some View {
@@ -309,17 +332,35 @@ struct NowPlayingView: View {
                         .font(.system(size: 14, weight: .regular))
                         .foregroundStyle(.white.opacity(0.52))
                         .padding(.top, 2)
+
+                        if let lyrics = track.lyrics, !lyrics.isEmpty {
+                            Button {
+                                lyricsTrack = track
+                            } label: {
+                                Label("Lyrics", systemImage: "quote.bubble")
+                                    .font(.system(size: 13, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.70))
+                                    .padding(.top, 3)
+                            }
+                            .buttonStyle(MotifPressStyle(scale: 0.94))
+                        }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
+                    .opacity(transitionSettled ? 1 : 0)
+                    .allowsHitTesting(transitionSettled)
 
                     NowPlayingScrubber()
                         .padding(.horizontal, 24)
                         .padding(.top, 10)
+                        .opacity(transitionSettled ? 1 : 0)
+                        .allowsHitTesting(transitionSettled)
 
                     controls(track)
                         .padding(.horizontal, 22)
                         .padding(.top, 12)
+                        .opacity(transitionSettled ? 1 : 0)
+                        .allowsHitTesting(transitionSettled)
 
                     Spacer(minLength: 0)
                 }
@@ -327,6 +368,8 @@ struct NowPlayingView: View {
 
                 topBar(track)
                     .padding(.top, 4)
+                    .opacity(transitionSettled ? 1 : 0)
+                    .allowsHitTesting(transitionSettled)
             }
         }
     }
@@ -384,6 +427,66 @@ struct NowPlayingView: View {
                             .disabled(library.isDownloading(track))
                         }
                     }
+
+                    Section {
+                        Button {
+                            showQueue = true
+                        } label: {
+                            Label("Up Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+                        }
+
+                        Button {
+                            lyricsTrack = track
+                        } label: {
+                            Label("Lyrics", systemImage: "quote.bubble")
+                        }
+                    }
+
+                    Section("Playback") {
+                        Menu {
+                            if player.isSleepTimerActive {
+                                Button {
+                                    player.cancelSleepTimer()
+                                } label: {
+                                    Label("Cancel Sleep Timer", systemImage: "xmark.circle")
+                                }
+                                Divider()
+                            }
+
+                            ForEach([5, 10, 15, 30, 45, 60], id: \.self) { minutes in
+                                Button("\(minutes) minutes") {
+                                    player.setSleepTimer(minutes: minutes)
+                                }
+                            }
+                        } label: {
+                            Label(
+                                player.sleepTimerRemainingText.map { "Sleep Timer · \($0)" } ?? "Sleep Timer",
+                                systemImage: "moon.zzz"
+                            )
+                        }
+
+                        Menu {
+                            ForEach([0, 2, 4, 6, 8, 12], id: \.self) { seconds in
+                                Button {
+                                    player.setCrossfade(Double(seconds))
+                                } label: {
+                                    HStack {
+                                        Text(seconds == 0 ? "Off" : "\(seconds) seconds")
+                                        if abs(player.crossfadeDuration - Double(seconds)) < 0.01 {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        } label: {
+                            Label(
+                                player.crossfadeDuration > 0
+                                    ? "Crossfade · \(Int(player.crossfadeDuration))s"
+                                    : "Crossfade",
+                                systemImage: "arrow.left.arrow.right"
+                            )
+                        }
+                    }
                 } label: {
                     Image(systemName: "line.3.horizontal")
                         .font(.system(size: 19, weight: .medium))
@@ -395,9 +498,22 @@ struct NowPlayingView: View {
                 .accessibilityLabel("More options")
             }
 
-            Text("Now playing")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(0.72))
+            VStack(spacing: 1) {
+                Text("Now playing")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.72))
+
+                if let badge = spatialAudio.badge {
+                    HStack(spacing: 4) {
+                        Image(systemName: "waveform")
+                        Text(badge)
+                    }
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .transition(.opacity)
+                }
+            }
+            .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, 24)
         .frame(height: 44)
@@ -625,5 +741,165 @@ private struct MiniArtworkTransitionSource: ViewModifier {
         } else {
             content
         }
+    }
+}
+
+struct UpNextView: View {
+    @EnvironmentObject private var player: PlayerManager
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let current = player.current {
+                    Section("Now Playing") {
+                        QueueRow(track: current, isCurrent: true)
+                    }
+                }
+
+                Section("Next Up") {
+                    if player.upNextTracks.isEmpty {
+                        Text("Nothing queued. Add songs from any song’s menu.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(Array(player.upNextTracks.enumerated()), id: \.element.id) { index, track in
+                            QueueRow(track: track, isCurrent: false)
+                                .swipeActions {
+                                    Button(role: .destructive) {
+                                        player.removeFromUpNext(at: IndexSet(integer: index))
+                                    } label: {
+                                        Label("Remove", systemImage: "trash")
+                                    }
+                                }
+                        }
+                        .onMove { source, destination in
+                            player.moveUpNext(from: source, to: destination)
+                        }
+                        .onDelete { offsets in
+                            player.removeFromUpNext(at: offsets)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Up Next")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    EditButton()
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
+        .presentationDetents([.medium, .large])
+    }
+}
+
+private struct QueueRow: View {
+    let track: Track
+    let isCurrent: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                Text(track.artist)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if isCurrent {
+                Image(systemName: "waveform")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(track.durationText)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct LyricsView: View {
+    @Environment(\.dismiss) private var dismiss
+    let track: Track
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(spacing: 14) {
+                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(track.title)
+                                .font(.headline)
+                                .lineLimit(2)
+                            Text(track.artist)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    if let lyrics = displayLyrics {
+                        Text(lyrics)
+                            .font(.system(size: 24, weight: .semibold, design: .serif))
+                            .lineSpacing(9)
+                            .foregroundStyle(.primary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        VStack(spacing: 12) {
+                            Image(systemName: "quote.bubble")
+                                .font(.system(size: 30, weight: .light))
+                                .foregroundStyle(.tertiary)
+                            Text("Lyrics aren’t available for this track.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 48)
+                    }
+                }
+                .padding(24)
+            }
+            .navigationTitle("Lyrics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDragIndicator(.visible)
+        .presentationDetents([.medium, .large])
+    }
+
+    private var displayLyrics: String? {
+        guard let lyrics = track.lyrics else { return nil }
+        let stripped = lyrics.replacingOccurrences(
+            of: "\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,2})?\\]",
+            with: "",
+            options: .regularExpression
+        )
+        let trimmed = stripped.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

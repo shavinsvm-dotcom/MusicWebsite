@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreImage
 import SwiftUI
 import UIKit
@@ -369,6 +370,76 @@ final class PlaybackBackdropCache {
     }
 }
 
+@MainActor
+final class SpatialAudioMonitor: ObservableObject {
+    @Published private(set) var badge: String?
+
+    private var observers: [NSObjectProtocol] = []
+
+    init() {
+        refresh()
+
+        let center = NotificationCenter.default
+        observers.append(center.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        })
+
+        if #available(iOS 15.0, *) {
+            observers.append(center.addObserver(
+                forName: AVAudioSession.spatialPlaybackCapabilitiesChangedNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            })
+        }
+
+        if #available(iOS 18.0, *) {
+            observers.append(center.addObserver(
+                forName: AVAudioSession.renderingModeChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.refresh() }
+            })
+        }
+    }
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    func refresh() {
+        let session = AVAudioSession.sharedInstance()
+        var next: String?
+
+        if #available(iOS 18.0, *) {
+            switch session.renderingMode {
+            case .dolbyAtmos:
+                next = "Dolby Atmos"
+            case .dolbyAudio:
+                next = "Dolby Audio"
+            case .spatialAudio:
+                next = "Spatial Audio"
+            default:
+                break
+            }
+        }
+
+        if next == nil, #available(iOS 15.0, *) {
+            if session.currentRoute.outputs.contains(where: { $0.isSpatialAudioEnabled }) {
+                next = "Spatial Audio"
+            }
+        }
+
+        badge = next
+    }
+}
+
 struct SectionTitle: View {
     let title: String
 
@@ -461,6 +532,18 @@ struct TrackRow: View {
                     player.play(track, queue: queue ?? [track])
                 } label: {
                     Label("Play", systemImage: "play.fill")
+                }
+
+                Button {
+                    player.playNext(track)
+                } label: {
+                    Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+                }
+
+                Button {
+                    player.addToQueue(track)
+                } label: {
+                    Label("Add to Queue", systemImage: "text.badge.plus")
                 }
 
                 Button {

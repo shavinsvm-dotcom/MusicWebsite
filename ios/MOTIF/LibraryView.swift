@@ -14,7 +14,6 @@ struct LibraryView: View {
 
     @State private var showImporter = false
     @State private var showNewPlaylist = false
-    @State private var newPlaylistName = ""
     @State private var importError: String?
     @State private var filter: LibraryFilter = .all
 
@@ -69,7 +68,6 @@ struct LibraryView: View {
                         }
 
                         Button {
-                            newPlaylistName = ""
                             showNewPlaylist = true
                         } label: {
                             Label("New playlist", systemImage: "text.badge.plus")
@@ -99,15 +97,8 @@ struct LibraryView: View {
                     importError = error.localizedDescription
                 }
             }
-            .alert("New playlist", isPresented: $showNewPlaylist) {
-                TextField("Playlist name", text: $newPlaylistName)
-                Button("Create") {
-                    _ = library.createPlaylist(named: newPlaylistName)
-                    newPlaylistName = ""
-                }
-                Button("Cancel", role: .cancel) {
-                    newPlaylistName = ""
-                }
+            .sheet(isPresented: $showNewPlaylist) {
+                PlaylistEditorView()
             }
             .alert(
                 "Couldn’t add music",
@@ -331,7 +322,6 @@ struct LibraryView: View {
                 SectionTitle(title: "Playlists")
                 Spacer()
                 Button {
-                    newPlaylistName = ""
                     showNewPlaylist = true
                 } label: {
                     Image(systemName: "plus")

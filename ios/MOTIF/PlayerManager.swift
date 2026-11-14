@@ -23,28 +23,42 @@ final class PlayerManager: ObservableObject {
     @Published private(set) var duration: Double = 0
     @Published private(set) var isShuffled = false
     @Published private(set) var repeatMode: RepeatMode = .off
+    @Published private(set) var crossfadeDuration: TimeInterval = UserDefaults.standard.double(forKey: "motif.crossfadeDuration")
+    @Published private(set) var sleepTimerEnd: Date?
+
+    var onTrackStarted: ((Track) -> Void)?
 
     let progress = PlaybackProgress()
 
     var elapsed: Double { progress.elapsed }
 
-    var upNext: Track? {
-        guard !isShuffled, repeatMode != .one,
-              let current,
-              let index = queue.firstIndex(where: { $0.id == current.id })
-        else { return nil }
+    var upNext: Track? { upNextTracks.first }
 
-        if index + 1 < queue.count {
-            return queue[index + 1]
-        }
-        return repeatMode == .all ? queue.first : nil
+    var upNextTracks: [Track] {
+        guard let current,
+              let index = queue.firstIndex(where: { $0.id == current.id })
+        else { return [] }
+        return Array(queue.dropFirst(index + 1))
+    }
+
+    var isSleepTimerActive: Bool { sleepTimerEnd != nil }
+
+    var sleepTimerRemainingText: String? {
+        guard let sleepTimerEnd else { return nil }
+        let remaining = max(0, sleepTimerEnd.timeIntervalSinceNow)
+        let minutes = max(1, Int(ceil(remaining / 60)))
+        return "\(minutes) min"
     }
 
     private let player = AVPlayer()
+    private let fadePlayer = AVPlayer()
     private var currentIndex = 0
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var infoTick = 0
+    private var crossfadeTask: Task<Void, Never>?
+    private var isCrossfading = false
+    private var sleepTask: Task<Void, Never>?
 
     init() {
         configureAudioSession()
@@ -68,6 +82,75 @@ final class PlayerManager: ObservableObject {
         load(track)
     }
 
+    func playNext(_ track: Track) {
+        if current == nil {
+            play(track)
+            return
+        }
+        guard let currentIndex = queue.firstIndex(where: { $0.id == current?.id }) else {
+            queue.insert(track, at: 0)
+            return
+        }
+        queue.removeAll { $0.id == track.id }
+        let insertIndex = min(currentIndex + 1, queue.count)
+        queue.insert(track, at: insertIndex)
+    }
+
+    func addToQueue(_ track: Track) {
+        if current == nil {
+            play(track)
+            return
+        }
+        guard !queue.contains(where: { $0.id == track.id }) else { return }
+        queue.append(track)
+    }
+
+    func removeFromUpNext(at offsets: IndexSet) {
+        let upcoming = upNextTracks
+        let ids = Set(offsets.compactMap { upcoming.indices.contains($0) ? upcoming[$0].id : nil })
+        queue.removeAll { ids.contains($0.id) && $0.id != current?.id }
+    }
+
+    func moveUpNext(from source: IndexSet, to destination: Int) {
+        guard let current,
+              let currentIndex = queue.firstIndex(where: { $0.id == current.id }),
+              currentIndex + 1 < queue.count
+        else { return }
+        var upcoming = Array(queue.dropFirst(currentIndex + 1))
+        upcoming.move(fromOffsets: source, toOffset: destination)
+        queue = Array(queue.prefix(currentIndex + 1)) + upcoming
+    }
+
+    func setCrossfade(_ seconds: TimeInterval) {
+        let clamped = max(0, min(seconds, 12))
+        crossfadeDuration = clamped
+        UserDefaults.standard.set(clamped, forKey: "motif.crossfadeDuration")
+        if clamped == 0 { cancelCrossfade() }
+    }
+
+    func setSleepTimer(minutes: Int) {
+        sleepTask?.cancel()
+        guard minutes > 0 else {
+            sleepTimerEnd = nil
+            sleepTask = nil
+            return
+        }
+        sleepTimerEnd = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        sleepTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(minutes) * 60 * 1_000_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.pause()
+            self.sleepTimerEnd = nil
+            self.sleepTask = nil
+        }
+    }
+
+    func cancelSleepTimer() {
+        sleepTask?.cancel()
+        sleepTask = nil
+        sleepTimerEnd = nil
+    }
+
     func toggle() {
         if isPlaying {
             pause()
@@ -88,6 +171,7 @@ final class PlayerManager: ObservableObject {
     }
 
     func pause() {
+        cancelCrossfade()
         player.pause()
         isPlaying = false
         updateNowPlaying()
@@ -122,6 +206,7 @@ final class PlayerManager: ObservableObject {
 
     func seek(to seconds: Double) {
         guard duration > 0 || seconds == 0 else { return }
+        cancelCrossfade()
         let clamped = max(0, min(seconds, duration > 0 ? duration : seconds))
         player.seek(
             to: CMTime(seconds: clamped, preferredTimescale: 600),
@@ -133,6 +218,7 @@ final class PlayerManager: ObservableObject {
     }
 
     private func load(_ track: Track) {
+        cancelCrossfade()
         current = track
         progress.elapsed = 0
         duration = max(track.duration, 0)
@@ -145,21 +231,17 @@ final class PlayerManager: ObservableObject {
 
         let item = AVPlayerItem(url: track.mediaURL)
         player.replaceCurrentItem(with: item)
-        endObserver = NotificationCenter.default.addObserver(
-            forName: .AVPlayerItemDidPlayToEndTime,
-            object: item,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.handleTrackEnded() }
-        }
+        installEndObserver(for: item)
 
         try? AVAudioSession.sharedInstance().setActive(true)
         player.play()
         isPlaying = true
+        onTrackStarted?(track)
         updateNowPlaying()
     }
 
     private func handleTrackEnded() {
+        if isCrossfading { return }
         if repeatMode == .one {
             seek(to: 0)
             resume()
@@ -170,6 +252,7 @@ final class PlayerManager: ObservableObject {
 
     private func advance(by offset: Int) {
         guard !queue.isEmpty else { return }
+        cancelCrossfade()
 
         if isShuffled, queue.count > 1, offset > 0 {
             let choices = queue.indices.filter { $0 != currentIndex }
@@ -227,8 +310,126 @@ final class PlayerManager: ObservableObject {
 
                 self.infoTick += 1
                 if self.infoTick % 20 == 0 { self.updateNowPlaying() }
+                self.maybeBeginCrossfade()
             }
         }
+    }
+
+    private func installEndObserver(for item: AVPlayerItem) {
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.handleTrackEnded() }
+        }
+    }
+
+    private func maybeBeginCrossfade() {
+        guard crossfadeDuration > 0,
+              isPlaying,
+              !isCrossfading,
+              repeatMode != .one,
+              duration > 0,
+              let nextIndex = upcomingIndex()
+        else { return }
+
+        let remaining = duration - elapsed
+        guard remaining > 0, remaining <= crossfadeDuration else { return }
+        beginCrossfade(to: nextIndex)
+    }
+
+    private func upcomingIndex() -> Int? {
+        guard !queue.isEmpty else { return nil }
+
+        if isShuffled, queue.count > 1 {
+            return queue.indices.filter { $0 != currentIndex }.randomElement()
+        }
+
+        let next = currentIndex + 1
+        if next < queue.count { return next }
+        if repeatMode == .all { return 0 }
+        return nil
+    }
+
+    private func beginCrossfade(to nextIndex: Int) {
+        guard nextIndex >= 0, nextIndex < queue.count else { return }
+        let next = queue[nextIndex]
+        guard next.id != current?.id else { return }
+
+        isCrossfading = true
+        let item = AVPlayerItem(url: next.mediaURL)
+        fadePlayer.replaceCurrentItem(with: item)
+        fadePlayer.volume = 0
+        fadePlayer.play()
+
+        let total = max(crossfadeDuration, 0.5)
+        let steps = max(Int(total * 12), 1)
+        let stepSeconds = total / Double(steps)
+
+        crossfadeTask = Task { [weak self] in
+            for step in 1...steps {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(stepSeconds * 1_000_000_000)
+                )
+                guard !Task.isCancelled, let self else { return }
+                let progress = Float(step) / Float(steps)
+                self.player.volume = 1 - progress
+                self.fadePlayer.volume = progress
+            }
+
+            guard !Task.isCancelled, let self else { return }
+            self.finishCrossfade(to: nextIndex)
+        }
+    }
+
+    private func finishCrossfade(to nextIndex: Int) {
+        guard nextIndex >= 0, nextIndex < queue.count else {
+            cancelCrossfade()
+            return
+        }
+        let next = queue[nextIndex]
+        guard let item = fadePlayer.currentItem else {
+            cancelCrossfade()
+            return
+        }
+
+        let time = fadePlayer.currentTime()
+        fadePlayer.pause()
+        fadePlayer.replaceCurrentItem(with: nil)
+
+        player.pause()
+        player.replaceCurrentItem(with: item)
+        player.volume = 1
+        installEndObserver(for: item)
+        if time.isValid {
+            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+        }
+
+        currentIndex = nextIndex
+        current = next
+        duration = max(next.duration, 0)
+        progress.elapsed = time.isValid ? max(0, CMTimeGetSeconds(time)) : 0
+        isCrossfading = false
+        isPlaying = true
+        crossfadeTask = nil
+        try? AVAudioSession.sharedInstance().setActive(true)
+        player.play()
+        onTrackStarted?(next)
+        updateNowPlaying()
+    }
+
+    private func cancelCrossfade() {
+        crossfadeTask?.cancel()
+        crossfadeTask = nil
+        isCrossfading = false
+        fadePlayer.pause()
+        fadePlayer.replaceCurrentItem(with: nil)
+        player.volume = 1
     }
 
     private func configureAudioSession() {

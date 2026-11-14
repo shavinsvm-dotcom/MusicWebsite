@@ -1,71 +1,105 @@
+import PhotosUI
 import SwiftUI
 import UIKit
+
+private enum PlaylistsLayout: String {
+    case grid
+    case list
+}
+
+private enum PlaylistSort: String, CaseIterable, Identifiable {
+    case recent
+    case name
+    case manual
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .recent: return "Recently Added"
+        case .name: return "Name"
+        case .manual: return "Manual"
+        }
+    }
+}
 
 struct PlaylistsView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
 
-    @State private var showNewPlaylist = false
-    @State private var newPlaylistName = ""
+    @State private var showCreatePlaylist = false
+    @State private var layout: PlaylistsLayout = .grid
+    @State private var sort: PlaylistSort = .recent
 
-    private let columns = [
+    private let gridColumns = [
         GridItem(.flexible(), spacing: 18),
         GridItem(.flexible(), spacing: 18)
     ]
 
+    private var sortedPlaylists: [Playlist] {
+        switch sort {
+        case .recent:
+            return library.playlists.sorted { $0.createdAt > $1.createdAt }
+        case .name:
+            return library.playlists.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        case .manual:
+            return library.playlists
+        }
+    }
+
+    private var recentTracks: [Track] {
+        Array(library.recentTracks.prefix(10))
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                if library.playlists.isEmpty {
-                    emptyState
-                        .padding(.horizontal, 24)
-                        .padding(.top, 72)
-                } else {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
-                        ForEach(library.playlists) { playlist in
-                            let tracks = library.tracks(in: playlist)
+                VStack(alignment: .leading, spacing: 26) {
+                    if !recentTracks.isEmpty {
+                        recentlyPlayed
+                    }
 
-                            NavigationLink {
-                                PlaylistDetailView(
-                                    playlistID: playlist.id,
-                                    showNowPlaying: $showNowPlaying
-                                )
-                            } label: {
-                                PlaylistTile(playlist: playlist, tracks: tracks)
-                            }
-                            .buttonStyle(MotifPressStyle(scale: 0.975, opacity: 0.92))
-                            .contextMenu {
-                                Button {
-                                    play(playlist)
-                                } label: {
-                                    Label("Play", systemImage: "play.fill")
-                                }
+                    if library.playlists.isEmpty {
+                        emptyState
+                            .padding(.top, 54)
+                    } else {
+                        sectionHeader
 
-                                if tracks.contains(where: { $0.isCloud && !library.isDownloaded($0) }) {
-                                    Button {
-                                        Task {
-                                            await library.downloadAll(
-                                                tracks.filter { $0.isCloud && !library.isDownloaded($0) }
-                                            )
-                                        }
-                                    } label: {
-                                        Label("Download playlist", systemImage: "arrow.down.circle")
+                        if layout == .grid {
+                            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 24) {
+                                ForEach(sortedPlaylists) { playlist in
+                                    playlistLink(playlist) {
+                                        PlaylistTile(
+                                            playlist: playlist,
+                                            tracks: library.tracks(in: playlist)
+                                        )
                                     }
                                 }
+                            }
+                        } else {
+                            LazyVStack(spacing: 0) {
+                                ForEach(sortedPlaylists) { playlist in
+                                    playlistLink(playlist) {
+                                        PlaylistListRow(
+                                            playlist: playlist,
+                                            tracks: library.tracks(in: playlist)
+                                        )
+                                    }
 
-                                Button(role: .destructive) {
-                                    library.deletePlaylist(playlist)
-                                } label: {
-                                    Label("Delete playlist", systemImage: "trash")
+                                    if playlist.id != sortedPlaylists.last?.id {
+                                        Divider().opacity(0.35)
+                                    }
                                 }
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 6)
-                    .padding(.bottom, 120)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
+                .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
             .background(AppBackground())
@@ -74,24 +108,101 @@ struct PlaylistsView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        beginNewPlaylist()
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.body.weight(.semibold))
+                    HStack(spacing: 14) {
+                        Menu {
+                            Section("View") {
+                                Button {
+                                    layout = .grid
+                                } label: {
+                                    Label("Grid", systemImage: layout == .grid ? "checkmark" : "square.grid.2x2")
+                                }
+                                Button {
+                                    layout = .list
+                                } label: {
+                                    Label("List", systemImage: layout == .list ? "checkmark" : "list.bullet")
+                                }
+                            }
+
+                            Section("Sort") {
+                                ForEach(PlaylistSort.allCases) { option in
+                                    Button {
+                                        sort = option
+                                    } label: {
+                                        Label(
+                                            option.title,
+                                            systemImage: sort == option ? "checkmark" : "arrow.up.arrow.down"
+                                        )
+                                    }
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.body.weight(.semibold))
+                        }
+                        .accessibilityLabel("Playlist options")
+
+                        Button {
+                            showCreatePlaylist = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .font(.body.weight(.semibold))
+                        }
+                        .accessibilityLabel("New playlist")
                     }
-                    .accessibilityLabel("New playlist")
                 }
             }
-            .alert("New playlist", isPresented: $showNewPlaylist) {
-                TextField("Playlist name", text: $newPlaylistName)
-                Button("Create") {
-                    _ = library.createPlaylist(named: newPlaylistName)
-                    newPlaylistName = ""
+            .sheet(isPresented: $showCreatePlaylist) {
+                PlaylistEditorView()
+            }
+        }
+    }
+
+    private var sectionHeader: some View {
+        HStack(alignment: .firstTextBaseline) {
+            SectionTitle(title: "Your Playlists")
+            Spacer()
+            Text("\(library.playlists.count)")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var recentlyPlayed: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionTitle(title: "Recently Played")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(alignment: .top, spacing: 14) {
+                    ForEach(recentTracks) { track in
+                        Button {
+                            player.play(track, queue: recentTracks)
+                            showNowPlaying = true
+                        } label: {
+                            VStack(alignment: .leading, spacing: 7) {
+                                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                                    .frame(width: 128, height: 128)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                                    }
+
+                                Text(track.title)
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+
+                                Text(track.artist)
+                                    .font(.system(size: 11, weight: .regular))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(width: 128, alignment: .leading)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.975, opacity: 0.9))
+                    }
                 }
-                Button("Cancel", role: .cancel) {
-                    newPlaylistName = ""
-                }
+                .padding(.horizontal, 2)
             }
         }
     }
@@ -113,7 +224,7 @@ struct PlaylistsView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Button {
-                beginNewPlaylist()
+                showCreatePlaylist = true
             } label: {
                 Label("New playlist", systemImage: "plus")
                     .font(.subheadline.weight(.semibold))
@@ -128,9 +239,46 @@ struct PlaylistsView: View {
         .frame(maxWidth: .infinity)
     }
 
-    private func beginNewPlaylist() {
-        newPlaylistName = ""
-        showNewPlaylist = true
+    @ViewBuilder
+    private func playlistLink<Label: View>(
+        _ playlist: Playlist,
+        @ViewBuilder label: () -> Label
+    ) -> some View {
+        NavigationLink {
+            PlaylistDetailView(
+                playlistID: playlist.id,
+                showNowPlaying: $showNowPlaying
+            )
+        } label: {
+            label()
+        }
+        .buttonStyle(MotifPressStyle(scale: 0.975, opacity: 0.92))
+        .contextMenu {
+            Button {
+                play(playlist)
+            } label: {
+                Label("Play", systemImage: "play.fill")
+            }
+
+            let tracks = library.tracks(in: playlist)
+            if tracks.contains(where: { $0.isCloud && !library.isDownloaded($0) }) {
+                Button {
+                    Task {
+                        await library.downloadAll(
+                            tracks.filter { $0.isCloud && !library.isDownloaded($0) }
+                        )
+                    }
+                } label: {
+                    Label("Download playlist", systemImage: "arrow.down.circle")
+                }
+            }
+
+            Button(role: .destructive) {
+                library.deletePlaylist(playlist)
+            } label: {
+                Label("Delete playlist", systemImage: "trash")
+            }
+        }
     }
 
     private func play(_ playlist: Playlist) {
@@ -147,7 +295,7 @@ struct PlaylistTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            PlaylistMosaic(tracks: tracks)
+            PlaylistArtwork(playlist: playlist, tracks: tracks)
                 .aspectRatio(1, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .overlay {
@@ -172,6 +320,66 @@ struct PlaylistTile: View {
     private var trackCountText: String {
         let count = tracks.count
         return count == 1 ? "1 track" : "\(count) tracks"
+    }
+}
+
+private struct PlaylistListRow: View {
+    let playlist: Playlist
+    let tracks: [Track]
+
+    var body: some View {
+        HStack(spacing: 12) {
+            PlaylistArtwork(playlist: playlist, tracks: tracks)
+                .frame(width: 62, height: 62)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(playlist.name)
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+
+                if playlist.description.isEmpty {
+                    Text(trackText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(playlist.description)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Text("\(tracks.count)")
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.tertiary)
+
+            Image(systemName: "chevron.right")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 9)
+        .contentShape(Rectangle())
+    }
+
+    private var trackText: String {
+        tracks.count == 1 ? "1 track" : "\(tracks.count) tracks"
+    }
+}
+
+struct PlaylistArtwork: View {
+    let playlist: Playlist
+    let tracks: [Track]
+
+    var body: some View {
+        if let cover = playlist.customCoverURL {
+            ArtworkView(url: cover, seed: playlist.name)
+        } else {
+            PlaylistMosaic(tracks: tracks)
+        }
     }
 }
 
@@ -254,6 +462,9 @@ struct PlaylistDetailView: View {
     let playlistID: UUID
     @Binding var showNowPlaying: Bool
 
+    @State private var showEditDetails = false
+    @State private var showEditTracks = false
+
     private var playlist: Playlist? {
         library.playlists.first(where: { $0.id == playlistID })
     }
@@ -273,25 +484,40 @@ struct PlaylistDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(spacing: 0) {
                 header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
+                    .padding(.bottom, 26)
+                    .frame(maxWidth: .infinity)
+                    .background(alignment: .top) {
+                        headerAmbience
+                    }
 
                 if tracks.isEmpty {
                     emptyState
+                        .padding(.horizontal, 20)
                 } else {
                     LazyVStack(spacing: 0) {
-                        ForEach(tracks) { track in
-                            TrackRow(track: track, queue: tracks)
+                        ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
+                            PlaylistTrackRow(
+                                index: index,
+                                track: track,
+                                queue: tracks,
+                                playlistID: playlistID,
+                                showNowPlaying: $showNowPlaying
+                            )
+
                             if track.id != tracks.last?.id {
-                                Divider().opacity(0.35)
+                                Divider().opacity(0.32)
                             }
                         }
                     }
+                    .padding(.horizontal, 20)
                 }
+
+                Spacer(minLength: 120)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 4)
-            .padding(.bottom, 120)
         }
         .scrollIndicators(.hidden)
         .background(AppBackground())
@@ -302,22 +528,27 @@ struct PlaylistDetailView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
-                        play(shuffled: true)
+                        showEditDetails = true
                     } label: {
-                        Label("Shuffle", systemImage: "shuffle")
+                        Label("Edit details", systemImage: "pencil")
                     }
-                    .disabled(tracks.isEmpty)
 
-                    if tracks.contains(where: { $0.isCloud }) {
+                    Button {
+                        showEditTracks = true
+                    } label: {
+                        Label("Edit tracks", systemImage: "arrow.up.arrow.down")
+                    }
+
+                    if let playlist {
                         Button {
-                            Task { await library.downloadAll(downloadable) }
+                            library.duplicatePlaylist(playlist)
                         } label: {
-                            Label(
-                                downloadable.isEmpty ? "Downloaded" : "Download playlist",
-                                systemImage: downloadable.isEmpty ? "checkmark.circle" : "arrow.down.circle"
-                            )
+                            Label("Duplicate", systemImage: "plus.square.on.square")
                         }
-                        .disabled(downloadable.isEmpty || isDownloading)
+
+                        ShareLink(item: "\(playlist.name) — a playlist on MOTIF") {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
                     }
 
                     Divider()
@@ -335,40 +566,56 @@ struct PlaylistDetailView: View {
                 }
             }
         }
+        .sheet(isPresented: $showEditDetails) {
+            if let playlist {
+                PlaylistEditorView(playlist: playlist)
+            }
+        }
+        .sheet(isPresented: $showEditTracks) {
+            PlaylistTracksEditor(playlistID: playlistID)
+        }
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .bottom, spacing: 16) {
-                PlaylistMosaic(tracks: tracks)
-                    .frame(width: 126, height: 126)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
-                    }
-                    .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("PLAYLIST")
-                        .font(.system(size: 10, weight: .semibold))
-                        .tracking(1.2)
-                        .foregroundStyle(.secondary)
-
-                    Text(playlist?.name ?? "Playlist")
-                        .font(.system(size: 27, weight: .bold))
-                        .tracking(-0.8)
-                        .foregroundStyle(.primary)
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.8)
-
-                    Text(subtitle)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+        VStack(spacing: 14) {
+            PlaylistArtwork(playlist: playlist ?? Playlist(name: "Playlist"), tracks: tracks)
+                .frame(width: 222, height: 222)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
                 }
-                .padding(.bottom, 2)
+                .shadow(color: .black.opacity(0.28), radius: 24, y: 12)
+
+            VStack(spacing: 6) {
+                Text("PLAYLIST")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.3)
+                    .foregroundStyle(.secondary)
+
+                Text(playlist?.name ?? "Playlist")
+                    .font(.system(size: 33, weight: .bold))
+                    .tracking(-1.1)
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+
+                if let description = playlist?.description, !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 1)
+                }
+
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.tertiary)
+                    .padding(.top, 1)
             }
+            .padding(.horizontal, 16)
 
             if !tracks.isEmpty {
                 HStack(spacing: 10) {
@@ -377,8 +624,8 @@ struct PlaylistDetailView: View {
                     } label: {
                         Label("Play", systemImage: "play.fill")
                             .font(.system(size: 14, weight: .semibold))
-                            .padding(.horizontal, 20)
-                            .frame(height: 40)
+                            .padding(.horizontal, 22)
+                            .frame(height: 42)
                             .background(Color.primary, in: Capsule())
                             .foregroundStyle(Color(uiColor: .systemBackground))
                     }
@@ -390,14 +637,12 @@ struct PlaylistDetailView: View {
                         Image(systemName: "shuffle")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(.primary)
-                            .frame(width: 40, height: 40)
+                            .frame(width: 42, height: 42)
                             .contentShape(Circle())
                             .nativeGlass(Circle(), interactive: true)
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.9))
                     .accessibilityLabel("Shuffle playlist")
-
-                    Spacer(minLength: 4)
 
                     if tracks.contains(where: { $0.isCloud }) {
                         Button {
@@ -414,7 +659,7 @@ struct PlaylistDetailView: View {
                                         .foregroundStyle(.primary)
                                 }
                             }
-                            .frame(width: 40, height: 40)
+                            .frame(width: 42, height: 42)
                             .contentShape(Circle())
                             .nativeGlass(Circle(), interactive: true)
                         }
@@ -425,6 +670,31 @@ struct PlaylistDetailView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var headerAmbience: some View {
+        GeometryReader { geometry in
+            ZStack {
+                PlaylistArtwork(playlist: playlist ?? Playlist(name: "Playlist"), tracks: tracks)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .opacity(0.52)
+
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.52), location: 0),
+                        .init(color: .black.opacity(0.38), location: 0.45),
+                        .init(color: Color(uiColor: .systemBackground).opacity(0.92), location: 0.82),
+                        .init(color: Color(uiColor: .systemBackground), location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+        }
+        .frame(height: 500)
+        .allowsHitTesting(false)
     }
 
     private var emptyState: some View {
@@ -467,5 +737,316 @@ struct PlaylistDetailView: View {
         }
         player.play(first, queue: tracks)
         showNowPlaying = true
+    }
+}
+
+private struct PlaylistTrackRow: View {
+    @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var player: PlayerManager
+
+    let index: Int
+    let track: Track
+    let queue: [Track]
+    let playlistID: UUID
+    @Binding var showNowPlaying: Bool
+
+    private var isCurrent: Bool {
+        player.current?.id == track.id
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Group {
+                if isCurrent {
+                    Image(systemName: "waveform")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                } else {
+                    Text("\(index + 1)")
+                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .frame(width: 20)
+
+            Button {
+                player.play(track, queue: queue)
+                showNowPlaying = true
+            } label: {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(track.title)
+                            .font(.system(size: 15, weight: isCurrent ? .semibold : .medium))
+                            .foregroundStyle(isCurrent ? .primary : .primary)
+                            .lineLimit(1)
+
+                        Text(track.artist)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 6)
+
+                    Text(track.durationText)
+                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MotifPressStyle(scale: 0.985, opacity: 0.9))
+
+            Menu {
+                Button {
+                    player.play(track, queue: queue)
+                    showNowPlaying = true
+                } label: {
+                    Label("Play", systemImage: "play.fill")
+                }
+
+                Button {
+                    player.playNext(track)
+                } label: {
+                    Label("Play Next", systemImage: "text.line.first.and.arrowtriangle.forward")
+                }
+
+                Button {
+                    player.addToQueue(track)
+                } label: {
+                    Label("Add to Queue", systemImage: "text.badge.plus")
+                }
+
+                Button {
+                    library.toggleFavorite(track)
+                } label: {
+                    Label(
+                        library.isFavorite(track) ? "Remove favorite" : "Favorite",
+                        systemImage: library.isFavorite(track) ? "heart.slash" : "heart"
+                    )
+                }
+
+                if track.isCloud {
+                    if library.isDownloaded(track) {
+                        Button(role: .destructive) {
+                            library.removeDownload(track)
+                        } label: {
+                            Label("Remove download", systemImage: "icloud.slash")
+                        }
+                    } else {
+                        Button {
+                            Task { await library.download(track) }
+                        } label: {
+                            Label("Download for offline", systemImage: "arrow.down.circle")
+                        }
+                        .disabled(library.isDownloading(track))
+                    }
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    library.remove(track, from: playlistID)
+                } label: {
+                    Label("Remove from playlist", systemImage: "minus.circle")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 30, height: 38)
+                    .contentShape(Rectangle())
+            }
+        }
+        .padding(.vertical, 7)
+    }
+}
+
+struct PlaylistTracksEditor: View {
+    @EnvironmentObject private var library: LibraryStore
+    @Environment(\.dismiss) private var dismiss
+
+    let playlistID: UUID
+
+    private var playlist: Playlist? {
+        library.playlists.first(where: { $0.id == playlistID })
+    }
+
+    private var tracks: [Track] {
+        guard let playlist else { return [] }
+        return library.tracks(in: playlist)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if tracks.isEmpty {
+                    Text("This playlist is empty.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(tracks) { track in
+                        HStack(spacing: 12) {
+                            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                                .frame(width: 42, height: 42)
+                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(track.title)
+                                    .font(.subheadline.weight(.medium))
+                                    .lineLimit(1)
+                                Text(track.artist)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    .onMove { source, destination in
+                        library.moveTracks(in: playlistID, from: source, to: destination)
+                    }
+                    .onDelete { offsets in
+                        for index in offsets where tracks.indices.contains(index) {
+                            library.remove(tracks[index], from: playlistID)
+                        }
+                    }
+                }
+            }
+            .environment(\.editMode, .constant(.active))
+            .navigationTitle("Edit Tracks")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+struct PlaylistEditorView: View {
+    @EnvironmentObject private var library: LibraryStore
+    @Environment(\.dismiss) private var dismiss
+
+    let playlist: Playlist?
+
+    @State private var name: String
+    @State private var descriptionText: String
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var coverData: Data?
+    @State private var removeCover = false
+
+    init(playlist: Playlist? = nil) {
+        self.playlist = playlist
+        _name = State(initialValue: playlist?.name ?? "")
+        _descriptionText = State(initialValue: playlist?.description ?? "")
+    }
+
+    private var tracks: [Track] {
+        guard let playlist else { return [] }
+        return library.tracks(in: playlist)
+    }
+
+    private var previewPlaylist: Playlist {
+        playlist ?? Playlist(name: name.isEmpty ? "Playlist" : name)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    HStack {
+                        Spacer()
+                        coverPreview
+                            .frame(width: 138, height: 138)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                            }
+                            .overlay(alignment: .bottomTrailing) {
+                                PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                        .frame(width: 34, height: 34)
+                                        .nativeGlass(Circle(), interactive: true)
+                                }
+                                .offset(x: 6, y: 6)
+                            }
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                    .padding(.vertical, 8)
+
+                    if playlist?.customCoverURL != nil || coverData != nil {
+                        Button("Remove Cover", role: .destructive) {
+                            coverData = nil
+                            selectedPhoto = nil
+                            removeCover = true
+                        }
+                    }
+                }
+
+                Section("Details") {
+                    TextField("Name", text: $name)
+                        .textInputAutocapitalization(.words)
+
+                    TextField("Description", text: $descriptionText, axis: .vertical)
+                        .lineLimit(2...5)
+                }
+            }
+            .navigationTitle(playlist == nil ? "New Playlist" : "Edit Playlist")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Save") { save() }
+                        .fontWeight(.semibold)
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .task(id: selectedPhoto) {
+                guard let selectedPhoto,
+                      let data = try? await selectedPhoto.loadTransferable(type: Data.self)
+                else { return }
+                coverData = data
+                removeCover = false
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    @ViewBuilder
+    private var coverPreview: some View {
+        if let coverData, let image = UIImage(data: coverData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+        } else if !removeCover, let cover = playlist?.customCoverURL {
+            ArtworkView(url: cover, seed: previewPlaylist.name)
+        } else {
+            PlaylistMosaic(tracks: tracks)
+        }
+    }
+
+    private func save() {
+        if let playlist {
+            library.updatePlaylistDetails(
+                playlist.id,
+                name: name,
+                description: descriptionText,
+                coverData: coverData,
+                removeCover: removeCover
+            )
+        } else {
+            _ = library.createPlaylist(
+                named: name,
+                description: descriptionText,
+                coverData: coverData
+            )
+        }
+        dismiss()
     }
 }

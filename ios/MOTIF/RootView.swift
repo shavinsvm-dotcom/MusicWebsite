@@ -54,6 +54,9 @@ struct RootView: View {
                     )
             }
             .task {
+                player.onTrackStarted = { track in
+                    library.recordPlay(track)
+                }
                 await library.refreshLocalMetadata()
                 await library.refreshCloud()
             }

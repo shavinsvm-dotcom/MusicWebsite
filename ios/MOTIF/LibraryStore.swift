@@ -8,6 +8,7 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var tracks: [Track] = []
     @Published private(set) var favoriteIDs: Set<UUID> = []
     @Published private(set) var playlists: [Playlist] = []
+    @Published private(set) var recentTrackIDs: [UUID] = []
     @Published private(set) var isRefreshingCloud = false
     @Published private(set) var downloadingIDs: Set<UUID> = []
     @Published private(set) var cloudMessage: String?
@@ -35,6 +36,20 @@ final class LibraryStore: ObservableObject {
 
     var favorites: [Track] {
         tracks.filter { favoriteIDs.contains($0.id) }
+    }
+
+    var recentTracks: [Track] {
+        recentTrackIDs.compactMap { id in tracks.first(where: { $0.id == id }) }
+    }
+
+    func recordPlay(_ track: Track) {
+        guard let existing = canonicalTrack(for: track) else { return }
+        recentTrackIDs.removeAll { $0 == existing.id }
+        recentTrackIDs.insert(existing.id, at: 0)
+        if recentTrackIDs.count > 20 {
+            recentTrackIDs = Array(recentTrackIDs.prefix(20))
+        }
+        save()
     }
 
     var artists: [String] {
@@ -74,6 +89,7 @@ final class LibraryStore: ObservableObject {
             let track = tracks[index]
             let asset = AVURLAsset(url: track.mediaURL)
             let items = (try? await asset.load(.commonMetadata)) ?? []
+            let allItems = (try? await asset.load(.metadata)) ?? items
             var updated = track
 
             if let title = await metadataString(in: items, key: .commonKeyTitle) {
@@ -92,6 +108,9 @@ final class LibraryStore: ObservableObject {
             }
             if updated.artworkURL == nil, let artwork = await artworkURL(in: items) {
                 updated.artworkURL = artwork
+            }
+            if updated.lyrics == nil, let lyrics = await lyrics(in: allItems) {
+                updated.lyrics = lyrics
             }
 
             if updated != track {
@@ -180,10 +199,17 @@ final class LibraryStore: ObservableObject {
                 }
             }
 
+            let downloadedAsset = AVURLAsset(url: destination)
+            let downloadedItems = (try? await downloadedAsset.load(.metadata)) ?? []
+            let downloadedLyrics = await lyrics(in: downloadedItems)
+
             if let index = tracks.firstIndex(where: { $0.id == existing.id }) {
                 tracks[index].mediaURL = destination
                 if let localArtwork {
                     tracks[index].artworkURL = localArtwork
+                }
+                if let downloadedLyrics, tracks[index].lyrics == nil {
+                    tracks[index].lyrics = downloadedLyrics
                 }
             }
             save()
@@ -252,6 +278,7 @@ final class LibraryStore: ObservableObject {
         guard let existing = canonicalTrack(for: track) else { return }
         tracks.removeAll { $0.id == existing.id }
         favoriteIDs.remove(existing.id)
+        recentTrackIDs.removeAll { $0 == existing.id }
         for index in playlists.indices {
             playlists[index].trackIDs.removeAll { $0 == existing.id }
         }
@@ -265,16 +292,77 @@ final class LibraryStore: ObservableObject {
     }
 
     @discardableResult
-    func createPlaylist(named name: String) -> Playlist? {
+    func createPlaylist(
+        named name: String,
+        description: String = "",
+        coverData: Data? = nil
+    ) -> Playlist? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        let playlist = Playlist(name: trimmed)
+        var playlist = Playlist(
+            name: trimmed,
+            description: description.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        playlist.customCoverURL = storePlaylistCover(coverData, for: playlist.id)
         playlists.insert(playlist, at: 0)
         save()
         return playlist
     }
 
+    func updatePlaylistDetails(
+        _ playlistID: UUID,
+        name: String,
+        description: String,
+        coverData: Data?,
+        removeCover: Bool
+    ) {
+        guard let index = playlists.firstIndex(where: { $0.id == playlistID }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        playlists[index].name = trimmed
+        playlists[index].description = description.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if removeCover {
+            removePlaylistCover(at: playlists[index].customCoverURL)
+            playlists[index].customCoverURL = nil
+        } else if let coverData {
+            removePlaylistCover(at: playlists[index].customCoverURL)
+            playlists[index].customCoverURL = storePlaylistCover(coverData, for: playlistID)
+        }
+        save()
+    }
+
+    @discardableResult
+    func duplicatePlaylist(_ playlist: Playlist) -> Playlist? {
+        var copy = Playlist(
+            name: playlist.name + " Copy",
+            description: playlist.description,
+            trackIDs: playlist.trackIDs
+        )
+        if let cover = playlist.customCoverURL,
+           let data = try? Data(contentsOf: cover) {
+            copy.customCoverURL = storePlaylistCover(data, for: copy.id)
+        }
+        playlists.insert(copy, at: 0)
+        save()
+        return copy
+    }
+
+    func moveTracks(in playlistID: UUID, from source: IndexSet, to destination: Int) {
+        guard let index = playlists.firstIndex(where: { $0.id == playlistID }) else { return }
+        playlists[index].trackIDs.move(fromOffsets: source, toOffset: destination)
+        save()
+    }
+
+    func setTrackOrder(_ trackIDs: [UUID], in playlistID: UUID) {
+        guard let index = playlists.firstIndex(where: { $0.id == playlistID }) else { return }
+        playlists[index].trackIDs = trackIDs
+        save()
+    }
+
     func deletePlaylist(_ playlist: Playlist) {
+        removePlaylistCover(at: playlist.customCoverURL)
         playlists.removeAll { $0.id == playlist.id }
         save()
     }
@@ -384,6 +472,47 @@ final class LibraryStore: ObservableObject {
         }
     }
 
+    private func storePlaylistCover(_ data: Data?, for playlistID: UUID) -> URL? {
+        guard
+            let data,
+            let image = UIImage(data: data),
+            let jpeg = image.jpegData(compressionQuality: 0.9)
+        else { return nil }
+
+        let destination = artworkDirectory
+            .appendingPathComponent("playlist-\(playlistID.uuidString).jpg")
+        do {
+            try jpeg.write(to: destination, options: .atomic)
+            return destination
+        } catch {
+            return nil
+        }
+    }
+
+    private func removePlaylistCover(at url: URL?) {
+        guard let url, url.isFileURL else { return }
+        try? fileManager.removeItem(at: url)
+    }
+
+    private func lyrics(in items: [AVMetadataItem]) async -> String? {
+        for item in items {
+            let identifier = item.identifier?.rawValue.lowercased() ?? ""
+            let key = String(describing: item.key).lowercased()
+            let commonKey = item.commonKey?.rawValue.lowercased() ?? ""
+            let isLyrics = identifier.contains("uslt")
+                || identifier.contains("lyr")
+                || key.contains("lyric")
+                || commonKey.contains("lyric")
+            guard isLyrics else { continue }
+
+            if let value = try? await item.load(.stringValue) {
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { return value }
+            }
+        }
+        return nil
+    }
+
     private func canonicalTrack(for track: Track) -> Track? {
         tracks.first { existing in
             if existing.id == track.id { return true }
@@ -413,13 +542,17 @@ final class LibraryStore: ObservableObject {
         }
         favoriteIDs = Set(snapshot.favoriteIDs)
         playlists = snapshot.playlists
+        recentTrackIDs = snapshot.recentTrackIDs.filter { id in
+            tracks.contains { $0.id == id }
+        }
     }
 
     private func save() {
         let snapshot = LibrarySnapshot(
             tracks: tracks,
             favoriteIDs: Array(favoriteIDs),
-            playlists: playlists
+            playlists: playlists,
+            recentTrackIDs: recentTrackIDs
         )
         do {
             let data = try JSONEncoder().encode(snapshot)
