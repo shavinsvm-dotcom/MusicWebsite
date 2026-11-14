@@ -210,7 +210,7 @@ struct LibraryView: View {
                 .foregroundStyle(.secondary)
             }
 
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(library.tracks) { track in
                     TrackRow(track: track, queue: library.tracks)
                     if track.id != library.tracks.last?.id {
@@ -224,7 +224,7 @@ struct LibraryView: View {
     private var favorites: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "Favorites")
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(library.favorites) { track in
                     TrackRow(track: track, queue: library.favorites)
                     if track.id != library.favorites.last?.id {
@@ -343,7 +343,7 @@ struct PlaylistDetailView: View {
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.94))
 
-                    VStack(spacing: 0) {
+                    LazyVStack(spacing: 0) {
                         ForEach(tracks) { track in
                             TrackRow(track: track, queue: tracks)
                             if track.id != tracks.last?.id {

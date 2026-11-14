@@ -195,17 +195,24 @@ final class PlayerManager: ObservableObject {
 
     private func installTimeObserver() {
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
+            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             Task { @MainActor in
                 guard let self else { return }
                 let seconds = CMTimeGetSeconds(time)
-                if seconds.isFinite { self.elapsed = max(0, seconds) }
+                if seconds.isFinite {
+                    let next = max(0, seconds)
+                    if abs(next - self.elapsed) > 0.01 {
+                        self.elapsed = next
+                    }
+                }
 
                 if let itemDuration = self.player.currentItem?.duration {
                     let loadedDuration = CMTimeGetSeconds(itemDuration)
-                    if loadedDuration.isFinite, loadedDuration > 0 {
+                    if loadedDuration.isFinite,
+                       loadedDuration > 0,
+                       abs(loadedDuration - self.duration) > 0.5 {
                         self.duration = loadedDuration
                     }
                 }

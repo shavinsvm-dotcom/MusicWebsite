@@ -89,12 +89,11 @@ struct MiniPlayer: View {
                 }
                 .padding(.leading, 6)
                 .padding(.trailing, 6)
-                .frame(height: 46)
-            }
-            .nativeGlass(Capsule())
-            .overlay(alignment: .bottom) {
+                .frame(height: 42)
+
                 progress
             }
+            .nativeGlass(Capsule())
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .padding(.horizontal, 12)
@@ -138,7 +137,7 @@ struct MiniPlayer: View {
         }
         .frame(height: 3)
         .padding(.horizontal, 18)
-        .padding(.bottom, 4)
+        .padding(.bottom, 5)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

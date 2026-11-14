@@ -13,7 +13,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
+                LazyVStack(alignment: .leading, spacing: 28) {
                     header
 
                     if let featured = library.tracks.first {
@@ -225,7 +225,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionTitle(title: "Favorites")
 
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(library.favorites) { track in
                     TrackRow(track: track, queue: library.favorites)
                     if track.id != library.favorites.last?.id {

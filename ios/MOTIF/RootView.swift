@@ -4,6 +4,7 @@ enum AppTab: String, Hashable {
     case forYou
     case home
     case library
+    case playlists
     case search
 
     var title: String {
@@ -11,6 +12,7 @@ enum AppTab: String, Hashable {
         case .forYou: return "For You"
         case .home: return "Home"
         case .library: return "Library"
+        case .playlists: return "Playlists"
         case .search: return "Search"
         }
     }
@@ -61,6 +63,10 @@ struct RootView: View {
                     libraryTab
                 }
 
+                Tab("Playlists", systemImage: "music.note.list", value: AppTab.playlists) {
+                    playlistsTab
+                }
+
                 Tab(
                     "Search",
                     systemImage: "magnifyingglass",
@@ -83,6 +89,10 @@ struct RootView: View {
                 libraryTab
                     .tabItem { Label("Library", systemImage: "square.stack") }
                     .tag(AppTab.library)
+
+                playlistsTab
+                    .tabItem { Label("Playlists", systemImage: "music.note.list") }
+                    .tag(AppTab.playlists)
 
                 searchTab
                     .tabItem { Label("Search", systemImage: "magnifyingglass") }
@@ -124,6 +134,16 @@ struct RootView: View {
                 showNowPlaying: $showNowPlaying,
                 currentID: player.current?.id,
                 transitionSourceID: "now-playing-\(AppTab.library.rawValue)",
+                transitionNamespace: playerTransition
+            ))
+    }
+
+    private var playlistsTab: some View {
+        PlaylistsView(showNowPlaying: $showNowPlaying)
+            .modifier(MiniPlayerInset(
+                showNowPlaying: $showNowPlaying,
+                currentID: player.current?.id,
+                transitionSourceID: "now-playing-\(AppTab.playlists.rawValue)",
                 transitionNamespace: playerTransition
             ))
     }

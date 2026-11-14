@@ -10,7 +10,7 @@ struct ForYouView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 30) {
+                LazyVStack(alignment: .leading, spacing: 30) {
                     header
 
                     if library.tracks.isEmpty {
@@ -178,7 +178,7 @@ struct ForYouView: View {
                 .foregroundStyle(.secondary)
             }
 
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(repeatTracks) { track in
                     TrackRow(track: track, queue: repeatTracks)
                     if track.id != repeatTracks.last?.id {
@@ -349,7 +349,7 @@ struct ArtistTracksView: View {
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.94))
 
-                VStack(spacing: 0) {
+                LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in
                         TrackRow(track: track, queue: tracks)
                         if track.id != tracks.last?.id {

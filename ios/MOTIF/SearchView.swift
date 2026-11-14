@@ -133,7 +133,7 @@ struct SearchView: View {
                 Spacer()
             }
 
-            VStack(spacing: 0) {
+            LazyVStack(spacing: 0) {
                 ForEach(tracks) { track in
                     TrackRow(track: track, queue: tracks)
                     if track.id != tracks.last?.id {

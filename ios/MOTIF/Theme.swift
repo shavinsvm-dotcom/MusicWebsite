@@ -142,6 +142,14 @@ struct ArtworkView: View {
     let url: URL?
     let seed: String
 
+    @State private var image: UIImage?
+
+    private var resolvedImage: UIImage? {
+        if let image { return image }
+        guard let url else { return nil }
+        return ArtworkImageCache.shared.image(for: url)
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -150,30 +158,52 @@ struct ArtworkView: View {
                 endPoint: .bottomTrailing
             )
 
-            if let url {
-                if url.isFileURL, let image = UIImage(contentsOfFile: url.path) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    AsyncImage(url: url) { phase in
-                        if let image = phase.image {
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } else if phase.error != nil {
-                            fallback
-                        } else {
-                            ProgressView()
-                                .tint(.white)
-                        }
-                    }
-                }
+            if let image = resolvedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if url != nil {
+                ProgressView()
+                    .tint(.white)
             } else {
                 fallback
             }
         }
         .clipped()
+        .task(id: url) {
+            await loadImage()
+        }
+    }
+
+    @MainActor
+    private func loadImage() async {
+        guard let url else {
+            image = nil
+            return
+        }
+
+        if let cached = ArtworkImageCache.shared.image(for: url) {
+            image = cached
+            return
+        }
+
+        image = nil
+
+        if url.isFileURL {
+            if let local = UIImage(contentsOfFile: url.path) {
+                ArtworkImageCache.shared.store(local, for: url)
+                image = local
+            }
+            return
+        }
+
+        guard let (data, _) = try? await URLSession.shared.data(from: url),
+              !Task.isCancelled,
+              let remote = UIImage(data: data)
+        else { return }
+
+        ArtworkImageCache.shared.store(remote, for: url)
+        image = remote
     }
 
     private var fallback: some View {
@@ -196,6 +226,26 @@ struct ArtworkView: View {
             hash = (hash &* 33) &+ UInt64(scalar.value)
         }
         return Double(hash % 360) / 360
+    }
+}
+
+final class ArtworkImageCache {
+    static let shared = ArtworkImageCache()
+
+    private let cache = NSCache<NSURL, UIImage>()
+
+    private init() {
+        cache.countLimit = 160
+        cache.totalCostLimit = 96 * 1024 * 1024
+    }
+
+    func image(for url: URL) -> UIImage? {
+        cache.object(forKey: url as NSURL)
+    }
+
+    func store(_ image: UIImage, for url: URL) {
+        let cost = Int(image.size.width * image.size.height * 4)
+        cache.setObject(image, forKey: url as NSURL, cost: cost)
     }
 }
 
