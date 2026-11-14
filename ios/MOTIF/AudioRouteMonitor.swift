@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import Foundation
+import UIKit
 
 struct AirPodsConnection: Identifiable, Equatable {
     let id = UUID()
@@ -70,6 +71,7 @@ final class AudioRouteMonitor: ObservableObject {
             : (lowercased.contains("pro") ? "airpodspro" : "airpods")
 
         lastShownAt = now
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
         let next = AirPodsConnection(name: name, symbolName: symbol)
         connection = next
         dismissTask?.cancel()

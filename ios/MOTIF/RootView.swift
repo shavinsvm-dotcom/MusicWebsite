@@ -33,7 +33,9 @@ struct RootView: View {
             .environmentObject(player)
             .environmentObject(player.progress)
             .overlay(alignment: .top) {
-                AirPodsConnectOverlay(monitor: routeMonitor)
+                if !showNowPlaying {
+                    AirPodsConnectOverlay(monitor: routeMonitor)
+                }
             }
             .fullScreenCover(isPresented: $showNowPlaying) {
                 NowPlayingView()
