@@ -82,7 +82,7 @@ enum LyricsFileParser {
         }
 
         let lines = (file.lines ?? []).compactMap { line -> String? in
-            let text = line.text ?? (line.words ?? []).map(\.text).joined()
+            let text = line.text ?? (line.words ?? []).map { $0.text ?? "" }.joined()
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
         }
