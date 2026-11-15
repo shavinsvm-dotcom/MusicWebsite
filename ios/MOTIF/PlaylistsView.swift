@@ -27,6 +27,7 @@ enum SmartPlaylist: String, CaseIterable, Identifiable {
     case recentlyPlayed
     case favorites
     case downloaded
+    case cloud
     case recentlyAdded
     case mostPlayed
 
@@ -37,6 +38,7 @@ enum SmartPlaylist: String, CaseIterable, Identifiable {
         case .recentlyPlayed: return "Recently Played"
         case .favorites: return "Favorites"
         case .downloaded: return "Downloaded"
+        case .cloud: return "Cloud Library"
         case .recentlyAdded: return "Recently Added"
         case .mostPlayed: return "Most Played"
         }
@@ -47,6 +49,7 @@ enum SmartPlaylist: String, CaseIterable, Identifiable {
         case .recentlyPlayed: return "clock.arrow.circlepath"
         case .favorites: return "heart.fill"
         case .downloaded: return "arrow.down.circle.fill"
+        case .cloud: return "cloud.fill"
         case .recentlyAdded: return "sparkles"
         case .mostPlayed: return "chart.bar.fill"
         }
@@ -60,6 +63,8 @@ enum SmartPlaylist: String, CaseIterable, Identifiable {
             return Color(red: 0.61, green: 0.25, blue: 0.33)
         case .downloaded:
             return Color(red: 0.20, green: 0.45, blue: 0.37)
+        case .cloud:
+            return Color(red: 0.22, green: 0.38, blue: 0.62)
         case .recentlyAdded:
             return Color(red: 0.42, green: 0.32, blue: 0.58)
         case .mostPlayed:
@@ -72,6 +77,7 @@ enum SmartPlaylist: String, CaseIterable, Identifiable {
         case .recentlyPlayed: return "Nothing played yet"
         case .favorites: return "No favorites yet"
         case .downloaded: return "Nothing downloaded"
+        case .cloud: return "No cloud tracks"
         case .recentlyAdded: return "No songs yet"
         case .mostPlayed: return "No play history yet"
         }
@@ -85,6 +91,8 @@ enum SmartPlaylist: String, CaseIterable, Identifiable {
             return "Tap the heart on any song and it will live here."
         case .downloaded:
             return "Download a cloud song and it will show up here."
+        case .cloud:
+            return "Sync your Tigris library and your cloud songs will appear here."
         case .recentlyAdded:
             return "Import files or add previews and they will appear here."
         case .mostPlayed:
@@ -101,6 +109,8 @@ enum SmartPlaylist: String, CaseIterable, Identifiable {
             return library.favorites
         case .downloaded:
             return library.tracks.filter { library.isDownloaded($0) }
+        case .cloud:
+            return library.tracks.filter { $0.isCloud }
         case .recentlyAdded:
             return library.tracks.sorted { lhs, rhs in
                 if lhs.addedAt != rhs.addedAt { return lhs.addedAt > rhs.addedAt }
@@ -370,14 +380,41 @@ struct PlaylistTile: View {
     let tracks: [Track]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            PlaylistArtwork(playlist: playlist, tracks: tracks)
-                .aspectRatio(1, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+        VStack(alignment: .leading, spacing: 9) {
+            ZStack(alignment: .bottomLeading) {
+                PlaylistArtwork(playlist: playlist, tracks: tracks)
+                    .aspectRatio(1, contentMode: .fit)
+
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.12), .black.opacity(0.62)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+
+                HStack(alignment: .center) {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(.black.opacity(0.42), in: Circle())
+
+                    Spacer(minLength: 6)
+
+                    Text(trackCountText)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.82))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.34), in: Capsule())
                 }
+                .padding(10)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.7)
+            }
+            .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
 
             Text(playlist.name)
                 .font(.system(size: 15, weight: .semibold))
@@ -385,11 +422,12 @@ struct PlaylistTile: View {
                 .foregroundStyle(.primary)
                 .lineLimit(1)
 
-            Text(trackCountText)
+            Text(playlist.description.isEmpty ? trackCountText : playlist.description)
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
     }
 
@@ -404,40 +442,42 @@ private struct PlaylistListRow: View {
     let tracks: [Track]
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             PlaylistArtwork(playlist: playlist, tracks: tracks)
-                .frame(width: 62, height: 62)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .frame(width: 68, height: 68)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
+                }
+                .shadow(color: .black.opacity(0.16), radius: 9, y: 4)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(playlist.name)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
+                    .tracking(-0.2)
                     .lineLimit(1)
 
-                if playlist.description.isEmpty {
-                    Text(trackText)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                } else {
-                    Text(playlist.description)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(playlist.description.isEmpty ? trackText : playlist.description)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
 
             Spacer(minLength: 8)
 
             Text("\(tracks.count)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.tertiary)
+                .font(.caption.monospacedDigit().weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.06), in: Capsule())
 
             Image(systemName: "chevron.right")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 9)
+        .padding(.vertical, 10)
         .contentShape(Rectangle())
     }
 
@@ -500,6 +540,14 @@ struct PlaylistMosaic: View {
             }
         }
         .background(Color.secondary.opacity(0.10))
+        .overlay {
+            LinearGradient(
+                colors: [.white.opacity(0.05), .clear, .black.opacity(0.10)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .allowsHitTesting(false)
+        }
     }
 
     private var placeholder: some View {
@@ -655,13 +703,13 @@ struct PlaylistDetailView: View {
     private var header: some View {
         VStack(spacing: 14) {
             PlaylistArtwork(playlist: playlist ?? Playlist(name: "Playlist"), tracks: tracks)
-                .frame(width: 222, height: 222)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .frame(width: 236, height: 236)
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.8)
                 }
-                .shadow(color: .black.opacity(0.28), radius: 24, y: 12)
+                .shadow(color: .black.opacity(0.30), radius: 30, y: 15)
 
             VStack(spacing: 6) {
                 Text("PLAYLIST")
@@ -670,8 +718,8 @@ struct PlaylistDetailView: View {
                     .foregroundStyle(.secondary)
 
                 Text(playlist?.name ?? "Playlist")
-                    .font(.system(size: 33, weight: .bold))
-                    .tracking(-1.1)
+                    .font(.system(size: 36, weight: .bold))
+                    .tracking(-1.2)
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -791,8 +839,15 @@ struct PlaylistDetailView: View {
     private var subtitle: String {
         let count = tracks.count
         let songText = count == 1 ? "1 song" : "\(count) songs"
-        guard let duration = durationText else { return songText }
-        return "\(songText) · \(duration)"
+        var parts = [songText]
+        if let durationText {
+            parts.append(durationText)
+        }
+        let cloudCount = tracks.filter(\.isCloud).count
+        if cloudCount > 0 {
+            parts.append("\(cloudCount) cloud")
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var durationText: String? {
@@ -1155,14 +1210,16 @@ struct SmartPlaylistTile: View {
         VStack(alignment: .leading, spacing: 7) {
             SmartPlaylistCover(smart: smart, tracks: tracks)
                 .frame(width: 132, height: 132)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.7)
                 }
+                .shadow(color: .black.opacity(0.16), radius: 12, y: 6)
 
             Text(smart.title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
+                .tracking(-0.15)
                 .foregroundStyle(.primary)
                 .lineLimit(1)
 

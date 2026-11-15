@@ -6,6 +6,7 @@ struct LibraryView: View {
     private enum LibraryFilter: Hashable {
         case all
         case downloads
+        case cloud
     }
 
     @EnvironmentObject private var library: LibraryStore
@@ -21,6 +22,10 @@ struct LibraryView: View {
         library.tracks.filter { library.isDownloaded($0) }
     }
 
+    private var cloudTracks: [Track] {
+        library.tracks.filter { $0.isCloud }
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -30,7 +35,8 @@ struct LibraryView: View {
                     if !library.tracks.isEmpty {
                         Picker("Library filter", selection: $filter) {
                             Text("Songs").tag(LibraryFilter.all)
-                            Text("Downloaded").tag(LibraryFilter.downloads)
+                            Text("Downloads").tag(LibraryFilter.downloads)
+                            Text("Cloud").tag(LibraryFilter.cloud)
                         }
                         .pickerStyle(.segmented)
                     }
@@ -39,7 +45,11 @@ struct LibraryView: View {
                         emptyState
                     } else if filter == .downloads {
                         downloads
+                    } else if filter == .cloud {
+                        cloudLibrary
                     } else {
+                        LibraryArtistsSection(showNowPlaying: $showNowPlaying)
+
                         songs
 
                         if !library.favorites.isEmpty {
@@ -328,6 +338,96 @@ struct LibraryView: View {
                     TrackRow(track: track, queue: library.favorites)
                     if track.id != library.favorites.last?.id {
                         Divider().opacity(0.35)
+                    }
+                }
+            }
+        }
+    }
+
+    private var cloudLibrary: some View {
+        let tracks = cloudTracks
+        let pendingDownloads = tracks.filter { !library.isDownloaded($0) }
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Cloud tracks")
+                Spacer()
+                Text("\(tracks.count)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            if tracks.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Image(systemName: "cloud")
+                        .font(.system(size: 28, weight: .light))
+                        .foregroundStyle(.tertiary)
+
+                    Text("No cloud tracks yet")
+                        .font(.system(size: 21, weight: .semibold))
+                        .tracking(-0.3)
+
+                    Text("Sync your Tigris library to bring your cloud songs into MOTIF.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button {
+                        Task { await library.refreshCloud() }
+                    } label: {
+                        Label("Sync cloud tracks", systemImage: "arrow.clockwise")
+                            .font(.subheadline.weight(.semibold))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .background(Color.primary, in: Capsule())
+                            .foregroundStyle(Color(uiColor: .systemBackground))
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.94))
+                    .disabled(library.isRefreshingCloud)
+                    .padding(.top, 2)
+                }
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassSurface(radius: 26)
+            } else {
+                HStack(spacing: 14) {
+                    Text("Stream from your Tigris library, or download songs for offline listening.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 8)
+
+                    if !pendingDownloads.isEmpty {
+                        Button {
+                            Task { await library.downloadAll(pendingDownloads) }
+                        } label: {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.9))
+                        .accessibilityLabel("Download all cloud tracks")
+                    }
+
+                    Button {
+                        guard let first = tracks.first else { return }
+                        player.play(first, queue: tracks)
+                        showNowPlaying = true
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.92))
+                    .foregroundStyle(.secondary)
+                }
+
+                LazyVStack(spacing: 0) {
+                    ForEach(tracks) { track in
+                        TrackRow(track: track, queue: tracks)
+                        if track.id != tracks.last?.id {
+                            Divider().opacity(0.35)
+                        }
                     }
                 }
             }
