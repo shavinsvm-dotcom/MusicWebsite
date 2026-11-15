@@ -452,7 +452,11 @@ struct LibraryAlbumDetailView: View {
 
     private var header: some View {
         VStack(spacing: 16) {
-            ArtworkView(url: album.artworkURL, seed: album.title + album.artist)
+            LivingArtworkView(
+                url: album.artworkURL,
+                seed: album.title + album.artist,
+                isPlaying: player.isPlaying
+            )
                 .frame(width: 220, height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay {

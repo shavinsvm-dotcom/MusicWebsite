@@ -148,13 +148,19 @@ extension View {
 struct ArtworkView: View {
     let url: URL?
     let seed: String
+    let onImageLoaded: ((UIImage) -> Void)?
 
     @State private var image: UIImage?
     @State private var failed = false
 
-    init(url: URL?, seed: String) {
+    init(
+        url: URL?,
+        seed: String,
+        onImageLoaded: ((UIImage) -> Void)? = nil
+    ) {
         self.url = url
         self.seed = seed
+        self.onImageLoaded = onImageLoaded
         _image = State(initialValue: url.flatMap { ArtworkImageCache.shared.image(for: $0) })
     }
 
@@ -190,6 +196,7 @@ struct ArtworkView: View {
                     image = cached
                 }
                 failed = false
+                onImageLoaded?(cached)
                 return
             }
             await loadImage()
@@ -207,6 +214,7 @@ struct ArtworkView: View {
         if let cached = ArtworkImageCache.shared.image(for: url) {
             image = cached
             failed = false
+            onImageLoaded?(cached)
             return
         }
 
@@ -217,6 +225,7 @@ struct ArtworkView: View {
             if let local = UIImage(contentsOfFile: url.path) {
                 ArtworkImageCache.shared.store(local, for: url)
                 image = local
+                onImageLoaded?(local)
             } else {
                 failed = true
             }
@@ -233,6 +242,7 @@ struct ArtworkView: View {
 
         ArtworkImageCache.shared.store(remote, for: url)
         image = remote
+        onImageLoaded?(remote)
     }
 
     private var fallback: some View {

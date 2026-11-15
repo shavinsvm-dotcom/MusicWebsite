@@ -161,6 +161,7 @@ struct NowPlayingView: View {
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(LivingArtworkSettings.enabledKey) private var livingArtworkEnabled = LivingArtworkSettings.defaultEnabled
 
     let backdropImage: UIImage?
 
@@ -294,7 +295,11 @@ struct NowPlayingView: View {
 
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
-                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                    LivingArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist,
+                        isPlaying: player.isPlaying
+                    )
                         .frame(width: geometry.size.width, height: artHeight)
                         .mask(
                             LinearGradient(
@@ -494,6 +499,11 @@ struct NowPlayingView: View {
                     }
 
                     Section("Playback") {
+                        Toggle(isOn: $livingArtworkEnabled) {
+                            Label("Living Artwork", systemImage: "sparkles")
+                        }
+                        .accessibilityHint("Animated lighting and particles on large album covers")
+
                         Toggle(isOn: Binding(
                             get: { player.automixEnabled },
                             set: { player.setAutomix($0) }
