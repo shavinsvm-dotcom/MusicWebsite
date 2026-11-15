@@ -576,7 +576,7 @@ struct NowPlayingView: View {
                     .foregroundStyle(.white.opacity(0.72))
 
                 if player.automixEnabled {
-                    Text("AUTOMIX")
+                    Text(player.automixBPM.map { "AUTOMIX · \($0) BPM" } ?? "AUTOMIX")
                         .font(.system(size: 8, weight: .bold))
                         .tracking(1.1)
                         .foregroundStyle(.white.opacity(0.56))

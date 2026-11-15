@@ -44,6 +44,13 @@ final class PlayerManager: ObservableObject {
 
     var isSleepTimerActive: Bool { sleepTimerEnd != nil }
 
+    var automixBPM: Int? {
+        guard automixEnabled, let current,
+              let grid = automixAnalysis.grid(for: current)
+        else { return nil }
+        return Int(grid.bpm.rounded())
+    }
+
     var sleepTimerRemainingText: String? {
         guard let sleepTimerEnd else { return nil }
         let remaining = max(0, sleepTimerEnd.timeIntervalSinceNow)
@@ -58,8 +65,11 @@ final class PlayerManager: ObservableObject {
     private var endObserver: NSObjectProtocol?
     private var infoTick = 0
     private var crossfadeTask: Task<Void, Never>?
+    private var tempoRestoreTask: Task<Void, Never>?
+    private var automixNextIndex: Int?
     private var isCrossfading = false
     private var sleepTask: Task<Void, Never>?
+    private let automixAnalysis = AutomixAnalysisService.shared
 
     init() {
         configureAudioSession()
@@ -95,6 +105,8 @@ final class PlayerManager: ObservableObject {
         queue.removeAll { $0.id == track.id }
         let insertIndex = min(currentIndex + 1, queue.count)
         queue.insert(track, at: insertIndex)
+        automixNextIndex = nil
+        prepareAutomixAnalysis()
     }
 
     func addToQueue(_ track: Track) {
@@ -104,12 +116,16 @@ final class PlayerManager: ObservableObject {
         }
         guard !queue.contains(where: { $0.id == track.id }) else { return }
         queue.append(track)
+        automixNextIndex = nil
+        prepareAutomixAnalysis()
     }
 
     func removeFromUpNext(at offsets: IndexSet) {
         let upcoming = upNextTracks
         let ids = Set(offsets.compactMap { upcoming.indices.contains($0) ? upcoming[$0].id : nil })
         queue.removeAll { ids.contains($0.id) && $0.id != current?.id }
+        automixNextIndex = nil
+        prepareAutomixAnalysis()
     }
 
     func moveUpNext(from source: IndexSet, to destination: Int) {
@@ -120,6 +136,7 @@ final class PlayerManager: ObservableObject {
         var upcoming = Array(queue.dropFirst(currentIndex + 1))
         upcoming.move(fromOffsets: source, toOffset: destination)
         queue = Array(queue.prefix(currentIndex + 1)) + upcoming
+        automixNextIndex = nil
     }
 
     func setCrossfade(_ seconds: TimeInterval) {
@@ -132,7 +149,11 @@ final class PlayerManager: ObservableObject {
     func setAutomix(_ enabled: Bool) {
         automixEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: "motif.automixEnabled")
-        if !enabled { cancelCrossfade() }
+        if enabled {
+            prepareAutomixAnalysis()
+        } else {
+            cancelCrossfade()
+        }
     }
 
     private var effectiveTransitionDuration: TimeInterval {
@@ -202,6 +223,8 @@ final class PlayerManager: ObservableObject {
 
     func toggleShuffle() {
         isShuffled.toggle()
+        automixNextIndex = nil
+        prepareAutomixAnalysis()
     }
 
     func cycleRepeat() {
@@ -213,6 +236,8 @@ final class PlayerManager: ObservableObject {
         case .one:
             repeatMode = .off
         }
+        automixNextIndex = nil
+        prepareAutomixAnalysis()
     }
 
     func seek(to seconds: Double) {
@@ -230,6 +255,7 @@ final class PlayerManager: ObservableObject {
 
     private func load(_ track: Track) {
         cancelCrossfade()
+        automixNextIndex = nil
         current = track
         progress.elapsed = 0
         duration = max(track.duration, 0)
@@ -248,6 +274,7 @@ final class PlayerManager: ObservableObject {
         player.play()
         isPlaying = true
         onTrackStarted?(track)
+        prepareAutomixAnalysis()
         updateNowPlaying()
     }
 
@@ -341,18 +368,97 @@ final class PlayerManager: ObservableObject {
     }
 
     private func maybeBeginCrossfade() {
-        let transitionDuration = effectiveTransitionDuration
-        guard transitionDuration > 0,
-              isPlaying,
+        guard isPlaying,
               !isCrossfading,
               repeatMode != .one,
-              duration > 0,
-              let nextIndex = upcomingIndex()
+              duration > 0
+        else { return }
+
+        if automixEnabled,
+           let plan = automixPlan() {
+            if elapsed >= plan.outgoingStart,
+               elapsed < plan.outgoingStart + 0.75 {
+                beginAutomix(plan)
+                return
+            }
+            if elapsed < plan.outgoingStart {
+                return
+            }
+        }
+
+        let transitionDuration = effectiveTransitionDuration
+        guard transitionDuration > 0,
+              let nextIndex = automixNextIndex ?? upcomingIndex()
         else { return }
 
         let remaining = duration - elapsed
         guard remaining > 0, remaining <= transitionDuration else { return }
         beginCrossfade(to: nextIndex)
+    }
+
+    private func automixPlan() -> AutomixPlan? {
+        guard automixEnabled,
+              let current,
+              let currentGrid = automixAnalysis.grid(for: current),
+              currentGrid.confidence >= 0.18,
+              let nextIndex = automixNextIndex ?? upcomingIndex(),
+              queue.indices.contains(nextIndex)
+        else { return nil }
+
+        let next = queue[nextIndex]
+        guard next.id != current.id,
+              next.mediaURL.isFileURL,
+              current.mediaURL.isFileURL,
+              let nextGrid = automixAnalysis.grid(for: next),
+              nextGrid.confidence >= 0.18
+        else { return nil }
+
+        let rate = currentGrid.bpm / nextGrid.bpm
+        guard rate.isFinite, rate >= 0.85, rate <= 1.18 else { return nil }
+
+        let currentDuration = max(duration, currentGrid.duration)
+        let beats = 8
+        let transitionDuration = (60 / currentGrid.bpm) * Double(beats)
+        guard currentDuration > transitionDuration + 1 else { return nil }
+
+        let targetStart = currentDuration - transitionDuration
+        let outgoingStart = currentGrid.beat(atOrBefore: targetStart)
+        guard outgoingStart > 0,
+              currentDuration - outgoingStart > 0.5
+        else { return nil }
+
+        let incomingStart = nextGrid.firstBeat
+        let nextDuration = max(next.duration, nextGrid.duration)
+        let incomingAdvance = transitionDuration * Double(rate)
+        guard incomingStart >= 0,
+              nextDuration > incomingStart + incomingAdvance + 1
+        else { return nil }
+
+        return AutomixPlan(
+            nextIndex: nextIndex,
+            next: next,
+            outgoingStart: outgoingStart,
+            incomingStart: incomingStart,
+            incomingRate: Float(rate),
+            duration: transitionDuration
+        )
+    }
+
+    private func prepareAutomixAnalysis() {
+        guard automixEnabled, let current else { return }
+
+        var tracks = [current]
+        let nextIndex = automixNextIndex ?? upcomingIndex()
+        automixNextIndex = nextIndex
+        if let nextIndex, queue.indices.contains(nextIndex) {
+            tracks.append(queue[nextIndex])
+        }
+
+        for track in tracks where track.mediaURL.isFileURL {
+            Task {
+                _ = await automixAnalysis.analyze(track)
+            }
+        }
     }
 
     private func upcomingIndex() -> Int? {
@@ -373,6 +479,7 @@ final class PlayerManager: ObservableObject {
         let next = queue[nextIndex]
         guard next.id != current?.id else { return }
 
+        resetPlaybackTempo()
         isCrossfading = true
         let item = AVPlayerItem(url: next.mediaURL)
         fadePlayer.replaceCurrentItem(with: item)
@@ -428,6 +535,7 @@ final class PlayerManager: ObservableObject {
         isCrossfading = false
         isPlaying = true
         crossfadeTask = nil
+        automixNextIndex = nil
 
         try? AVAudioSession.sharedInstance().setActive(true)
         if resumeAt > 0 {
@@ -437,18 +545,151 @@ final class PlayerManager: ObservableObject {
                 toleranceAfter: .zero
             )
         }
+
         player.play()
+        player.rate = 1
         onTrackStarted?(next)
+        prepareAutomixAnalysis()
         updateNowPlaying()
+    }
+
+    private func beginAutomix(_ plan: AutomixPlan) {
+        guard plan.nextIndex >= 0,
+              plan.nextIndex < queue.count,
+              queue[plan.nextIndex].id == plan.next.id
+        else { return }
+
+        resetPlaybackTempo()
+        isCrossfading = true
+
+        let item = AVPlayerItem(url: plan.next.mediaURL)
+        item.audioTimePitchAlgorithm = .spectral
+        fadePlayer.replaceCurrentItem(with: item)
+        fadePlayer.volume = 0
+
+        let start = CMTime(seconds: plan.incomingStart, preferredTimescale: 600)
+        fadePlayer.seek(
+            to: start,
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        ) { [weak self] finished in
+            Task { @MainActor in
+                guard let self, self.isCrossfading else { return }
+                guard finished else {
+                    self.cancelCrossfade()
+                    return
+                }
+                self.fadePlayer.play()
+                self.fadePlayer.rate = plan.incomingRate
+                self.startAutomixFade(plan)
+            }
+        }
+    }
+
+    private func startAutomixFade(_ plan: AutomixPlan) {
+        let total = max(plan.duration, 0.5)
+        let steps = max(Int(total * 20), 1)
+        let stepSeconds = total / Double(steps)
+
+        crossfadeTask = Task { [weak self] in
+            for step in 1...steps {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(stepSeconds * 1_000_000_000)
+                )
+                guard !Task.isCancelled, let self else { return }
+                let progress = Double(step) / Double(steps)
+                let angle = progress * .pi / 2
+                self.player.volume = Float(cos(angle))
+                self.fadePlayer.volume = Float(sin(angle))
+            }
+
+            guard !Task.isCancelled, let self else { return }
+            self.finishAutomix(plan)
+        }
+    }
+
+    private func finishAutomix(_ plan: AutomixPlan) {
+        guard plan.nextIndex >= 0,
+              plan.nextIndex < queue.count,
+              queue[plan.nextIndex].id == plan.next.id
+        else {
+            cancelCrossfade()
+            return
+        }
+
+        let next = queue[plan.nextIndex]
+        let time = fadePlayer.currentTime()
+        let fallbackResume = plan.incomingStart + plan.duration * Double(plan.incomingRate)
+        let resumeAt = time.isValid ? max(0, CMTimeGetSeconds(time)) : fallbackResume
+
+        fadePlayer.pause()
+        fadePlayer.replaceCurrentItem(with: nil)
+        player.pause()
+
+        let nextItem = AVPlayerItem(url: next.mediaURL)
+        nextItem.audioTimePitchAlgorithm = .spectral
+        player.replaceCurrentItem(with: nextItem)
+        installEndObserver(for: nextItem)
+        player.volume = 1
+
+        currentIndex = plan.nextIndex
+        current = next
+        duration = max(next.duration, 0)
+        progress.elapsed = resumeAt
+        isCrossfading = false
+        isPlaying = true
+        crossfadeTask = nil
+        automixNextIndex = nil
+
+        try? AVAudioSession.sharedInstance().setActive(true)
+        if resumeAt > 0 {
+            player.seek(
+                to: CMTime(seconds: resumeAt, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            )
+        }
+
+        player.play()
+        player.rate = plan.incomingRate
+        scheduleTempoRestore()
+        onTrackStarted?(next)
+        prepareAutomixAnalysis()
+        updateNowPlaying()
+    }
+
+    private func scheduleTempoRestore() {
+        tempoRestoreTask?.cancel()
+        tempoRestoreTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled, let self,
+                  self.isPlaying, !self.isCrossfading
+            else { return }
+            self.player.rate = 1
+            self.tempoRestoreTask = nil
+        }
+    }
+
+    private func resetPlaybackTempo() {
+        tempoRestoreTask?.cancel()
+        tempoRestoreTask = nil
+        if isPlaying {
+            player.rate = 1
+        }
     }
 
     private func cancelCrossfade() {
         crossfadeTask?.cancel()
         crossfadeTask = nil
+        tempoRestoreTask?.cancel()
+        tempoRestoreTask = nil
         isCrossfading = false
         fadePlayer.pause()
         fadePlayer.replaceCurrentItem(with: nil)
         player.volume = 1
+        if isPlaying {
+            player.rate = 1
+        }
     }
 
     private func configureAudioSession() {
