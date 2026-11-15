@@ -248,7 +248,8 @@ struct NowPlayingView: View {
                         RefractionBackdrop(
                             url: artworkURL,
                             seed: track.title + track.artist,
-                            mode: .player
+                            mode: .player,
+                            fallbackImage: backdropImage
                         )
                     } else if let backdropImage {
                         Image(uiImage: backdropImage)

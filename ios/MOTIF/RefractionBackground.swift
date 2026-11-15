@@ -37,13 +37,18 @@ struct RefractionBackdrop: View {
     @State private var artwork: UIImage?
     @State private var palette: [Color] = []
 
-    init(url: URL?, seed: String, mode: RefractionMode = .ambient) {
+    init(
+        url: URL?,
+        seed: String,
+        mode: RefractionMode = .ambient,
+        fallbackImage: UIImage? = nil
+    ) {
         self.url = url
         self.seed = seed
         self.mode = mode
         _artwork = State(initialValue: url.flatMap {
             PlaybackBackdropCache.shared.preparedImage(for: $0)
-        })
+        } ?? fallbackImage)
     }
 
     var body: some View {
@@ -63,7 +68,6 @@ struct RefractionBackdrop: View {
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
         }
-        .background(Color.black)
         .allowsHitTesting(false)
         .task(id: url) {
             await loadArtwork()

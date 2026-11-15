@@ -16,13 +16,13 @@ struct AppBackground: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
+            plainBackground
+
             if refractionEnabled,
                colorScheme == .dark,
                let source {
                 RefractionBackdrop(url: source.url, seed: source.seed)
-            } else {
-                plainBackground
             }
         }
         .ignoresSafeArea()
