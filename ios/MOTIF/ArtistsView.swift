@@ -110,7 +110,7 @@ struct LibraryArtistDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20)
                 } else {
-                    if albums.count > 1 {
+                    if !albums.isEmpty {
                         albumSection
                     }
 

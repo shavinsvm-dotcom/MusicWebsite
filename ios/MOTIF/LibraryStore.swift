@@ -304,7 +304,7 @@ final class LibraryStore: ObservableObject {
     }
 
     func retryDownload(_ job: DownloadJob) {
-        guard let track = tracks.first(where: { $0.id == job.trackID }) else {
+        guard tracks.contains(where: { $0.id == job.trackID }) else {
             removeDownloadJob(job.id)
             return
         }
@@ -313,7 +313,6 @@ final class LibraryStore: ObservableObject {
             downloadJobs[index].detail = nil
         }
         pumpDownloads()
-        _ = track
     }
 
     func removeDownloadJob(_ jobID: UUID) {

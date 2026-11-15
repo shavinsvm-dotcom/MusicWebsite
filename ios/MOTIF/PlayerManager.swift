@@ -85,6 +85,10 @@ final class PlayerManager: ObservableObject {
         configureAudioSession()
         configureRemoteCommands()
         installTimeObserver()
+
+        if #available(iOS 16.2, *) {
+            liveActivity = Activity<MusicActivityAttributes>.activities.first
+        }
     }
 
     func play(_ track: Track, queue newQueue: [Track]? = nil) {
@@ -261,6 +265,7 @@ final class PlayerManager: ObservableObject {
         isShuffled.toggle()
         automixNextIndex = nil
         prepareAutomixAnalysis()
+        prepareNextTrack()
     }
 
     func cycleRepeat() {
@@ -274,6 +279,7 @@ final class PlayerManager: ObservableObject {
         }
         automixNextIndex = nil
         prepareAutomixAnalysis()
+        prepareNextTrack()
     }
 
     func seek(to seconds: Double) {
