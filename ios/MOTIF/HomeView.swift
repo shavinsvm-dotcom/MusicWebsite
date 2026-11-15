@@ -9,6 +9,7 @@ struct HomeView: View {
 
     @State private var showImporter = false
     @State private var importError: String?
+    @AppStorage(VisualSettings.refractionKey) private var refractionEnabled = true
 
     var body: some View {
         NavigationStack {
@@ -79,6 +80,20 @@ struct HomeView: View {
             }
 
             Spacer()
+
+            Menu {
+                Toggle(isOn: $refractionEnabled) {
+                    Label("Cover refraction", systemImage: "sparkles")
+                }
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 42, height: 42)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(MotifPressStyle(scale: 0.9))
+            .glassSurface(radius: 21)
+            .accessibilityLabel("Visual settings")
 
             Button {
                 showImporter = true

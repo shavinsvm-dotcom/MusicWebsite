@@ -161,6 +161,7 @@ struct NowPlayingView: View {
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(VisualSettings.refractionKey) private var refractionEnabled = true
 
     let backdropImage: UIImage?
 
@@ -243,7 +244,13 @@ struct NowPlayingView: View {
                 Color.black
 
                 Group {
-                    if let backdropImage {
+                    if refractionEnabled, let artworkURL = track.artworkURL {
+                        RefractionBackdrop(
+                            url: artworkURL,
+                            seed: track.title + track.artist,
+                            mode: .player
+                        )
+                    } else if let backdropImage {
                         Image(uiImage: backdropImage)
                             .resizable()
                             .scaledToFill()
@@ -536,6 +543,12 @@ struct NowPlayingView: View {
                                     : "Crossfade",
                                 systemImage: "arrow.left.arrow.right"
                             )
+                        }
+                    }
+
+                    Section("Visuals") {
+                        Toggle(isOn: $refractionEnabled) {
+                            Label("Cover refraction", systemImage: "sparkles")
                         }
                     }
                 } label: {
