@@ -97,7 +97,7 @@ private struct DownloadJobRow: View {
                     .lineLimit(1)
                 Text(job.detail ?? job.state.title)
                     .font(.caption2)
-                    .foregroundStyle(job.state == .failed ? .red.opacity(0.85) : .tertiary)
+                    .foregroundStyle(job.state == .failed ? Color.red.opacity(0.85) : Color.secondary)
                     .lineLimit(2)
             }
 

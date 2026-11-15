@@ -195,12 +195,12 @@ final class PlayerManager: ObservableObject {
                 try? await Task.sleep(
                     nanoseconds: UInt64((fadeSeconds / Double(steps)) * 1_000_000_000)
                 )
-                guard !Task.isCancelled, let self else { return }
+                guard !Task.isCancelled else { return }
                 let progress = Double(step) / Double(steps)
                 self.player.volume = Float(1 - progress)
             }
 
-            guard !Task.isCancelled, let self else { return }
+            guard !Task.isCancelled else { return }
             self.pause()
             self.player.volume = 1
             self.sleepTimerEnd = nil
