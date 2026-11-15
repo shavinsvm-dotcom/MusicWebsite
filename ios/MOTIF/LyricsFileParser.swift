@@ -12,7 +12,7 @@ enum LyricsFileParser {
         var nextID = 0
 
         for sourceLine in sourceLines {
-            let words = (sourceLine.words ?? []).enumerated().compactMap { index, word -> LyricWord? in
+            var words = (sourceLine.words ?? []).enumerated().compactMap { index, word -> LyricWord? in
                 guard let start = word.startMs, start.isFinite, start >= 0 else { return nil }
                 let end = word.endMs.flatMap { value in
                     value.isFinite && value >= start ? value : nil
@@ -23,6 +23,12 @@ enum LyricsFileParser {
                     start: start / 1000,
                     end: end.map { $0 / 1000 }
                 )
+            }
+
+            for index in words.indices where words[index].end == nil {
+                if index + 1 < words.count {
+                    words[index].end = words[index + 1].start
+                }
             }
 
             let lineStart = sourceLine.startMs.flatMap { value in

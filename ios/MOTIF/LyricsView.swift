@@ -154,13 +154,19 @@ enum LyricsParser {
             return (text.trimmingCharacters(in: .whitespacesAndNewlines), [])
         }
 
-        let words = parsed.enumerated().map { index, word in
+        var words = parsed.enumerated().map { index, word in
             LyricWord(
                 id: index,
                 text: word.text,
                 start: word.start,
                 end: word.end
             )
+        }
+
+        for index in words.indices where words[index].end == nil {
+            if index + 1 < words.count {
+                words[index].end = words[index + 1].start
+            }
         }
 
         let joined = words
