@@ -46,7 +46,8 @@ final class PlayerManager: ObservableObject {
 
     var automixBPM: Int? {
         guard automixEnabled, let current,
-              let grid = automixAnalysis.grid(for: current)
+              let grid = automixAnalysis.grid(for: current),
+              grid.confidence >= 0.18
         else { return nil }
         return Int(grid.bpm.rounded())
     }
