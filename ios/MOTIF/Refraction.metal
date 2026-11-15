@@ -27,8 +27,9 @@ using namespace metal;
     half4 warm = layer.sample(samplePoint + direction * (1.1 * strength));
     half4 cool = layer.sample(samplePoint - direction * (1.1 * strength));
 
-    color.r = mix(color.r, warm.r, 0.40);
-    color.b = mix(color.b, cool.b, 0.40);
+    half blend = half(0.40);
+    color.r = mix(color.r, warm.r, blend);
+    color.b = mix(color.b, cool.b, blend);
 
     half caustic = half(lens * strength) * half(0.045);
     color.rgb += half3(0.70, 0.84, 1.0) * caustic;
