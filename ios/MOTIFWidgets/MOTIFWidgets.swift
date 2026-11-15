@@ -44,7 +44,7 @@ struct MOTIFNowPlayingWidget: Widget {
             MOTIFNowPlayingWidgetView(entry: entry)
         }
         .configurationDisplayName("Now Playing")
-        .description("Your current MOTIF track and playback progress.")
+        .description("Your current Lilt track and playback progress.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
@@ -112,9 +112,9 @@ private struct MOTIFNowPlayingWidgetView: View {
             Image(systemName: "waveform")
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(.secondary)
-            Text("MOTIF")
-                .font(.system(size: 15, weight: .bold))
-                .tracking(-0.3)
+            Text("lilt")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .tracking(-0.5)
             Text("Play a song to see it here.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
@@ -191,7 +191,7 @@ struct MOTIFLibraryWidget: Widget {
             MOTIFLibraryWidgetView(entry: entry)
         }
         .configurationDisplayName("Your Library")
-        .description("A quick look at your MOTIF library and recent songs.")
+        .description("A quick look at your Lilt library and recent songs.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }

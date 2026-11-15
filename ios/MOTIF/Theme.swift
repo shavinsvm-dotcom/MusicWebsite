@@ -454,6 +454,18 @@ final class SpatialAudioMonitor: ObservableObject {
     }
 }
 
+struct LiltWordmark: View {
+    var height: CGFloat = 18
+
+    var body: some View {
+        Image("LiltWordmark")
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
+            .accessibilityLabel("Lilt")
+    }
+}
+
 struct SectionTitle: View {
     let title: String
 

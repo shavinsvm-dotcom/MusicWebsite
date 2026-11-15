@@ -67,10 +67,8 @@ struct HomeView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("MOTIF")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(2.4)
-                    .foregroundStyle(.secondary)
+                LiltWordmark()
+                    .opacity(0.92)
 
                 Text(greeting)
                     .font(.system(size: 33, weight: .semibold))

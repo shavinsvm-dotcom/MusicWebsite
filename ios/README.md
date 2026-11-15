@@ -1,6 +1,10 @@
-# MOTIF for iOS
+# Lilt for iOS
 
 A native SwiftUI music app. No website or web view.
+
+The Xcode project, target, scheme, bundle identifier, app group, URL scheme and
+widget kinds remain MOTIF/motif internally so existing installs and shared data
+keep working. Lilt is the display name.
 
 ## What it does
 

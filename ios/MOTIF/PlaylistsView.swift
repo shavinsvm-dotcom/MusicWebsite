@@ -670,7 +670,7 @@ struct PlaylistDetailView: View {
                             Label("Duplicate", systemImage: "plus.square.on.square")
                         }
 
-                        ShareLink(item: "\(playlist.name) — a playlist on MOTIF") {
+                        ShareLink(item: "\(playlist.name) — a playlist on Lilt") {
                             Label("Share", systemImage: "square.and.arrow.up")
                         }
                     }

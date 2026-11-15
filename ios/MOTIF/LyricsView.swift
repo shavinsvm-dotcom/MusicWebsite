@@ -532,7 +532,7 @@ struct LyricsView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            Text("MOTIF checks automatically when a track starts, preferring word-synced lyrics that fit the recording.")
+            Text("Lilt checks automatically when a track starts, preferring word-synced lyrics that fit the recording.")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)

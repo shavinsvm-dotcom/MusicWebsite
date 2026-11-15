@@ -106,7 +106,7 @@ enum LyricsServiceError: LocalizedError {
 
 enum LyricsService {
     private static let baseURL = "https://lrclib.net"
-    private static let userAgent = "MOTIF/1.0 (https://github.com/shavinsvm-dotcom/MusicWebsite)"
+    private static let userAgent = "Lilt/1.0 (https://github.com/shavinsvm-dotcom/MusicWebsite)"
 
     /// Finds the best available lyrics record for a library track.
     ///

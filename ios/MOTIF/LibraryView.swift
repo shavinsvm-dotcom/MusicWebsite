@@ -378,7 +378,7 @@ struct LibraryView: View {
                         .font(.system(size: 21, weight: .semibold))
                         .tracking(-0.3)
 
-                    Text("Sync your Tigris library to bring your cloud songs into MOTIF.")
+                    Text("Sync your Tigris library to bring your cloud songs into Lilt.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
