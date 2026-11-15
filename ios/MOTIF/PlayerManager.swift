@@ -1,8 +1,10 @@
 import AVFoundation
+import ActivityKit
 import Combine
 import Foundation
 import MediaPlayer
 import UIKit
+import WidgetKit
 
 @MainActor
 final class PlaybackProgress: ObservableObject {
@@ -76,6 +78,9 @@ final class PlayerManager: ObservableObject {
     private var isCrossfading = false
     private var sleepTask: Task<Void, Never>?
     private let automixAnalysis = AutomixAnalysisService.shared
+    @available(iOS 16.2, *)
+    private var liveActivity: Activity<MusicActivityAttributes>?
+    private var liveActivitySignature: String?
 
     init() {
         configureAudioSession()
@@ -810,6 +815,24 @@ final class PlayerManager: ObservableObject {
             Task { @MainActor in self?.seek(to: event.positionTime) }
             return .success
         }
+
+        center.skipForwardCommand.preferredIntervals = [15]
+        center.skipForwardCommand.addTarget { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.seek(to: self.elapsed + 15)
+            }
+            return .success
+        }
+
+        center.skipBackwardCommand.preferredIntervals = [15]
+        center.skipBackwardCommand.addTarget { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.seek(to: max(0, self.elapsed - 15))
+            }
+            return .success
+        }
     }
 
     private func updateNowPlaying() {
@@ -817,16 +840,26 @@ final class PlayerManager: ObservableObject {
             nowPlayingArtwork = nil
             nowPlayingArtworkURL = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            SharedNowPlaying.clear()
+            WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
+            endLiveActivity()
             return
         }
+
+        defer { updatePlaybackSurfaces(for: track) }
 
         var info: [String: Any] = [
             MPMediaItemPropertyTitle: track.title,
             MPMediaItemPropertyArtist: track.artist,
             MPMediaItemPropertyAlbumTitle: track.album,
+            MPMediaItemPropertyAlbumArtist: track.artist,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
-            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0,
+            MPNowPlayingInfoPropertyIsLiveStream: false,
+            MPNowPlayingInfoPropertyExternalContentIdentifier: "motif:\(track.id.uuidString)",
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue
         ]
 
         guard let artworkURL = track.artworkURL else {
@@ -854,5 +887,68 @@ final class PlayerManager: ObservableObject {
                 self.updateNowPlaying()
             }
         }.resume()
+    }
+
+    private func updatePlaybackSurfaces(for track: Track) {
+        let snapshot = SharedNowPlaying(
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            artworkURL: track.artworkURL?.absoluteString,
+            isPlaying: isPlaying,
+            elapsed: elapsed,
+            duration: duration,
+            updatedAt: Date()
+        )
+        SharedNowPlaying.save(snapshot)
+        WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
+        syncLiveActivity(for: track)
+    }
+
+    private func syncLiveActivity(for track: Track) {
+        guard #available(iOS 16.2, *) else { return }
+
+        let signature = "\(track.id.uuidString)-\(isPlaying)-\(Int(elapsed))\(Int(duration))"
+        guard signature != liveActivitySignature else { return }
+        liveActivitySignature = signature
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+
+        let state = MusicActivityAttributes.ContentState(
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            isPlaying: isPlaying,
+            elapsed: elapsed,
+            duration: duration,
+            updatedAt: Date()
+        )
+
+        if let liveActivity {
+            Task {
+                await liveActivity.update(ActivityContent(state: state, staleDate: nil))
+            }
+        } else {
+            do {
+                liveActivity = try Activity.request(
+                    attributes: MusicActivityAttributes(trackID: track.id.uuidString),
+                    content: ActivityContent(state: state, staleDate: nil),
+                    pushType: nil
+                )
+            } catch {
+                liveActivitySignature = nil
+            }
+        }
+    }
+
+    private func endLiveActivity() {
+        guard #available(iOS 16.2, *) else { return }
+        liveActivitySignature = nil
+        let activities = Activity<MusicActivityAttributes>.activities
+        liveActivity = nil
+        Task {
+            for activity in activities {
+                await activity.end(nil, dismissalPolicy: .immediate)
+            }
+        }
     }
 }
