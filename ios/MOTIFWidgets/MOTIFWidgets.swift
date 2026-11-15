@@ -67,6 +67,7 @@ private struct MOTIFNowPlayingWidgetView: View {
             }
         }
         .widgetBackground(Color(red: 0.06, green: 0.06, blue: 0.08))
+        .widgetURL(URL(string: "motif://nowplaying"))
     }
 
     private func content(_ snapshot: SharedNowPlaying) -> some View {
@@ -176,6 +177,7 @@ struct MOTIFLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: MusicActivityAttributes.self) { context in
             LiveActivityLockScreenView(state: context.state)
+                .widgetURL(URL(string: "motif://nowplaying"))
                 .activityBackgroundTint(Color(red: 0.06, green: 0.06, blue: 0.08))
                 .activitySystemActionForegroundColor(.white)
         } dynamicIsland: { context in

@@ -54,6 +54,10 @@ struct RootView: View {
                         )
                     )
             }
+            .onOpenURL { url in
+                guard url.scheme == "motif", url.host == "nowplaying" else { return }
+                showNowPlaying = true
+            }
             .task {
                 player.onTrackStarted = { track in
                     library.recordPlay(track)
