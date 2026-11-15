@@ -235,7 +235,7 @@ private struct LyricsResultRow: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
 
-                Text(record.isSynced ? "SYNCED" : "PLAIN")
+                Text(record.isWordSynced ? "WORD SYNC" : (record.isSynced ? "SYNCED" : "PLAIN"))
                     .font(.system(size: 8, weight: .bold))
                     .tracking(0.7)
                     .foregroundStyle(record.isSynced ? Color.green : Color.secondary)
@@ -279,7 +279,7 @@ private struct LyricsMatchView: View {
                     HStack(spacing: 8) {
                         Text(record.durationText)
                         Text("·")
-                        Text(record.isSynced ? "Synced lyrics" : "Plain lyrics")
+                        Text(record.isWordSynced ? "Word-synced lyrics" : (record.isSynced ? "Synced lyrics" : "Plain lyrics"))
                         if record.instrumental == true {
                             Text("·")
                             Text("Instrumental")
@@ -312,21 +312,30 @@ private struct LyricsMatchView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(saved ? "Saved" : "Use Lyrics") {
-                    if let lyrics = record.lyricsText {
-                        library.setLyrics(lyrics, for: track)
+                    if record.hasUsableLyrics {
+                        library.setLyrics(
+                            record.lyricsText,
+                            lyricsFile: record.lyricsfile,
+                            for: track
+                        )
                         saved = true
                     }
                 }
                 .fontWeight(.semibold)
-                .disabled(saved || record.lyricsText == nil)
+                .disabled(saved || !record.hasUsableLyrics)
             }
         }
     }
 
     private var displayLyrics: String? {
+        if let lyricsfile = record.lyricsfile,
+           let plain = LyricsFileParser.plainText(from: lyricsfile) {
+            return plain
+        }
+
         guard let lyrics = record.lyricsText else { return nil }
         let stripped = lyrics.replacingOccurrences(
-            of: "\\[\\d{1,2}:\\d{2}(?:\\.\\d{1,2})?\\]",
+            of: "\\[\\d{1,3}:\\d{2}(?:\\.\\d{1,3})?\\]|<\\d{1,3}:\\d{2}(?:\\.\\d{1,3})?>",
             with: "",
             options: .regularExpression
         )

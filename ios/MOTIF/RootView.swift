@@ -90,18 +90,26 @@ struct RootView: View {
                     await PlaybackBackdropCache.shared.prepare(for: url)
                 }
 
-                // An offline track should have its lyrics available offline too.
-                // New downloads fetch them during download; this covers files
-                // that were downloaded before lyrics lookup was added.
-                guard track.mediaURL.isFileURL,
-                      track.lyrics == nil,
+                // Auto-fetch lyrics for any library track that does not have
+                // them yet. The matcher only accepts candidates that fit the
+                // track's duration, so this will not silently save a live or
+                // remix version just because it was the only search result.
+                guard track.lyrics == nil,
+                      track.lyricsFile == nil,
                       !attemptedLyricsIDs.contains(track.id)
                 else { return }
 
                 attemptedLyricsIDs.insert(track.id)
-                if let record = try? await LyricsService.findLyrics(for: track),
-                   let lyrics = record.lyricsText {
-                    library.setLyrics(lyrics, for: track)
+                let audioDuration = player.duration > 0 ? player.duration : nil
+                if let record = try? await LyricsService.findLyrics(
+                    for: track,
+                    audioDuration: audioDuration
+                ), record.hasUsableLyrics {
+                    library.setLyrics(
+                        record.lyricsText,
+                        lyricsFile: record.lyricsfile,
+                        for: track
+                    )
                 }
             }
     }

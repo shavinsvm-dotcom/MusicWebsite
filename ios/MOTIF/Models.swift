@@ -20,6 +20,8 @@ struct Track: Identifiable, Codable, Hashable {
     var streamURL: URL? = nil
     var addedAt: Date = Date()
     var lyrics: String? = nil
+    /// Raw LRCLIB Lyricsfile YAML when the record has word-level timings.
+    var lyricsFile: String? = nil
     /// "tags", "filename", or "ai". Optional so older library.json files decode.
     var metadataSource: String? = nil
 

@@ -1,24 +1,41 @@
 import Foundation
 import SwiftUI
 
+struct LyricWord: Identifiable, Equatable {
+    let id: Int
+    let text: String
+    let start: TimeInterval
+    var end: TimeInterval?
+}
+
 struct LyricLine: Identifiable, Equatable {
     let id: Int
     let timestamp: TimeInterval?
+    var end: TimeInterval?
     let text: String
+    var words: [LyricWord]
 
     var isTimed: Bool { timestamp != nil }
+    var isWordTimed: Bool { !words.isEmpty }
 }
 
 struct LyricsDocument {
     let lines: [LyricLine]
     let isSynced: Bool
 
+    var isWordSynced: Bool {
+        lines.contains { !$0.words.isEmpty }
+    }
+
     static let empty = LyricsDocument(lines: [], isSynced: false)
 }
 
 enum LyricsParser {
-    private static let timestampRegex = try! NSRegularExpression(
+    private static let lineTimestampRegex = try! NSRegularExpression(
         pattern: "\\[(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?\\]"
+    )
+    private static let wordTimestampRegex = try! NSRegularExpression(
+        pattern: "<(\\d{1,3}):(\\d{2})(?:\\.(\\d{1,3}))?>"
     )
 
     static func parse(_ raw: String) -> LyricsDocument {
@@ -39,45 +56,47 @@ enum LyricsParser {
             }
 
             let range = NSRange(location: 0, length: (line as NSString).length)
-            let matches = timestampRegex.matches(in: line, range: range)
+            let lineMatches = lineTimestampRegex.matches(in: line, range: range)
 
-            guard !matches.isEmpty else {
+            guard !lineMatches.isEmpty else {
                 if !line.hasPrefix("[") {
                     plain.append(line)
                 }
                 continue
             }
 
-            let text = timestampRegex
+            let text = lineTimestampRegex
                 .stringByReplacingMatches(in: line, range: range, withTemplate: "")
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { continue }
 
-            for match in matches {
-                guard
-                    let minuteRange = Range(match.range(at: 1), in: line),
-                    let secondRange = Range(match.range(at: 2), in: line),
-                    let minutes = Double(line[minuteRange]),
-                    let seconds = Double(line[secondRange])
-                else { continue }
+            let parsedWords = makeWords(from: text)
 
-                var fraction = 0.0
-                if match.range(at: 3).location != NSNotFound,
-                   let fractionRange = Range(match.range(at: 3), in: line) {
-                    fraction = Double("0.\(line[fractionRange])") ?? 0
-                }
-
-                timed.append(LyricLine(
-                    id: nextID,
-                    timestamp: minutes * 60 + seconds + fraction,
-                    text: text
-                ))
+            for match in lineMatches {
+                guard let timestamp = seconds(from: match, in: line) else { continue }
+                timed.append(
+                    LyricLine(
+                        id: nextID,
+                        timestamp: timestamp,
+                        end: nil,
+                        text: parsedWords.text.isEmpty ? text : parsedWords.text,
+                        words: parsedWords.words
+                    )
+                )
                 nextID += 1
             }
         }
 
         if !timed.isEmpty {
             timed.sort { ($0.timestamp ?? 0) < ($1.timestamp ?? 0) }
+            for index in timed.indices {
+                let nextStart = index + 1 < timed.count ? timed[index + 1].timestamp : nil
+                timed[index].end = nextStart
+                for wordIndex in timed[index].words.indices where timed[index].words[wordIndex].end == nil {
+                    timed[index].words[wordIndex].end = nextStart
+                        ?? (timed[index].words[wordIndex].start + 0.4)
+                }
+            }
             return LyricsDocument(lines: timed, isSynced: true)
         }
 
@@ -86,10 +105,87 @@ enum LyricsParser {
 
         return LyricsDocument(
             lines: plain.enumerated().map { index, text in
-                LyricLine(id: index, timestamp: nil, text: text)
+                LyricLine(id: index, timestamp: nil, end: nil, text: text, words: [])
             },
             isSynced: false
         )
+    }
+
+    private static func makeWords(from text: String) -> (text: String, words: [LyricWord]) {
+        let range = NSRange(location: 0, length: (text as NSString).length)
+        let matches = wordTimestampRegex.matches(in: text, range: range)
+        guard !matches.isEmpty else {
+            return (text.trimmingCharacters(in: .whitespacesAndNewlines), [])
+        }
+
+        struct ParsedWord {
+            let start: TimeInterval
+            let text: String
+            var end: TimeInterval?
+        }
+
+        var parsed: [ParsedWord] = []
+
+        for (index, match) in matches.enumerated() {
+            guard let start = seconds(from: match, in: text) else { continue }
+
+            let segmentStart = match.range.location + match.range.length
+            let segmentEnd = index + 1 < matches.count
+                ? matches[index + 1].range.location
+                : (text as NSString).length
+            guard segmentStart <= segmentEnd else { continue }
+
+            let segment = (text as NSString).substring(
+                with: NSRange(location: segmentStart, length: segmentEnd - segmentStart)
+            )
+
+            if segment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                // A trailing empty word tag gives the preceding word an explicit end.
+                if !parsed.isEmpty {
+                    parsed[parsed.count - 1].end = start
+                }
+                continue
+            }
+
+            parsed.append(ParsedWord(start: start, text: segment, end: nil))
+        }
+
+        guard !parsed.isEmpty else {
+            return (text.trimmingCharacters(in: .whitespacesAndNewlines), [])
+        }
+
+        let words = parsed.enumerated().map { index, word in
+            LyricWord(
+                id: index,
+                text: word.text,
+                start: word.start,
+                end: word.end
+            )
+        }
+
+        let joined = words
+            .map(\.text)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return (joined, words)
+    }
+
+    private static func seconds(from match: NSTextCheckingResult, in string: String) -> TimeInterval? {
+        guard
+            let minuteRange = Range(match.range(at: 1), in: string),
+            let secondRange = Range(match.range(at: 2), in: string),
+            let minutes = Double(string[minuteRange]),
+            let seconds = Double(string[secondRange])
+        else { return nil }
+
+        var fraction = 0.0
+        if match.range(at: 3).location != NSNotFound,
+           let fractionRange = Range(match.range(at: 3), in: string) {
+            fraction = Double("0.\(string[fractionRange])") ?? 0
+        }
+
+        return minutes * 60 + seconds + fraction
     }
 }
 
@@ -100,6 +196,7 @@ struct LyricsView: View {
     let track: Track
 
     @State private var activeIndex: Int?
+    @State private var activeWordIndex: Int?
     @State private var showFinder = false
 
     private var currentTrack: Track {
@@ -110,6 +207,12 @@ struct LyricsView: View {
     }
 
     private var document: LyricsDocument {
+        if let lyricsFile = currentTrack.lyricsFile,
+           !lyricsFile.isEmpty,
+           let parsed = LyricsFileParser.parse(lyricsFile) {
+            return parsed
+        }
+
         guard let lyrics = currentTrack.lyrics, !lyrics.isEmpty else { return .empty }
         return LyricsParser.parse(lyrics)
     }
@@ -175,7 +278,15 @@ struct LyricsView: View {
                         .tracking(1.2)
                         .foregroundStyle(.secondary)
 
-                    if document.isSynced {
+                    if document.isWordSynced {
+                        Text("WORD SYNC")
+                            .font(.system(size: 8, weight: .bold))
+                            .tracking(0.8)
+                            .foregroundStyle(.white.opacity(0.78))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.white.opacity(0.14), in: Capsule())
+                    } else if document.isSynced {
                         Text("SYNCED")
                             .font(.system(size: 8, weight: .bold))
                             .tracking(0.8)
@@ -207,23 +318,30 @@ struct LyricsView: View {
 
     private var syncedLyrics: some View {
         VStack(alignment: .leading, spacing: 0) {
-            LyricsPlayhead(lines: document.lines) { index in
-                if activeIndex != index {
-                    activeIndex = index
+            LyricsPlayhead(lines: document.lines) { lineIndex, wordIndex in
+                if activeIndex != lineIndex {
+                    activeIndex = lineIndex
+                    activeWordIndex = wordIndex
+                } else if activeWordIndex != wordIndex {
+                    activeWordIndex = wordIndex
                 }
             }
 
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(document.lines.enumerated()), id: \.element.id) { index, line in
-                let isActive = index == activeIndex
+                    let isActive = index == activeIndex
 
-                HStack(alignment: .top, spacing: 12) {
-                    Capsule()
-                        .fill(isActive ? Color.white.opacity(0.92) : Color.clear)
-                        .frame(width: 2, height: isActive ? 25 : 0)
-                        .padding(.top, 4)
+                    HStack(alignment: .top, spacing: 12) {
+                        Capsule()
+                            .fill(isActive ? Color.white.opacity(0.92) : Color.clear)
+                            .frame(width: 2, height: isActive ? 25 : 0)
+                            .padding(.top, 4)
 
-                    Text(line.text)
+                        lyricText(
+                            for: line,
+                            isActive: isActive,
+                            activeWord: isActive ? activeWordIndex : nil
+                        )
                         .font(.system(
                             size: isActive ? 29 : 25,
                             weight: isActive ? .bold : .semibold,
@@ -231,17 +349,48 @@ struct LyricsView: View {
                         ))
                         .tracking(-0.35)
                         .lineSpacing(isActive ? 8 : 6)
-                        .foregroundStyle(isActive ? Color.white : Color.white.opacity(0.38))
                         .scaleEffect(isActive ? 1 : 0.985, anchor: .leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .animation(.easeInOut(duration: 0.24), value: isActive)
-                }
+                        .animation(.easeInOut(duration: 0.12), value: activeWordIndex)
+                    }
                     .padding(.vertical, isActive ? 12 : 8)
                     .id(line.id)
                 }
             }
         }
         .padding(.top, 4)
+    }
+
+    private func lyricText(for line: LyricLine, isActive: Bool, activeWord: Int?) -> Text {
+        guard !line.words.isEmpty else {
+            return Text(line.text)
+                .foregroundColor(isActive ? .white : .white.opacity(0.38))
+        }
+
+        var result = Text("")
+        for (index, word) in line.words.enumerated() {
+            var part = Text(word.text)
+
+            if isActive {
+                if let activeWord {
+                    if index < activeWord {
+                        part = part.foregroundColor(.white)
+                    } else if index == activeWord {
+                        part = part.foregroundColor(.white).fontWeight(.bold)
+                    } else {
+                        part = part.foregroundColor(.white.opacity(0.38))
+                    }
+                } else {
+                    part = part.foregroundColor(.white.opacity(0.38))
+                }
+            } else {
+                part = part.foregroundColor(.white.opacity(0.38))
+            }
+
+            result = result + part
+        }
+        return result
     }
 
     private var plainLyrics: some View {
@@ -299,29 +448,37 @@ struct LyricsView: View {
 }
 
 /// Small invisible observer so the large lyric list does not redraw on every
-/// playback-progress tick. It publishes only when the active line changes.
+/// playback-progress tick. It publishes only when the active line or word changes.
 private struct LyricsPlayhead: View {
     @EnvironmentObject private var progress: PlaybackProgress
 
     let lines: [LyricLine]
-    let onChange: (Int?) -> Void
+    let onChange: (Int?, Int?) -> Void
 
     var body: some View {
         Color.clear
             .frame(height: 1)
             .onAppear {
-                onChange(index(for: progress.elapsed))
+                let state = state(for: progress.elapsed)
+                onChange(state.line, state.word)
             }
             .onChange(of: progress.elapsed) { elapsed in
-                onChange(index(for: elapsed))
+                let state = state(for: elapsed)
+                onChange(state.line, state.word)
             }
     }
 
-    private func index(for elapsed: Double) -> Int? {
+    private func state(for elapsed: Double) -> (line: Int?, word: Int?) {
         let time = elapsed + 0.06
-        return lines.lastIndex(where: { line in
+        guard let lineIndex = lines.lastIndex(where: { line in
             guard let timestamp = line.timestamp else { return false }
             return timestamp <= time
-        })
+        }) else { return (nil, nil) }
+
+        let words = lines[lineIndex].words
+        guard !words.isEmpty else { return (lineIndex, nil) }
+
+        let wordIndex = words.lastIndex(where: { $0.start <= time })
+        return (lineIndex, wordIndex)
     }
 }

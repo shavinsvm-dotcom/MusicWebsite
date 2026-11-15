@@ -410,6 +410,12 @@ final class LibraryStore: ObservableObject {
             let downloadedAsset = AVURLAsset(url: destination)
             let downloadedItems = (try? await downloadedAsset.load(.metadata)) ?? []
             let downloadedLyrics = await lyrics(in: downloadedItems)
+            let loadedDuration = try? await downloadedAsset.load(.duration)
+            let downloadedDuration: TimeInterval? = {
+                guard let loadedDuration else { return nil }
+                let seconds = CMTimeGetSeconds(loadedDuration)
+                return seconds.isFinite && seconds > 0 ? seconds : nil
+            }()
 
             if let index = tracks.firstIndex(where: { $0.id == existing.id }) {
                 tracks[index].mediaURL = destination
@@ -426,9 +432,16 @@ final class LibraryStore: ObservableObject {
             // file has none, ask LRCLIB and persist the result in the library.
             if downloadedLyrics == nil,
                tracks.first(where: { $0.id == existing.id })?.lyrics == nil,
-               let record = try? await LyricsService.findLyrics(for: existing),
-               let onlineLyrics = record.lyricsText {
-                setLyrics(onlineLyrics, for: existing)
+               let record = try? await LyricsService.findLyrics(
+                   for: existing,
+                   audioDuration: downloadedDuration
+               ),
+               record.hasUsableLyrics {
+                setLyrics(
+                    record.lyricsText,
+                    lyricsFile: record.lyricsfile,
+                    for: existing
+                )
             }
 
             updateDownloadJob(jobID, state: .completed)
@@ -744,14 +757,17 @@ final class LibraryStore: ObservableObject {
         if changed { save() }
     }
 
-    func setLyrics(_ lyrics: String, for track: Track) {
+    func setLyrics(_ lyrics: String?, lyricsFile: String? = nil, for track: Track) {
         guard let existing = canonicalTrack(for: track),
               let index = tracks.firstIndex(where: { $0.id == existing.id })
         else { return }
 
-        let trimmed = lyrics.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        tracks[index].lyrics = lyrics
+        let trimmedLyrics = lyrics?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedFile = lyricsFile?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedLyrics.isEmpty || !trimmedFile.isEmpty else { return }
+
+        tracks[index].lyrics = trimmedLyrics.isEmpty ? nil : lyrics
+        tracks[index].lyricsFile = trimmedFile.isEmpty ? nil : lyricsFile
         save()
     }
 

@@ -10,6 +10,11 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
 
+packages:
+  Yams:
+    url: https://github.com/jpsim/Yams.git
+    from: 5.0.0
+
 targets:
   MOTIF:
     type: application
@@ -30,6 +35,7 @@ targets:
     dependencies:
       - target: MOTIFWidgets
         embed: true
+      - package: Yams
 
   MOTIFWidgets:
     type: app-extension

@@ -8,8 +8,10 @@ struct LyricsRecord: Identifiable, Codable, Hashable {
     let albumName: String?
     let duration: Double?
     let instrumental: Bool?
+    let hasWordSync: Bool?
     let plainLyrics: String?
     let syncedLyrics: String?
+    let lyricsfile: String?
 
     var lyricsText: String? {
         guard instrumental != true else { return nil }
@@ -22,7 +24,18 @@ struct LyricsRecord: Identifiable, Codable, Hashable {
         return nil
     }
 
+    var isWordSynced: Bool {
+        guard instrumental != true else { return false }
+        guard hasWordSync == true else { return false }
+        return !(lyricsfile ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var hasUsableLyrics: Bool {
+        instrumental != true && (lyricsText != nil || isWordSynced)
+    }
+
     var isSynced: Bool {
+        if isWordSynced { return true }
         guard let syncedLyrics else { return false }
         return !syncedLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -65,10 +78,19 @@ enum LyricsService {
     private static let userAgent = "MOTIF/1.0 (https://github.com/shavinsvm-dotcom/MusicWebsite)"
 
     /// Finds the best available lyrics record for a library track.
-    static func findLyrics(for track: Track) async throws -> LyricsRecord? {
+    ///
+    /// When the audio duration is known, candidates that do not fit the track
+    /// or whose lyric timestamps run past the audio are rejected. This prevents
+    /// a live or remix version from winning just because it is the only result.
+    static func findLyrics(
+        for track: Track,
+        audioDuration: TimeInterval? = nil
+    ) async throws -> LyricsRecord? {
         let title = track.title.trimmingCharacters(in: .whitespacesAndNewlines)
         let artist = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !artist.isEmpty else { return nil }
+
+        let duration = usableDuration(audioDuration) ?? usableDuration(track.duration)
 
         var exactItems = [
             URLQueryItem(name: "track_name", value: title),
@@ -80,22 +102,29 @@ enum LyricsService {
             exactItems.append(URLQueryItem(name: "album_name", value: album))
         }
 
-        if track.duration.isFinite, track.duration >= 1, track.duration <= 3600 {
+        if let duration {
             exactItems.append(URLQueryItem(
                 name: "duration",
-                value: String(Int(track.duration.rounded()))
+                value: String(Int(duration.rounded()))
             ))
         }
 
         if let exact = try await fetchRecord(path: "/api/get", queryItems: exactItems),
-           exact.lyricsText != nil {
+           exact.hasUsableLyrics,
+           isAcceptable(exact, for: track, duration: duration) {
             return exact
         }
 
         let candidates = try await search(title: title, artist: artist)
         return candidates
-            .filter { $0.lyricsText != nil }
-            .min { rank($0, for: track) < rank($1, for: track) }
+            .filter {
+                $0.hasUsableLyrics
+                    && isAcceptable($0, for: track, duration: duration)
+            }
+            .max {
+                score($0, for: track, duration: duration)
+                    < score($1, for: track, duration: duration)
+            }
     }
 
     /// Searches LRCLIB using editable title and artist fields.
@@ -125,21 +154,140 @@ enum LyricsService {
         return results
     }
 
-    private static func rank(_ record: LyricsRecord, for track: Track) -> Double {
+    private static func usableDuration(_ value: TimeInterval?) -> TimeInterval? {
+        guard let value, value.isFinite, value >= 1, value <= 3600 else { return nil }
+        return value
+    }
+
+    private static func isAcceptable(
+        _ record: LyricsRecord,
+        for track: Track,
+        duration: TimeInterval?
+    ) -> Bool {
+        guard record.hasUsableLyrics else { return false }
+        guard !hasAlternateVersionMismatch(record, track: track) else { return false }
+
+        if let duration {
+            if let recordDuration = record.duration,
+               recordDuration.isFinite,
+               recordDuration >= 1 {
+                let tolerance = max(3.0, min(8.0, duration * 0.03))
+                guard abs(recordDuration - duration) <= tolerance else { return false }
+            }
+
+            guard timestampsFit(record, duration: duration) else { return false }
+        }
+
+        return true
+    }
+
+    private static func timestampsFit(_ record: LyricsRecord, duration: TimeInterval) -> Bool {
+        let document: LyricsDocument?
+        if record.isWordSynced, let lyricsfile = record.lyricsfile {
+            document = LyricsFileParser.parse(lyricsfile)
+        } else if let syncedLyrics = record.syncedLyrics {
+            document = LyricsParser.parse(syncedLyrics)
+        } else {
+            return true
+        }
+
+        guard let document, document.isSynced else { return true }
+        guard let first = document.lines.first?.timestamp,
+              let last = document.lines.last?.timestamp
+        else { return true }
+
+        guard first >= -1, first <= duration + 2, last <= duration + 2 else {
+            return false
+        }
+
+        let wordEndsOutOfBounds = document.lines.contains { line in
+            line.words.contains { word in
+                word.start > duration + 2
+                    || (word.end ?? word.start) > duration + 3
+            }
+        }
+        return !wordEndsOutOfBounds
+    }
+
+    private static func score(
+        _ record: LyricsRecord,
+        for track: Track,
+        duration: TimeInterval?
+    ) -> Double {
         var score = 0.0
-        if let duration = record.duration, track.duration > 0 {
-            score += abs(duration - track.duration)
-        }
+
         if normalize(record.trackName) == normalize(track.title) {
-            score -= 100
+            score += 1000
+        } else if normalize(record.trackName).contains(normalize(track.title))
+                    || normalize(track.title).contains(normalize(record.trackName)) {
+            score += 250
         }
+
         if normalize(record.artistName) == normalize(track.artist) {
-            score -= 40
+            score += 400
         }
-        if record.isSynced {
-            score -= 5
+
+        if let recordAlbum = record.albumName,
+           !recordAlbum.isEmpty,
+           normalize(recordAlbum) == normalize(track.album) {
+            score += 60
         }
+
+        if let duration, let recordDuration = record.duration, recordDuration.isFinite {
+            score -= abs(recordDuration - duration) * 100
+        }
+
+        if record.isWordSynced {
+            score += 35
+        } else if record.isSynced {
+            score += 12
+        }
+
+        if let duration {
+            if let document = lyricsDocument(for: record),
+               let last = document.lines.last?.timestamp {
+                let coverage = last / duration
+                if coverage < 0.45 {
+                    score -= 30
+                } else if coverage > 0.85 {
+                    score += 15
+                }
+            }
+        }
+
         return score
+    }
+
+    private static func lyricsDocument(for record: LyricsRecord) -> LyricsDocument? {
+        if record.isWordSynced, let lyricsfile = record.lyricsfile {
+            return LyricsFileParser.parse(lyricsfile)
+        }
+        if let syncedLyrics = record.syncedLyrics {
+            return LyricsParser.parse(syncedLyrics)
+        }
+        return nil
+    }
+
+    private static func hasAlternateVersionMismatch(
+        _ record: LyricsRecord,
+        track: Track
+    ) -> Bool {
+        let markers = [
+            "live", "remix", "acoustic", "instrumental", "karaoke",
+            "cover", "sped", "nightcore", "demo", "reprise", "remaster"
+        ]
+        let recordTokens = Set(tokens(in: record.trackName))
+        let trackTokens = Set(tokens(in: track.title))
+        let recordMarkers = Set(markers.filter(recordTokens.contains))
+        let trackMarkers = Set(markers.filter(trackTokens.contains))
+        return !recordMarkers.subtracting(trackMarkers).isEmpty
+    }
+
+    private static func tokens(in value: String) -> [String] {
+        value
+            .lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
     }
 
     private static func normalize(_ value: String) -> String {
