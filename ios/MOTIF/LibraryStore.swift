@@ -1114,5 +1114,24 @@ final class LibraryStore: ObservableObject {
         } catch {
             errorMessage = "Couldn’t save your library: \(error.localizedDescription)"
         }
+
+        let recent = recentTracks.prefix(4).map { track in
+            SharedLibrarySnapshot.Item(
+                id: track.id.uuidString,
+                title: track.title,
+                artist: track.artist,
+                artworkURL: track.artworkURL?.absoluteString
+            )
+        }
+        let firstPlaylist = playlists.first
+        SharedLibrarySnapshot.save(
+            SharedLibrarySnapshot(
+                trackCount: tracks.count,
+                playlistCount: playlists.count,
+                recent: Array(recent),
+                playlistName: firstPlaylist?.name,
+                playlistArtworkURL: firstPlaylist?.customCoverURL?.absoluteString
+            )
+        )
     }
 }

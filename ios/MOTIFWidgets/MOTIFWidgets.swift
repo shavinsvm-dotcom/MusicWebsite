@@ -7,6 +7,7 @@ struct MOTIFWidgetBundle: WidgetBundle {
     @WidgetBundleBuilder
     var body: some Widget {
         MOTIFNowPlayingWidget()
+        MOTIFLibraryWidget()
 
         if #available(iOS 16.1, *) {
             MOTIFLiveActivity()
@@ -158,6 +159,141 @@ private struct MOTIFNowPlayingWidgetView: View {
     private func timeText(_ seconds: Double) -> String {
         let value = max(0, Int(seconds))
         return String(format: "%d:%02d", value / 60, value % 60)
+    }
+}
+
+struct LibraryEntry: TimelineEntry {
+    let date: Date
+    let snapshot: SharedLibrarySnapshot?
+}
+
+struct LibraryProvider: TimelineProvider {
+    func placeholder(in context: Context) -> LibraryEntry {
+        LibraryEntry(date: Date(), snapshot: nil)
+    }
+
+    func getSnapshot(in context: Context, completion: @escaping (LibraryEntry) -> Void) {
+        completion(LibraryEntry(date: Date(), snapshot: SharedLibrarySnapshot.load()))
+    }
+
+    func getTimeline(in context: Context, completion: @escaping (Timeline<LibraryEntry>) -> Void) {
+        let entry = LibraryEntry(date: Date(), snapshot: SharedLibrarySnapshot.load())
+        let next = Calendar.current.date(byAdding: .minute, value: 5, to: Date()) ?? Date().addingTimeInterval(300)
+        completion(Timeline(entries: [entry], policy: .after(next)))
+    }
+}
+
+struct MOTIFLibraryWidget: Widget {
+    let kind = "MOTIFLibrary"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: LibraryProvider()) { entry in
+            MOTIFLibraryWidgetView(entry: entry)
+        }
+        .configurationDisplayName("Your Library")
+        .description("A quick look at your MOTIF library and recent songs.")
+        .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+private struct MOTIFLibraryWidgetView: View {
+    @Environment(\.widgetFamily) private var family
+    let entry: LibraryEntry
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.10, green: 0.10, blue: 0.12), Color(red: 0.04, green: 0.04, blue: 0.05)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 6) {
+                    Image(systemName: "square.stack")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text("YOUR LIBRARY")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.0)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let snapshot = entry.snapshot {
+                    Text("\(snapshot.trackCount)")
+                        .font(.system(size: 32, weight: .bold))
+                        .tracking(-1)
+                    Text(snapshot.trackCount == 1 ? "song" : "songs")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+
+                    if family == .systemMedium, !snapshot.recent.isEmpty {
+                        Divider().opacity(0.4)
+                        ForEach(snapshot.recent.prefix(3)) { item in
+                            HStack(spacing: 7) {
+                                miniArtwork(item)
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(item.title)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .lineLimit(1)
+                                    Text(item.artist)
+                                        .font(.system(size: 9))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                        }
+                    } else if !snapshot.recent.isEmpty {
+                        Spacer(minLength: 0)
+                        Text(snapshot.recent[0].title)
+                            .font(.system(size: 10, weight: .medium))
+                            .lineLimit(1)
+                        Text(snapshot.recent[0].artist)
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                } else {
+                    Text("Add songs to see them here.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .widgetBackground(Color(red: 0.06, green: 0.06, blue: 0.08))
+        .widgetURL(URL(string: "motif://library"))
+    }
+
+    @ViewBuilder
+    private func miniArtwork(_ item: SharedLibrarySnapshot.Item) -> some View {
+        if let value = item.artworkURL, let url = URL(string: value) {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFill()
+                } else {
+                    miniArtworkFallback
+                }
+            }
+            .frame(width: 22, height: 22)
+            .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        } else {
+            miniArtworkFallback
+                .frame(width: 22, height: 22)
+        }
+    }
+
+    private var miniArtworkFallback: some View {
+        RoundedRectangle(cornerRadius: 4, style: .continuous)
+            .fill(Color.secondary.opacity(0.16))
+            .overlay {
+                Image(systemName: "music.note")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
     }
 }
 
