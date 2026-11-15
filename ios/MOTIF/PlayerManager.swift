@@ -137,6 +137,7 @@ final class PlayerManager: ObservableObject {
         upcoming.move(fromOffsets: source, toOffset: destination)
         queue = Array(queue.prefix(currentIndex + 1)) + upcoming
         automixNextIndex = nil
+        prepareAutomixAnalysis()
     }
 
     func setCrossfade(_ seconds: TimeInterval) {

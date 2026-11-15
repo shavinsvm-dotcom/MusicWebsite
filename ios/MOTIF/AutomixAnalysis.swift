@@ -87,16 +87,24 @@ final class AutomixAnalysisService {
 
     private let store = AutomixAnalysisStore.shared
     private var tasks: [String: Task<BeatGrid?, Never>] = [:]
+    private var memory: [UUID: BeatGrid] = [:]
 
     func grid(for track: Track) -> BeatGrid? {
-        store.grid(for: AutomixAnalysisStore.key(for: track))
+        if let cached = memory[track.id] {
+            return cached
+        }
+        guard let cached = store.grid(for: AutomixAnalysisStore.key(for: track)) else {
+            return nil
+        }
+        memory[track.id] = cached
+        return cached
     }
 
     func analyze(_ track: Track) async -> BeatGrid? {
         guard track.mediaURL.isFileURL else { return nil }
 
         let key = AutomixAnalysisStore.key(for: track)
-        if let cached = store.grid(for: key) {
+        if let cached = grid(for: track) {
             return cached
         }
         if let existing = tasks[key] {
@@ -114,6 +122,7 @@ final class AutomixAnalysisService {
         tasks[key] = nil
         if let result {
             store.store(result, for: key)
+            memory[track.id] = result
         }
         return result
     }
