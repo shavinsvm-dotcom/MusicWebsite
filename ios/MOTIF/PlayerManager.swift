@@ -78,8 +78,7 @@ final class PlayerManager: ObservableObject {
     private var isCrossfading = false
     private var sleepTask: Task<Void, Never>?
     private let automixAnalysis = AutomixAnalysisService.shared
-    @available(iOS 16.2, *)
-    private var liveActivity: Activity<MusicActivityAttributes>?
+    private var liveActivity: Any?
     private var liveActivitySignature: String?
 
     init() {
@@ -923,9 +922,9 @@ final class PlayerManager: ObservableObject {
             updatedAt: Date()
         )
 
-        if let liveActivity {
+        if let activity = liveActivity as? Activity<MusicActivityAttributes> {
             Task {
-                await liveActivity.update(ActivityContent(state: state, staleDate: nil))
+                await activity.update(ActivityContent(state: state, staleDate: nil))
             }
         } else {
             do {
