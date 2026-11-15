@@ -70,6 +70,12 @@ jobs:
           cp -R build/Build/Products/Release-iphoneos/MOTIF.app Payload/
           zip -qry MOTIF.ipa Payload
 
+      - name: Verify widget extension
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          unzip -l MOTIF.ipa | grep -q 'Payload/MOTIF.app/PlugIns/MOTIFWidgets.appex/MOTIFWidgets'
+
       - name: Verify IPA contents
         working-directory: ios
         run: unzip -l MOTIF.ipa
