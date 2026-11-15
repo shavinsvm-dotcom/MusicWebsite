@@ -5,28 +5,11 @@ import UIKit
 
 struct AppBackground: View {
     @Environment(\.colorScheme) private var colorScheme
-    @EnvironmentObject private var library: LibraryStore
-    @EnvironmentObject private var player: PlayerManager
-    @AppStorage(VisualSettings.refractionKey) private var refractionEnabled = true
-
-    private var source: (url: URL, seed: String)? {
-        guard let track = player.current ?? library.tracks.first,
-              let url = track.artworkURL else { return nil }
-        return (url, track.title + track.artist)
-    }
 
     var body: some View {
-        ZStack {
-            plainBackground
-
-            if refractionEnabled,
-               colorScheme == .dark,
-               let source {
-                RefractionBackdrop(url: source.url, seed: source.seed)
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
+        plainBackground
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
     }
 
     private var plainBackground: some View {

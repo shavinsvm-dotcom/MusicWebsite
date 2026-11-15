@@ -150,7 +150,7 @@ private struct MiniArtworkProgressRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: 38, height: 38)
-        .animation(.linear(duration: 1.0 / 60.0), value: fraction)
+        .animation(.linear(duration: 0.12), value: fraction)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -161,7 +161,6 @@ struct NowPlayingView: View {
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(VisualSettings.refractionKey) private var refractionEnabled = true
 
     let backdropImage: UIImage?
 
@@ -244,14 +243,7 @@ struct NowPlayingView: View {
                 Color.black
 
                 Group {
-                    if refractionEnabled, let artworkURL = track.artworkURL {
-                        RefractionBackdrop(
-                            url: artworkURL,
-                            seed: track.title + track.artist,
-                            mode: .player,
-                            fallbackImage: backdropImage
-                        )
-                    } else if let backdropImage {
+                    if let backdropImage {
                         Image(uiImage: backdropImage)
                             .resizable()
                             .scaledToFill()
@@ -554,11 +546,6 @@ struct NowPlayingView: View {
                         }
                     }
 
-                    Section("Visuals") {
-                        Toggle(isOn: $refractionEnabled) {
-                            Label("Cover refraction", systemImage: "sparkles")
-                        }
-                    }
                 } label: {
                     Image(systemName: "line.3.horizontal")
                         .font(.system(size: 19, weight: .medium))
@@ -790,7 +777,7 @@ private struct NowPlayingScrubber: View {
                 }
                 .frame(height: geometry.size.height)
                 .animation(
-                    isScrubbing ? nil : .linear(duration: 1.0 / 60.0),
+                    isScrubbing ? nil : .linear(duration: 0.12),
                     value: fraction
                 )
                 .contentShape(Rectangle())

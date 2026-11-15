@@ -65,6 +65,8 @@ final class PlayerManager: ObservableObject {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var infoTick = 0
+    private var nowPlayingArtwork: MPMediaItemArtwork?
+    private var nowPlayingArtworkURL: URL?
     private var crossfadeTask: Task<Void, Never>?
     private var tempoRestoreTask: Task<Void, Never>?
     private var automixNextIndex: Int?
@@ -326,7 +328,7 @@ final class PlayerManager: ObservableObject {
 
     private func installTimeObserver() {
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 1.0 / 60.0, preferredTimescale: 600),
+            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             Task { @MainActor in
@@ -334,7 +336,7 @@ final class PlayerManager: ObservableObject {
                 let seconds = CMTimeGetSeconds(time)
                 if seconds.isFinite {
                     let next = max(0, seconds)
-                    if abs(next - self.progress.elapsed) > 0.01 {
+                    if abs(next - self.progress.elapsed) > 0.04 {
                         self.progress.elapsed = next
                     }
                 }
@@ -349,7 +351,7 @@ final class PlayerManager: ObservableObject {
                 }
 
                 self.infoTick += 1
-                if self.infoTick % 120 == 0 { self.updateNowPlaying() }
+                if self.infoTick % 50 == 0 { self.updateNowPlaying() }
                 self.maybeBeginCrossfade()
             }
         }
@@ -733,6 +735,8 @@ final class PlayerManager: ObservableObject {
 
     private func updateNowPlaying() {
         guard let track = current else {
+            nowPlayingArtwork = nil
+            nowPlayingArtworkURL = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             return
         }
@@ -745,14 +749,30 @@ final class PlayerManager: ObservableObject {
             MPNowPlayingInfoPropertyElapsedPlaybackTime: elapsed,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? 1.0 : 0.0
         ]
+
+        guard let artworkURL = track.artworkURL else {
+            nowPlayingArtwork = nil
+            nowPlayingArtworkURL = nil
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            return
+        }
+
+        if nowPlayingArtworkURL == artworkURL, let artwork = nowPlayingArtwork {
+            info[MPMediaItemPropertyArtwork] = artwork
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            return
+        }
+
+        nowPlayingArtworkURL = artworkURL
+        nowPlayingArtwork = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
-        guard let artworkURL = track.artworkURL else { return }
-        URLSession.shared.dataTask(with: artworkURL) { data, _, _ in
+        URLSession.shared.dataTask(with: artworkURL) { [weak self] data, _, _ in
             guard let data, let image = UIImage(data: data) else { return }
-            DispatchQueue.main.async {
-                info[MPMediaItemPropertyArtwork] = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+            Task { @MainActor [weak self] in
+                guard let self, self.current?.artworkURL == artworkURL else { return }
+                self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                self.updateNowPlaying()
             }
         }.resume()
     }
