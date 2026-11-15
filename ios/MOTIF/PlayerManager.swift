@@ -23,6 +23,9 @@ final class PlayerManager: ObservableObject {
     @Published private(set) var queue: [Track] = []
     @Published private(set) var isPlaying = false
     @Published private(set) var duration: Double = 0
+    /// True once the current item reports its own duration, rather than the
+    /// metadata duration copied from the track when loading began.
+    @Published private(set) var isDurationLoaded = false
     @Published private(set) var isShuffled = false
     @Published private(set) var repeatMode: RepeatMode = .off
     @Published private(set) var crossfadeDuration: TimeInterval = UserDefaults.standard.double(forKey: "motif.crossfadeDuration")
@@ -301,6 +304,7 @@ final class PlayerManager: ObservableObject {
         current = track
         progress.elapsed = 0
         duration = max(track.duration, 0)
+        isDurationLoaded = false
         isPlaying = false
 
         if let endObserver {
@@ -391,10 +395,13 @@ final class PlayerManager: ObservableObject {
 
                 if let itemDuration = self.player.currentItem?.duration {
                     let loadedDuration = CMTimeGetSeconds(itemDuration)
-                    if loadedDuration.isFinite,
-                       loadedDuration > 0,
-                       abs(loadedDuration - self.duration) > 0.5 {
-                        self.duration = loadedDuration
+                    if loadedDuration.isFinite, loadedDuration > 0 {
+                        if abs(loadedDuration - self.duration) > 0.5 {
+                            self.duration = loadedDuration
+                        }
+                        if !self.isDurationLoaded {
+                            self.isDurationLoaded = true
+                        }
                     }
                 }
 
@@ -622,6 +629,7 @@ final class PlayerManager: ObservableObject {
         currentIndex = nextIndex
         current = next
         duration = max(next.duration, 0)
+        isDurationLoaded = false
         progress.elapsed = resumeAt
         isCrossfading = false
         isPlaying = true
@@ -727,6 +735,7 @@ final class PlayerManager: ObservableObject {
         currentIndex = plan.nextIndex
         current = next
         duration = max(next.duration, 0)
+        isDurationLoaded = false
         progress.elapsed = resumeAt
         isCrossfading = false
         isPlaying = true

@@ -104,9 +104,9 @@ struct RootView: View {
                       !attemptedLyricsIDs.contains(libraryTrack.id)
                 else { return }
 
-                attemptedLyricsIDs.insert(libraryTrack.id)
                 let audioDuration = await audioDurationForLyrics(for: libraryTrack)
                 guard !Task.isCancelled, player.current?.id == track.id else { return }
+                attemptedLyricsIDs.insert(libraryTrack.id)
 
                 if let record = try? await LyricsService.findLyrics(
                     for: libraryTrack,
@@ -133,12 +133,18 @@ struct RootView: View {
     private func audioDurationForLyrics(for track: Track) async -> TimeInterval? {
         for _ in 0..<20 {
             guard !Task.isCancelled else { return nil }
-            if player.duration.isFinite, player.duration >= 1 {
+            if player.isDurationLoaded {
+                guard player.duration.isFinite, player.duration >= 1 else { break }
                 return player.duration
             }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
 
+        // The item may never report a duration (for example, an unavailable
+        // stream). In that case the metadata duration is the best available.
+        if player.duration.isFinite, player.duration >= 1 {
+            return player.duration
+        }
         guard track.duration.isFinite, track.duration >= 1 else { return nil }
         return track.duration
     }
