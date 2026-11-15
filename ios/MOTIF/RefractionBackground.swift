@@ -18,13 +18,6 @@ enum RefractionMode: Equatable {
         }
     }
 
-    var blurRadius: CGFloat {
-        switch self {
-        case .ambient: return 64
-        case .player: return 44
-        }
-    }
-
     var imageOpacity: Double {
         switch self {
         case .ambient: return 0.34
@@ -48,7 +41,9 @@ struct RefractionBackdrop: View {
         self.url = url
         self.seed = seed
         self.mode = mode
-        _artwork = State(initialValue: url.flatMap { ArtworkImageCache.shared.image(for: $0) })
+        _artwork = State(initialValue: url.flatMap {
+            PlaybackBackdropCache.shared.preparedImage(for: $0)
+        })
     }
 
     var body: some View {
@@ -79,23 +74,15 @@ struct RefractionBackdrop: View {
     private func loadArtwork() async {
         guard let url else { return }
 
-        if let cached = ArtworkImageCache.shared.image(for: url) {
-            apply(cached)
+        if let prepared = PlaybackBackdropCache.shared.preparedImage(for: url) {
+            apply(prepared)
             return
         }
 
-        let loaded: UIImage?
-        if url.isFileURL {
-            loaded = UIImage(contentsOfFile: url.path)
-        } else if let (data, _) = try? await URLSession.shared.data(from: url) {
-            loaded = UIImage(data: data)
-        } else {
-            loaded = nil
+        guard let prepared = await PlaybackBackdropCache.shared.prepare(for: url) else {
+            return
         }
-
-        guard let loaded else { return }
-        ArtworkImageCache.shared.store(loaded, for: url)
-        apply(loaded)
+        apply(prepared)
     }
 
     private func apply(_ image: UIImage) {
@@ -164,7 +151,6 @@ private struct RefractionPlate: View {
                 .scaledToFill()
                 .frame(width: size.width, height: size.height)
                 .clipped()
-                .blur(radius: mode.blurRadius)
                 .saturation(1.38)
                 .opacity(mode.imageOpacity)
 
