@@ -502,6 +502,13 @@ struct NowPlayingView: View {
                     }
 
                     Section("Playback") {
+                        Toggle(isOn: Binding(
+                            get: { player.automixEnabled },
+                            set: { player.setAutomix($0) }
+                        )) {
+                            Label("Automix", systemImage: "waveform.path.ecg")
+                        }
+
                         Menu {
                             if player.isSleepTimerActive {
                                 Button {
@@ -567,6 +574,13 @@ struct NowPlayingView: View {
                 Text("Now playing")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(.white.opacity(0.72))
+
+                if player.automixEnabled {
+                    Text("AUTOMIX")
+                        .font(.system(size: 8, weight: .bold))
+                        .tracking(1.1)
+                        .foregroundStyle(.white.opacity(0.56))
+                }
 
                 if let badge = spatialAudio.badge {
                     HStack(spacing: 4) {

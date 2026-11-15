@@ -24,6 +24,7 @@ final class PlayerManager: ObservableObject {
     @Published private(set) var isShuffled = false
     @Published private(set) var repeatMode: RepeatMode = .off
     @Published private(set) var crossfadeDuration: TimeInterval = UserDefaults.standard.double(forKey: "motif.crossfadeDuration")
+    @Published private(set) var automixEnabled = UserDefaults.standard.bool(forKey: "motif.automixEnabled")
     @Published private(set) var sleepTimerEnd: Date?
 
     var onTrackStarted: ((Track) -> Void)?
@@ -125,7 +126,17 @@ final class PlayerManager: ObservableObject {
         let clamped = max(0, min(seconds, 12))
         crossfadeDuration = clamped
         UserDefaults.standard.set(clamped, forKey: "motif.crossfadeDuration")
-        if clamped == 0 { cancelCrossfade() }
+        if clamped == 0 && !automixEnabled { cancelCrossfade() }
+    }
+
+    func setAutomix(_ enabled: Bool) {
+        automixEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: "motif.automixEnabled")
+        if !enabled { cancelCrossfade() }
+    }
+
+    private var effectiveTransitionDuration: TimeInterval {
+        automixEnabled ? max(crossfadeDuration, 6) : crossfadeDuration
     }
 
     func setSleepTimer(minutes: Int) {
@@ -330,7 +341,8 @@ final class PlayerManager: ObservableObject {
     }
 
     private func maybeBeginCrossfade() {
-        guard crossfadeDuration > 0,
+        let transitionDuration = effectiveTransitionDuration
+        guard transitionDuration > 0,
               isPlaying,
               !isCrossfading,
               repeatMode != .one,
@@ -339,7 +351,7 @@ final class PlayerManager: ObservableObject {
         else { return }
 
         let remaining = duration - elapsed
-        guard remaining > 0, remaining <= crossfadeDuration else { return }
+        guard remaining > 0, remaining <= transitionDuration else { return }
         beginCrossfade(to: nextIndex)
     }
 
@@ -367,7 +379,7 @@ final class PlayerManager: ObservableObject {
         fadePlayer.volume = 0
         fadePlayer.play()
 
-        let total = max(crossfadeDuration, 0.5)
+        let total = max(effectiveTransitionDuration, 0.5)
         let steps = max(Int(total * 12), 1)
         let stepSeconds = total / Double(steps)
 
@@ -393,31 +405,38 @@ final class PlayerManager: ObservableObject {
             return
         }
         let next = queue[nextIndex]
-        guard let item = fadePlayer.currentItem else {
-            cancelCrossfade()
-            return
-        }
 
+        // Do not move the fade player's AVPlayerItem onto the main player.
+        // AVPlayerItem ownership is fragile while it is still attached to a
+        // playing player, and was the source of the crossfade crash. Give the
+        // main player a fresh item and seek it to the blended position instead.
         let time = fadePlayer.currentTime()
+        let resumeAt = time.isValid ? max(0, CMTimeGetSeconds(time)) : 0
         fadePlayer.pause()
         fadePlayer.replaceCurrentItem(with: nil)
 
         player.pause()
-        player.replaceCurrentItem(with: item)
+        let nextItem = AVPlayerItem(url: next.mediaURL)
+        player.replaceCurrentItem(with: nextItem)
+        installEndObserver(for: nextItem)
         player.volume = 1
-        installEndObserver(for: item)
-        if time.isValid {
-            player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-        }
 
         currentIndex = nextIndex
         current = next
         duration = max(next.duration, 0)
-        progress.elapsed = time.isValid ? max(0, CMTimeGetSeconds(time)) : 0
+        progress.elapsed = resumeAt
         isCrossfading = false
         isPlaying = true
         crossfadeTask = nil
+
         try? AVAudioSession.sharedInstance().setActive(true)
+        if resumeAt > 0 {
+            player.seek(
+                to: CMTime(seconds: resumeAt, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: .zero
+            )
+        }
         player.play()
         onTrackStarted?(next)
         updateNowPlaying()
