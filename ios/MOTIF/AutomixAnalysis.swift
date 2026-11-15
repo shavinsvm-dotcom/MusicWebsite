@@ -233,6 +233,7 @@ enum AudioBeatAnalyzer {
 
         var bestLag = minLag
         var bestScore: Double = 0
+        var scores = [Double](repeating: 0, count: maxLag + 1)
 
         for lag in minLag...maxLag {
             var dot: Double = 0
@@ -248,6 +249,7 @@ enum AudioBeatAnalyzer {
             }
 
             let score = dot / sqrt(leftEnergy * rightEnergy + 0.0000001)
+            scores[lag] = score
             if score > bestScore {
                 bestScore = score
                 bestLag = lag
@@ -256,22 +258,36 @@ enum AudioBeatAnalyzer {
 
         guard bestScore > 0.12 else { return nil }
 
-        var bpm = 60 / (Double(bestLag) * hopSeconds)
+        var refinedLag = Double(bestLag)
+        if bestLag > minLag, bestLag < maxLag {
+            let left = scores[bestLag - 1]
+            let right = scores[bestLag + 1]
+            let denominator = left - 2 * bestScore + right
+            if abs(denominator) > 0.0000001 {
+                refinedLag += 0.5 * (left - right) / denominator
+            }
+        }
+
+        var bpm = 60 / (refinedLag * hopSeconds)
         while bpm < minimumBPM { bpm *= 2 }
         while bpm > maximumBPM { bpm /= 2 }
 
-        let beatFrames = max(1, Int((60 / (bpm * hopSeconds)).rounded()))
+        let beatPeriod = 60 / (bpm * hopSeconds)
+        let phaseCount = max(1, Int(ceil(beatPeriod)))
         var bestPhase = 0
         var bestPhaseScore: Double = 0
 
-        for phase in 0..<beatFrames {
+        for phase in 0..<phaseCount {
             var score: Double = 0
             var count = 0
-            var index = phase
-            while index < envelope.count {
-                score += Double(envelope[index])
+            var index = Double(phase)
+            while index < Double(envelope.count - 1) {
+                let lower = Int(index)
+                let fraction = index - Double(lower)
+                score += Double(envelope[lower]) * (1 - fraction)
+                    + Double(envelope[lower + 1]) * fraction
                 count += 1
-                index += beatFrames
+                index += beatPeriod
             }
             let normalized = score / Double(max(count, 1))
             if normalized > bestPhaseScore {
