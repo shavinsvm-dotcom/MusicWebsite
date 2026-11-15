@@ -58,6 +58,17 @@ struct RootView: View {
                 player.onTrackStarted = { track in
                     library.recordPlay(track)
                 }
+                player.automixContinuationProvider = { [weak library] current, excluded in
+                    guard let library else { return nil }
+                    let candidates = library.tracks.filter { !excluded.contains($0.id) }
+                    let sameAlbum = candidates.filter {
+                        !$0.album.isEmpty && $0.album == current.album
+                    }
+                    let sameArtist = candidates.filter { $0.artist == current.artist }
+                    return sameAlbum.randomElement()
+                        ?? sameArtist.randomElement()
+                        ?? candidates.randomElement()
+                }
                 await library.refreshLocalMetadata()
                 await library.refreshCloud()
             }

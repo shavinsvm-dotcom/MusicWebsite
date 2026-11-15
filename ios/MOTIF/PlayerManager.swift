@@ -28,6 +28,7 @@ final class PlayerManager: ObservableObject {
     @Published private(set) var sleepTimerEnd: Date?
 
     var onTrackStarted: ((Track) -> Void)?
+    var automixContinuationProvider: ((Track, Set<UUID>) -> Track?)?
 
     let progress = PlaybackProgress()
 
@@ -70,6 +71,8 @@ final class PlayerManager: ObservableObject {
     private var crossfadeTask: Task<Void, Never>?
     private var tempoRestoreTask: Task<Void, Never>?
     private var automixNextIndex: Int?
+    private var preloadedNextID: UUID?
+    private var preloadedItem: AVPlayerItem?
     private var isCrossfading = false
     private var sleepTask: Task<Void, Never>?
     private let automixAnalysis = AutomixAnalysisService.shared
@@ -110,6 +113,7 @@ final class PlayerManager: ObservableObject {
         queue.insert(track, at: insertIndex)
         automixNextIndex = nil
         prepareAutomixAnalysis()
+        prepareNextTrack()
     }
 
     func addToQueue(_ track: Track) {
@@ -121,6 +125,7 @@ final class PlayerManager: ObservableObject {
         queue.append(track)
         automixNextIndex = nil
         prepareAutomixAnalysis()
+        prepareNextTrack()
     }
 
     func removeFromUpNext(at offsets: IndexSet) {
@@ -129,6 +134,7 @@ final class PlayerManager: ObservableObject {
         queue.removeAll { ids.contains($0.id) && $0.id != current?.id }
         automixNextIndex = nil
         prepareAutomixAnalysis()
+        prepareNextTrack()
     }
 
     func moveUpNext(from source: IndexSet, to destination: Int) {
@@ -141,6 +147,7 @@ final class PlayerManager: ObservableObject {
         queue = Array(queue.prefix(currentIndex + 1)) + upcoming
         automixNextIndex = nil
         prepareAutomixAnalysis()
+        prepareNextTrack()
     }
 
     func setCrossfade(_ seconds: TimeInterval) {
@@ -166,16 +173,36 @@ final class PlayerManager: ObservableObject {
 
     func setSleepTimer(minutes: Int) {
         sleepTask?.cancel()
+        sleepTask = nil
+        player.volume = 1
         guard minutes > 0 else {
             sleepTimerEnd = nil
-            sleepTask = nil
             return
         }
-        sleepTimerEnd = Date().addingTimeInterval(TimeInterval(minutes * 60))
+
+        let totalSeconds = Double(minutes * 60)
+        let fadeSeconds = min(10, max(1, totalSeconds - 1))
+        sleepTimerEnd = Date().addingTimeInterval(totalSeconds)
         sleepTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: UInt64(minutes) * 60 * 1_000_000_000)
+            let fadeStart = max(0, totalSeconds - fadeSeconds)
+            if fadeStart > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(fadeStart * 1_000_000_000))
+            }
+            guard !Task.isCancelled, let self else { return }
+
+            let steps = 20
+            for step in 1...steps {
+                try? await Task.sleep(
+                    nanoseconds: UInt64((fadeSeconds / Double(steps)) * 1_000_000_000)
+                )
+                guard !Task.isCancelled, let self else { return }
+                let progress = Double(step) / Double(steps)
+                self.player.volume = Float(1 - progress)
+            }
+
             guard !Task.isCancelled, let self else { return }
             self.pause()
+            self.player.volume = 1
             self.sleepTimerEnd = nil
             self.sleepTask = nil
         }
@@ -185,6 +212,7 @@ final class PlayerManager: ObservableObject {
         sleepTask?.cancel()
         sleepTask = nil
         sleepTimerEnd = nil
+        player.volume = 1
     }
 
     func toggle() {
@@ -270,7 +298,7 @@ final class PlayerManager: ObservableObject {
             self.endObserver = nil
         }
 
-        let item = AVPlayerItem(url: track.mediaURL)
+        let item = makePlayerItem(for: track)
         player.replaceCurrentItem(with: item)
         installEndObserver(for: item)
 
@@ -279,6 +307,7 @@ final class PlayerManager: ObservableObject {
         isPlaying = true
         onTrackStarted?(track)
         prepareAutomixAnalysis()
+        prepareNextTrack()
         updateNowPlaying()
     }
 
@@ -311,6 +340,15 @@ final class PlayerManager: ObservableObject {
             if repeatMode == .all {
                 currentIndex = 0
                 load(queue[0])
+            } else if automixEnabled,
+                      let current,
+                      let next = automixContinuationProvider?(
+                          current,
+                          Set(queue.map(\.id))
+                      ) {
+                queue.append(next)
+                currentIndex = queue.count - 1
+                load(next)
             } else {
                 pause()
                 seek(to: 0)
@@ -465,6 +503,45 @@ final class PlayerManager: ObservableObject {
         }
     }
 
+    private func prepareNextTrack() {
+        guard !isCrossfading,
+              let nextIndex = automixNextIndex ?? upcomingIndex(),
+              queue.indices.contains(nextIndex)
+        else {
+            preloadedNextID = nil
+            preloadedItem = nil
+            return
+        }
+
+        let next = queue[nextIndex]
+        guard next.id != current?.id else { return }
+
+        if preloadedNextID != next.id {
+            let item = AVPlayerItem(url: next.mediaURL)
+            item.preferredForwardBufferDuration = 2
+            preloadedNextID = next.id
+            preloadedItem = item
+        }
+
+        if let artworkURL = next.artworkURL {
+            Task {
+                _ = await PlaybackBackdropCache.shared.prepare(for: artworkURL)
+            }
+        }
+    }
+
+    private func makePlayerItem(for track: Track) -> AVPlayerItem {
+        if preloadedNextID == track.id, let preloadedItem {
+            preloadedNextID = nil
+            self.preloadedItem = nil
+            return preloadedItem
+        }
+
+        let item = AVPlayerItem(url: track.mediaURL)
+        item.preferredForwardBufferDuration = 2
+        return item
+    }
+
     private func upcomingIndex() -> Int? {
         guard !queue.isEmpty else { return nil }
 
@@ -485,7 +562,7 @@ final class PlayerManager: ObservableObject {
 
         resetPlaybackTempo()
         isCrossfading = true
-        let item = AVPlayerItem(url: next.mediaURL)
+        let item = makePlayerItem(for: next)
         fadePlayer.replaceCurrentItem(with: item)
         fadePlayer.volume = 0
         fadePlayer.play()
@@ -527,7 +604,7 @@ final class PlayerManager: ObservableObject {
         fadePlayer.replaceCurrentItem(with: nil)
 
         player.pause()
-        let nextItem = AVPlayerItem(url: next.mediaURL)
+        let nextItem = makePlayerItem(for: next)
         player.replaceCurrentItem(with: nextItem)
         installEndObserver(for: nextItem)
         player.volume = 1
@@ -554,6 +631,7 @@ final class PlayerManager: ObservableObject {
         player.rate = 1
         onTrackStarted?(next)
         prepareAutomixAnalysis()
+        prepareNextTrack()
         updateNowPlaying()
     }
 
@@ -566,7 +644,7 @@ final class PlayerManager: ObservableObject {
         resetPlaybackTempo()
         isCrossfading = true
 
-        let item = AVPlayerItem(url: plan.next.mediaURL)
+        let item = makePlayerItem(for: plan.next)
         item.audioTimePitchAlgorithm = .spectral
         fadePlayer.replaceCurrentItem(with: item)
         fadePlayer.volume = 0
@@ -630,7 +708,7 @@ final class PlayerManager: ObservableObject {
         fadePlayer.replaceCurrentItem(with: nil)
         player.pause()
 
-        let nextItem = AVPlayerItem(url: next.mediaURL)
+        let nextItem = makePlayerItem(for: next)
         nextItem.audioTimePitchAlgorithm = .spectral
         player.replaceCurrentItem(with: nextItem)
         installEndObserver(for: nextItem)
@@ -659,6 +737,7 @@ final class PlayerManager: ObservableObject {
         scheduleTempoRestore()
         onTrackStarted?(next)
         prepareAutomixAnalysis()
+        prepareNextTrack()
         updateNowPlaying()
     }
 

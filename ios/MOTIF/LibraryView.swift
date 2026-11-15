@@ -15,6 +15,7 @@ struct LibraryView: View {
 
     @State private var showImporter = false
     @State private var showNewPlaylist = false
+    @State private var showDownloads = false
     @State private var importError: String?
     @State private var filter: LibraryFilter = .all
 
@@ -90,6 +91,12 @@ struct LibraryView: View {
                         }
 
                         Button {
+                            showDownloads = true
+                        } label: {
+                            Label("Download manager", systemImage: "arrow.down.circle")
+                        }
+
+                        Button {
                             Task { await library.uploadAllLocal() }
                         } label: {
                             Label("Upload local songs", systemImage: "icloud.and.arrow.up")
@@ -123,6 +130,10 @@ struct LibraryView: View {
             }
             .sheet(isPresented: $showNewPlaylist) {
                 PlaylistEditorView()
+            }
+            .sheet(isPresented: $showDownloads) {
+                DownloadManagerView()
+                    .environmentObject(library)
             }
             .alert(
                 "Couldn’t add music",
@@ -397,6 +408,16 @@ struct LibraryView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     Spacer(minLength: 8)
+
+                    Button {
+                        showDownloads = true
+                    } label: {
+                        Image(systemName: "list.bullet")
+                            .font(.body.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.9))
+                    .accessibilityLabel("Open download manager")
 
                     if !pendingDownloads.isEmpty {
                         Button {

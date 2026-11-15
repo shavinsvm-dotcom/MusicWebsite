@@ -13,6 +13,7 @@ final class LibraryStore: ObservableObject {
     @Published private(set) var playCounts: [UUID: Int] = [:]
     @Published private(set) var isRefreshingCloud = false
     @Published private(set) var downloadingIDs: Set<UUID> = []
+    @Published private(set) var downloadJobs: [DownloadJob] = []
     @Published private(set) var uploadingIDs: Set<UUID> = []
     @Published private(set) var enrichingIDs: Set<UUID> = []
     @Published private(set) var enrichmentMessage: String?
@@ -25,6 +26,9 @@ final class LibraryStore: ObservableObject {
     private let downloadsURL: URL
     private let artworkDirectory: URL
     private let libraryURL: URL
+    private var downloadTasks: [UUID: Task<Void, Never>] = [:]
+    private var activeDownloadCount = 0
+    private var isPumpingDownloads = false
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -252,18 +256,134 @@ final class LibraryStore: ObservableObject {
     }
 
     func download(_ track: Track) async {
-        guard
-            let existing = canonicalTrack(for: track),
-            !isDownloaded(existing),
-            !downloadingIDs.contains(existing.id),
-            let remoteURL = existing.streamURL ?? (existing.isCloud ? existing.mediaURL : nil)
+        enqueueDownload(track)
+    }
+
+    func enqueueDownload(_ track: Track) {
+        guard let existing = canonicalTrack(for: track),
+              existing.isCloud,
+              !isDownloaded(existing),
+              !downloadJobs.contains(where: {
+                  $0.trackID == existing.id
+                      && ($0.state == .queued || $0.state == .downloading)
+              })
         else { return }
+
+        if let index = downloadJobs.firstIndex(where: {
+            $0.trackID == existing.id && ($0.state == .failed || $0.state == .cancelled)
+        }) {
+            downloadJobs.remove(at: index)
+        }
+
+        let job = DownloadJob(
+            id: UUID(),
+            trackID: existing.id,
+            title: existing.title,
+            artist: existing.artist,
+            state: .queued,
+            detail: nil,
+            createdAt: Date()
+        )
+        downloadJobs.insert(job, at: 0)
+        pumpDownloads()
+    }
+
+    func downloadAll(_ candidates: [Track]) async {
+        for track in candidates where track.isCloud {
+            enqueueDownload(track)
+        }
+    }
+
+    func cancelDownload(_ jobID: UUID) {
+        guard let index = downloadJobs.firstIndex(where: { $0.id == jobID }) else { return }
+        if downloadJobs[index].state == .downloading {
+            downloadTasks[jobID]?.cancel()
+            downloadJobs[index].detail = "Stopping…"
+        }
+        downloadJobs[index].state = .cancelled
+    }
+
+    func retryDownload(_ job: DownloadJob) {
+        guard let track = tracks.first(where: { $0.id == job.trackID }) else {
+            removeDownloadJob(job.id)
+            return
+        }
+        if let index = downloadJobs.firstIndex(where: { $0.id == job.id }) {
+            downloadJobs[index].state = .queued
+            downloadJobs[index].detail = nil
+        }
+        pumpDownloads()
+        _ = track
+    }
+
+    func removeDownloadJob(_ jobID: UUID) {
+        if downloadJobs.first(where: { $0.id == jobID })?.state == .downloading {
+            downloadTasks[jobID]?.cancel()
+        }
+        downloadJobs.removeAll { $0.id == jobID }
+    }
+
+    func clearFinishedDownloads() {
+        downloadJobs.removeAll {
+            $0.state == .completed || $0.state == .cancelled
+        }
+    }
+
+    private func pumpDownloads() {
+        guard !isPumpingDownloads else { return }
+        isPumpingDownloads = true
+
+        while activeDownloadCount < 2,
+              let index = downloadJobs.firstIndex(where: { $0.state == .queued }) {
+            let job = downloadJobs[index]
+            guard let track = tracks.first(where: { $0.id == job.trackID }) else {
+                downloadJobs[index].state = .failed
+                downloadJobs[index].detail = "Song is no longer in the library."
+                continue
+            }
+
+            activeDownloadCount += 1
+            downloadJobs[index].state = .downloading
+            downloadJobs[index].detail = nil
+
+            let task = Task { [weak self] in
+                guard let self else { return }
+                await self.performDownload(track, jobID: job.id)
+                self.activeDownloadCount = max(0, self.activeDownloadCount - 1)
+                self.downloadTasks[job.id] = nil
+                self.isPumpingDownloads = false
+                self.pumpDownloads()
+            }
+            downloadTasks[job.id] = task
+        }
+
+        isPumpingDownloads = false
+    }
+
+    private func updateDownloadJob(
+        _ jobID: UUID,
+        state: DownloadJobState,
+        detail: String? = nil
+    ) {
+        guard let index = downloadJobs.firstIndex(where: { $0.id == jobID }) else { return }
+        downloadJobs[index].state = state
+        downloadJobs[index].detail = detail
+    }
+
+    private func performDownload(_ track: Track, jobID: UUID) async {
+        guard let existing = canonicalTrack(for: track),
+              let remoteURL = existing.streamURL ?? (existing.isCloud ? existing.mediaURL : nil)
+        else {
+            updateDownloadJob(jobID, state: .failed, detail: "The cloud file is unavailable.")
+            return
+        }
 
         downloadingIDs.insert(existing.id)
         defer { downloadingIDs.remove(existing.id) }
 
         do {
             let (temporaryURL, response) = try await URLSession.shared.download(from: remoteURL)
+            guard !Task.isCancelled else { throw CancellationError() }
             guard let http = response as? HTTPURLResponse,
                   (200..<300).contains(http.statusCode) else {
                 throw TigrisAPI.APIError.invalidResponse
@@ -285,6 +405,8 @@ final class LibraryStore: ObservableObject {
                     localArtwork = artworkDestination
                 }
             }
+
+            guard !Task.isCancelled else { throw CancellationError() }
 
             let downloadedAsset = AVURLAsset(url: destination)
             let downloadedItems = (try? await downloadedAsset.load(.metadata)) ?? []
@@ -309,14 +431,13 @@ final class LibraryStore: ObservableObject {
                let onlineLyrics = record.lyricsText {
                 setLyrics(onlineLyrics, for: existing)
             }
-        } catch {
-            errorMessage = "Couldn’t download \(existing.title): \(error.localizedDescription)"
-        }
-    }
 
-    func downloadAll(_ candidates: [Track]) async {
-        for track in candidates where track.isCloud {
-            await download(track)
+            updateDownloadJob(jobID, state: .completed)
+        } catch is CancellationError {
+            updateDownloadJob(jobID, state: .cancelled)
+        } catch {
+            updateDownloadJob(jobID, state: .failed, detail: error.localizedDescription)
+            errorMessage = "Couldn’t download \(existing.title): \(error.localizedDescription)"
         }
     }
 

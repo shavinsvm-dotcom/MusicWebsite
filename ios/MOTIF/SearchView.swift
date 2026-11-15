@@ -1,4 +1,29 @@
 import SwiftUI
+import UIKit
+
+private enum SearchScope: String, CaseIterable, Identifiable {
+    case all
+    case songs
+    case artists
+    case albums
+    case playlists
+    case downloads
+    case cloud
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "All"
+        case .songs: return "Songs"
+        case .artists: return "Artists"
+        case .albums: return "Albums"
+        case .playlists: return "Playlists"
+        case .downloads: return "Downloads"
+        case .cloud: return "Cloud"
+        }
+    }
+}
 
 struct SearchView: View {
     @EnvironmentObject private var library: LibraryStore
@@ -9,22 +34,65 @@ struct SearchView: View {
     @State private var results: [Track] = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var scope: SearchScope = .all
 
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var localMatches: [Track] {
+    private var needle: String {
+        trimmedQuery.lowercased()
+    }
+
+    private var matchingTracks: [Track] {
         guard !trimmedQuery.isEmpty else { return [] }
-        let needle = trimmedQuery.lowercased()
         return library.tracks
             .filter {
                 $0.title.lowercased().contains(needle)
                     || $0.artist.lowercased().contains(needle)
                     || $0.album.lowercased().contains(needle)
             }
-            .prefix(8)
-            .map { $0 }
+            .sorted {
+                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+    }
+
+    private var matchingArtists: [LibraryArtistGroup] {
+        guard !trimmedQuery.isEmpty else { return [] }
+        return LibraryArtistBuilder.artists(from: library.tracks)
+            .filter { $0.name.lowercased().contains(needle) }
+    }
+
+    private var matchingAlbums: [LibraryAlbumGroup] {
+        guard !trimmedQuery.isEmpty else { return [] }
+        return LibraryAlbumBuilder.albums(from: library.tracks)
+            .filter {
+                $0.title.lowercased().contains(needle)
+                    || $0.artist.lowercased().contains(needle)
+            }
+    }
+
+    private var matchingPlaylists: [Playlist] {
+        guard !trimmedQuery.isEmpty else { return [] }
+        return library.playlists.filter {
+            $0.name.lowercased().contains(needle)
+                || $0.description.lowercased().contains(needle)
+        }
+    }
+
+    private var downloadedMatches: [Track] {
+        matchingTracks.filter { library.isDownloaded($0) }
+    }
+
+    private var cloudMatches: [Track] {
+        matchingTracks.filter(\.isCloud)
+    }
+
+    private var hasAnyLocalMatch: Bool {
+        !matchingTracks.isEmpty
+            || !matchingArtists.isEmpty
+            || !matchingAlbums.isEmpty
+            || !matchingPlaylists.isEmpty
     }
 
     var body: some View {
@@ -41,50 +109,84 @@ struct SearchView: View {
                                 tracks: Array(library.tracks.prefix(12))
                             )
                         }
-                    }
+                    } else {
+                        scopePicker
 
-                    if !localMatches.isEmpty {
-                        resultSection(
-                            title: "In your library",
-                            subtitle: nil,
-                            tracks: localMatches
-                        )
-                    }
+                        switch scope {
+                        case .all:
+                            if !matchingArtists.isEmpty {
+                                artistSection
+                            }
+                            if !matchingAlbums.isEmpty {
+                                albumSection
+                            }
+                            if !matchingPlaylists.isEmpty {
+                                playlistSection
+                            }
+                            if !matchingTracks.isEmpty {
+                                resultSection(
+                                    title: "Songs",
+                                    subtitle: nil,
+                                    tracks: matchingTracks
+                                )
+                            }
+                        case .songs:
+                            resultSection(
+                                title: "Songs",
+                                subtitle: nil,
+                                tracks: matchingTracks
+                            )
+                        case .artists:
+                            artistSection
+                        case .albums:
+                            albumSection
+                        case .playlists:
+                            playlistSection
+                        case .downloads:
+                            resultSection(
+                                title: "Downloaded",
+                                subtitle: nil,
+                                tracks: downloadedMatches
+                            )
+                        case .cloud:
+                            resultSection(
+                                title: "Cloud tracks",
+                                subtitle: nil,
+                                tracks: cloudMatches
+                            )
+                        }
 
-                    if isLoading {
-                        HStack(spacing: 10) {
-                            ProgressView()
-                            Text("Searching the catalog…")
+                        if isLoading {
+                            HStack(spacing: 10) {
+                                ProgressView()
+                                Text("Searching the catalog…")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.vertical, 6)
+                        }
+
+                        if let errorMessage {
+                            Text(errorMessage)
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
+                                .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 6)
-                    }
 
-                    if let errorMessage {
-                        Text(errorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 4)
-                    }
+                        if (scope == .all || scope == .songs), !results.isEmpty {
+                            resultSection(
+                                title: "Catalog",
+                                subtitle: "Apple Music previews · 30 seconds",
+                                tracks: results
+                            )
+                        }
 
-                    if !results.isEmpty {
-                        resultSection(
-                            title: "Catalog",
-                            subtitle: "Apple Music previews · 30 seconds",
-                            tracks: results
-                        )
-                    }
-
-                    if !trimmedQuery.isEmpty,
-                       !isLoading,
-                       results.isEmpty,
-                       localMatches.isEmpty,
-                       errorMessage == nil {
-                        Text("No matches for “\(trimmedQuery)”.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 8)
+                        if !isLoading,
+                           !hasAnyLocalMatch,
+                           results.isEmpty,
+                           errorMessage == nil {
+                            emptyResults
+                        }
                     }
                 }
                 .padding(.horizontal, 20)
@@ -99,7 +201,7 @@ struct SearchView: View {
             .searchable(
                 text: $query,
                 placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Songs, artists, albums"
+                prompt: "Songs, artists, albums, playlists"
             )
             .task(id: query) {
                 await runSearch()
@@ -109,16 +211,146 @@ struct SearchView: View {
 
     private var browseHint: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Find something new.")
+            Text("Find anything.")
                 .font(.system(size: 24, weight: .semibold))
                 .tracking(-0.5)
 
-            Text("Search the iTunes catalog for songs and artists. Previews play instantly and can be saved to your library.")
+            Text("Search your songs, artists, albums, playlists, downloads and cloud library — or find something new in the iTunes catalog.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var scopePicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(SearchScope.allCases) { option in
+                    Button {
+                        withAnimation(.easeOut(duration: 0.16)) {
+                            scope = option
+                        }
+                    } label: {
+                        Text(option.title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(scope == option ? Color(uiColor: .systemBackground) : .secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(
+                                scope == option
+                                    ? Color.primary
+                                    : Color.primary.opacity(0.06),
+                                in: Capsule()
+                            )
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.94))
+                }
+            }
+        }
+    }
+
+    private var artistSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Artists")
+                Spacer()
+                Text("\(matchingArtists.count)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            if matchingArtists.isEmpty {
+                emptyScope("No artists match this search.")
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 16) {
+                        ForEach(matchingArtists) { artist in
+                            NavigationLink {
+                                LibraryArtistDetailView(
+                                    artistName: artist.name,
+                                    showNowPlaying: $showNowPlaying
+                                )
+                            } label: {
+                                LibraryArtistCard(artist: artist)
+                            }
+                            .buttonStyle(MotifPressStyle(scale: 0.96, opacity: 0.92))
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+            }
+        }
+    }
+
+    private var albumSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Albums")
+                Spacer()
+                Text("\(matchingAlbums.count)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            if matchingAlbums.isEmpty {
+                emptyScope("No albums match this search.")
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 16) {
+                        ForEach(matchingAlbums) { album in
+                            NavigationLink {
+                                LibraryAlbumDetailView(
+                                    album: album,
+                                    showNowPlaying: $showNowPlaying
+                                )
+                            } label: {
+                                LibraryAlbumCard(album: album)
+                            }
+                            .buttonStyle(MotifPressStyle(scale: 0.96, opacity: 0.92))
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+            }
+        }
+    }
+
+    private var playlistSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Playlists")
+                Spacer()
+                Text("\(matchingPlaylists.count)")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            if matchingPlaylists.isEmpty {
+                emptyScope("No playlists match this search.")
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(alignment: .top, spacing: 14) {
+                        ForEach(matchingPlaylists) { playlist in
+                            NavigationLink {
+                                PlaylistDetailView(
+                                    playlistID: playlist.id,
+                                    showNowPlaying: $showNowPlaying
+                                )
+                            } label: {
+                                PlaylistTile(
+                                    playlist: playlist,
+                                    tracks: library.tracks(in: playlist)
+                                )
+                                .frame(width: 146)
+                            }
+                            .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
+                        }
+                    }
+                    .padding(.horizontal, 2)
+                }
+            }
+        }
     }
 
     private func resultSection(title: String, subtitle: String?, tracks: [Track]) -> some View {
@@ -131,17 +363,44 @@ struct SearchView: View {
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
+                if !tracks.isEmpty {
+                    Text("\(tracks.count)")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            LazyVStack(spacing: 0) {
-                ForEach(tracks) { track in
-                    TrackRow(track: track, queue: tracks)
-                    if track.id != tracks.last?.id {
-                        Divider().opacity(0.35)
+            if tracks.isEmpty {
+                emptyScope("No \(title.lowercased()) match this search.")
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(tracks) { track in
+                        TrackRow(track: track, queue: tracks)
+                        if track.id != tracks.last?.id {
+                            Divider().opacity(0.35)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private var emptyResults: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("No matches for “\(trimmedQuery)”.")
+                .font(.subheadline.weight(.semibold))
+            Text("Try a shorter title, artist, album or playlist name.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 8)
+    }
+
+    private func emptyScope(_ message: String) -> some View {
+        Text(message)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 6)
     }
 
     @MainActor
