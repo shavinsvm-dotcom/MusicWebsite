@@ -1,5 +1,11 @@
 import Foundation
 
+enum LyricsSource: String, Codable, Hashable {
+    case automatic
+    case embedded
+    case manual
+}
+
 struct Track: Identifiable, Codable, Hashable {
     enum Source: String, Codable {
         case local
@@ -22,6 +28,9 @@ struct Track: Identifiable, Codable, Hashable {
     var lyrics: String? = nil
     /// Raw LRCLIB Lyricsfile YAML when the record has word-level timings.
     var lyricsFile: String? = nil
+    /// Whether the current lyrics were picked automatically or by the user.
+    /// Optional so older library.json files still decode.
+    var lyricsSource: LyricsSource? = nil
     /// "tags", "filename", or "ai". Optional so older library.json files decode.
     var metadataSource: String? = nil
 

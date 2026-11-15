@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct LyricWord: Identifiable, Equatable {
     let id: Int
@@ -198,6 +199,7 @@ enum LyricsParser {
 struct LyricsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var library: LibraryStore
+    @EnvironmentObject private var player: PlayerManager
 
     let track: Track
 
@@ -213,14 +215,23 @@ struct LyricsView: View {
     }
 
     private var document: LyricsDocument {
-        if let lyricsFile = currentTrack.lyricsFile,
-           !lyricsFile.isEmpty,
-           let parsed = LyricsFileParser.parse(lyricsFile) {
-            return parsed
+        let fileDocument = currentTrack.lyricsFile
+            .flatMap { $0.isEmpty ? nil : LyricsFileParser.parse($0) }
+        let textDocument = currentTrack.lyrics.flatMap { lyrics -> LyricsDocument? in
+            guard !lyrics.isEmpty else { return nil }
+            return LyricsParser.parse(lyrics)
         }
 
-        guard let lyrics = currentTrack.lyrics, !lyrics.isEmpty else { return .empty }
-        return LyricsParser.parse(lyrics)
+        if let fileDocument, fileDocument.isWordSynced {
+            return fileDocument
+        }
+        if let textDocument, textDocument.isWordSynced {
+            return textDocument
+        }
+        if let fileDocument, fileDocument.isSynced {
+            return fileDocument
+        }
+        return textDocument ?? .empty
     }
 
     var body: some View {
@@ -243,7 +254,7 @@ struct LyricsView: View {
                     .padding(.bottom, 120)
                 }
                 .scrollIndicators(.hidden)
-                .background(AppBackground())
+                .background(lyricsBackdrop)
                 .task {
                     // The first layout pass must exist before scrolling to a
                     // line in the middle of the song.
@@ -257,6 +268,15 @@ struct LyricsView: View {
             .navigationTitle("Lyrics")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        showFinder = true
+                    } label: {
+                        Image(systemName: "globe")
+                    }
+                    .accessibilityLabel("Find different lyrics")
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
                 }
@@ -271,55 +291,113 @@ struct LyricsView: View {
         }
     }
 
+    private var lyricsBackdrop: some View {
+        ZStack {
+            AppBackground()
+
+            if let url = currentTrack.artworkURL,
+               let image = PlaybackBackdropCache.shared.image(for: url) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .opacity(0.30)
+                    .clipped()
+            }
+
+            LinearGradient(
+                colors: [.black.opacity(0.18), .black.opacity(0.42), .black.opacity(0.70)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
+    }
+
     private var header: some View {
         HStack(spacing: 14) {
             ArtworkView(url: currentTrack.artworkURL, seed: currentTrack.title + currentTrack.artist)
                 .frame(width: 64, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.14), lineWidth: 0.7)
+                }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Text("LYRICS")
                         .font(.system(size: 9, weight: .bold))
                         .tracking(1.2)
                         .foregroundStyle(.secondary)
 
-                    if document.isWordSynced {
-                        Text("WORD SYNC")
-                            .font(.system(size: 8, weight: .bold))
-                            .tracking(0.8)
-                            .foregroundStyle(.white.opacity(0.78))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.white.opacity(0.14), in: Capsule())
-                    } else if document.isSynced {
-                        Text("SYNCED")
-                            .font(.system(size: 8, weight: .bold))
-                            .tracking(0.8)
-                            .foregroundStyle(.white.opacity(0.72))
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Color.white.opacity(0.10), in: Capsule())
+                    if let badge = syncBadge {
+                        glassBadge(badge)
+                    }
+
+                    if currentTrack.lyricsSource == .automatic {
+                        glassBadge("AUTO")
                     }
                 }
 
                 Text(currentTrack.title)
                     .font(.headline)
                     .lineLimit(2)
+
                 Text(currentTrack.artist)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+
+                Text(lyricsStatus)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.bottom, 24)
-        .overlay(alignment: .bottom) {
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(height: 0.5)
+        .padding(14)
+        .nativeGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.7)
         }
+        .padding(.bottom, 24)
+    }
+
+    private var syncBadge: String? {
+        if document.isWordSynced { return "WORD SYNC" }
+        if document.isSynced { return "SYNCED" }
+        if !document.lines.isEmpty { return "PLAIN" }
+        return nil
+    }
+
+    private var lyricsStatus: String {
+        if document.isWordSynced {
+            return "Word-synced to this recording"
+        }
+        if document.isSynced {
+            return "Timed lyrics matched to this recording"
+        }
+        if !document.lines.isEmpty {
+            return "Plain lyrics · timing unavailable"
+        }
+        return "No lyrics matched yet"
+    }
+
+    private func glassBadge(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 8, weight: .bold))
+            .tracking(0.8)
+            .foregroundStyle(.white.opacity(0.80))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .nativeGlass(Capsule())
+            .overlay {
+                Capsule()
+                    .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+            }
     }
 
     private var syncedLyrics: some View {
@@ -361,11 +439,39 @@ struct LyricsView: View {
                         .animation(.easeInOut(duration: 0.12), value: activeWordIndex)
                     }
                     .padding(.vertical, isActive ? 12 : 8)
+                    .background {
+                        activeLineGlass(isActive)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        seek(to: line)
+                    }
                     .id(line.id)
                 }
             }
         }
         .padding(.top, 4)
+    }
+
+    @ViewBuilder
+    private func activeLineGlass(_ isActive: Bool) -> some View {
+        if isActive {
+            Color.clear
+                .nativeGlass(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.6)
+                }
+                .padding(.horizontal, -10)
+                .padding(.vertical, -5)
+        }
+    }
+
+    private func seek(to line: LyricLine) {
+        guard let timestamp = line.timestamp,
+              player.current?.id == currentTrack.id
+        else { return }
+        player.seek(to: max(0, timestamp))
     }
 
     private func lyricText(for line: LyricLine, isActive: Bool, activeWord: Int?) -> Text {
@@ -406,6 +512,12 @@ struct LyricsView: View {
             .lineSpacing(11)
             .foregroundStyle(.white.opacity(0.92))
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(20)
+            .nativeGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.6)
+            }
             .padding(.top, 4)
     }
 
@@ -420,6 +532,11 @@ struct LyricsView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
+            Text("MOTIF checks automatically when a track starts, preferring word-synced lyrics that fit the recording.")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+
             Button {
                 showFinder = true
             } label: {
@@ -427,13 +544,20 @@ struct LyricsView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
-                    .background(Color.white.opacity(0.10), in: Capsule())
+                    .nativeGlass(Capsule(), interactive: true)
                     .foregroundStyle(.primary)
             }
             .buttonStyle(MotifPressStyle(scale: 0.94))
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 54)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 40)
+        .nativeGlass(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.6)
+        }
+        .padding(.top, 4)
     }
 
     private func scrollToActive(proxy: ScrollViewProxy, animated: Bool) {

@@ -219,6 +219,7 @@ struct NowPlayingView: View {
         }
         .sheet(item: $lyricsTrack) { track in
             LyricsView(track: track)
+                .environmentObject(player)
                 .environmentObject(player.progress)
         }
         .sheet(item: $lyricsFinderTrack) { track in

@@ -81,7 +81,7 @@ struct LyricsFinderView: View {
                 }
                 .padding(20)
             }
-            .background(AppBackground())
+            .background(finderBackdrop)
             .navigationTitle("Find Lyrics")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -97,6 +97,28 @@ struct LyricsFinderView: View {
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.visible)
         .presentationDetents([.medium, .large])
+    }
+
+    private var finderBackdrop: some View {
+        ZStack {
+            AppBackground()
+
+            if let url = track.artworkURL,
+               let image = PlaybackBackdropCache.shared.image(for: url) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .opacity(0.24)
+                    .clipped()
+            }
+
+            LinearGradient(
+                colors: [.black.opacity(0.16), .black.opacity(0.48), .black.opacity(0.72)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
     }
 
     private var trackHeader: some View {
@@ -132,13 +154,10 @@ struct LyricsFinderView: View {
                     .padding(.horizontal, 14)
                     .frame(height: 48)
             }
-            .background(
-                Color(uiColor: .secondarySystemBackground),
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
+            .nativeGlass(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
             }
 
             Button {
@@ -148,7 +167,7 @@ struct LyricsFinderView: View {
                     if isSearching {
                         ProgressView()
                             .controlSize(.small)
-                            .tint(Color(uiColor: .systemBackground))
+                            .tint(.primary)
                     } else {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 14, weight: .bold))
@@ -158,8 +177,12 @@ struct LyricsFinderView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 44)
-                .background(Color.primary, in: Capsule())
-                .foregroundStyle(Color(uiColor: .systemBackground))
+                .foregroundStyle(.primary)
+                .nativeGlass(Capsule(), interactive: true)
+                .overlay {
+                    Capsule()
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
+                }
             }
             .buttonStyle(MotifPressStyle(scale: 0.97))
             .disabled(isSearching || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -194,7 +217,15 @@ struct LyricsFinderView: View {
         defer { isSearching = false }
 
         do {
-            results = try await LyricsService.search(title: trimmedTitle, artist: artist)
+            let found = try await LyricsService.search(title: trimmedTitle, artist: artist)
+            results = found.sorted { lhs, rhs in
+                if lhs.syncLevel != rhs.syncLevel {
+                    return lhs.syncLevel > rhs.syncLevel
+                }
+                let leftDelta = abs((lhs.duration ?? track.duration) - track.duration)
+                let rightDelta = abs((rhs.duration ?? track.duration) - track.duration)
+                return leftDelta < rightDelta
+            }
             hasSearched = true
         } catch {
             results = []
@@ -246,13 +277,10 @@ private struct LyricsResultRow: View {
                 .foregroundStyle(.tertiary)
         }
         .padding(12)
-        .background(
-            Color(uiColor: .secondarySystemBackground),
-            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-        )
+        .nativeGlass(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.07), lineWidth: 0.5)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.6)
         }
         .contentShape(Rectangle())
     }

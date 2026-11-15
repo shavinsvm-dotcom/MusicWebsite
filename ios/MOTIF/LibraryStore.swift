@@ -149,6 +149,7 @@ final class LibraryStore: ObservableObject {
             }
             if updated.lyrics == nil, let lyrics = await lyrics(in: allItems) {
                 updated.lyrics = lyrics
+                updated.lyricsSource = .embedded
             }
 
             if updated != track {
@@ -424,22 +425,29 @@ final class LibraryStore: ObservableObject {
                 }
                 if let downloadedLyrics, tracks[index].lyrics == nil {
                     tracks[index].lyrics = downloadedLyrics
+                    tracks[index].lyricsSource = .embedded
                 }
             }
             save()
 
             // Keep lyrics with the offline copy. Embedded lyrics win; when the
-            // file has none, ask LRCLIB and persist the result in the library.
+            // file has none, ask LRCLIB and upgrade only when the new match is
+            // better than what is already stored.
+            let stored = tracks.first(where: { $0.id == existing.id })
+            let storedLevel = stored.map { LyricsService.syncLevel(for: $0) } ?? .none
             if downloadedLyrics == nil,
-               tracks.first(where: { $0.id == existing.id })?.lyrics == nil,
+               stored?.lyricsSource != .manual,
+               storedLevel < .wordSynced,
                let record = try? await LyricsService.findLyrics(
                    for: existing,
                    audioDuration: downloadedDuration
                ),
-               record.hasUsableLyrics {
+               record.hasUsableLyrics,
+               record.syncLevel > storedLevel {
                 setLyrics(
                     record.lyricsText,
                     lyricsFile: record.lyricsfile,
+                    source: .automatic,
                     for: existing
                 )
             }
@@ -757,7 +765,12 @@ final class LibraryStore: ObservableObject {
         if changed { save() }
     }
 
-    func setLyrics(_ lyrics: String?, lyricsFile: String? = nil, for track: Track) {
+    func setLyrics(
+        _ lyrics: String?,
+        lyricsFile: String? = nil,
+        source: LyricsSource = .manual,
+        for track: Track
+    ) {
         guard let existing = canonicalTrack(for: track),
               let index = tracks.firstIndex(where: { $0.id == existing.id })
         else { return }
@@ -768,6 +781,7 @@ final class LibraryStore: ObservableObject {
 
         tracks[index].lyrics = trimmedLyrics.isEmpty ? nil : lyrics
         tracks[index].lyricsFile = trimmedFile.isEmpty ? nil : lyricsFile
+        tracks[index].lyricsSource = source
         save()
     }
 

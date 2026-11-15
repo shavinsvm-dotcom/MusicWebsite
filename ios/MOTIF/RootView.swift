@@ -90,28 +90,57 @@ struct RootView: View {
                     await PlaybackBackdropCache.shared.prepare(for: url)
                 }
 
-                // Auto-fetch lyrics for any library track that does not have
-                // them yet. The matcher only accepts candidates that fit the
-                // track's duration, so this will not silently save a live or
-                // remix version just because it was the only search result.
-                guard track.lyrics == nil,
-                      track.lyricsFile == nil,
-                      !attemptedLyricsIDs.contains(track.id)
+                // Auto-fetch lyrics for any track that is not already
+                // word-synced. Manual picks are never replaced. The resolver
+                // waits for the real playback duration, then prefers a valid
+                // word-synced match over an exact-but-plain record.
+                let libraryTrack = library.tracks.first { existing in
+                    existing.id == track.id
+                        || (track.remoteID != nil && existing.remoteID == track.remoteID)
+                } ?? track
+                let currentLevel = LyricsService.syncLevel(for: libraryTrack)
+                guard libraryTrack.lyricsSource != .manual,
+                      currentLevel < .wordSynced,
+                      !attemptedLyricsIDs.contains(libraryTrack.id)
                 else { return }
 
-                attemptedLyricsIDs.insert(track.id)
-                let audioDuration = player.duration > 0 ? player.duration : nil
+                attemptedLyricsIDs.insert(libraryTrack.id)
+                let audioDuration = await audioDurationForLyrics(for: libraryTrack)
+                guard !Task.isCancelled, player.current?.id == track.id else { return }
+
                 if let record = try? await LyricsService.findLyrics(
-                    for: track,
+                    for: libraryTrack,
                     audioDuration: audioDuration
-                ), record.hasUsableLyrics {
+                ),
+                   record.hasUsableLyrics {
+                    // A manual pick can land while the network lookup is in
+                    // flight. Re-read the library before replacing anything.
+                    let latest = library.tracks.first(where: { $0.id == libraryTrack.id }) ?? libraryTrack
+                    guard latest.lyricsSource != .manual,
+                          LyricsService.syncLevel(for: latest) < record.syncLevel
+                    else { return }
+
                     library.setLyrics(
                         record.lyricsText,
                         lyricsFile: record.lyricsfile,
-                        for: track
+                        source: .automatic,
+                        for: latest
                     )
                 }
             }
+    }
+
+    private func audioDurationForLyrics(for track: Track) async -> TimeInterval? {
+        for _ in 0..<20 {
+            guard !Task.isCancelled else { return nil }
+            if player.duration.isFinite, player.duration >= 1 {
+                return player.duration
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        guard track.duration.isFinite, track.duration >= 1 else { return nil }
+        return track.duration
     }
 
     private var currentBackdrop: UIImage? {

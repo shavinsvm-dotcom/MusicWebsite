@@ -1,5 +1,16 @@
 import Foundation
 
+enum LyricsSyncLevel: Int, Comparable {
+    case none = 0
+    case plain = 1
+    case lineSynced = 2
+    case wordSynced = 3
+
+    static func < (lhs: LyricsSyncLevel, rhs: LyricsSyncLevel) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+}
+
 struct LyricsRecord: Identifiable, Codable, Hashable {
     let id: Int
     let name: String?
@@ -21,13 +32,21 @@ struct LyricsRecord: Identifiable, Codable, Hashable {
                 return candidate
             }
         }
+        if let lyricsfile,
+           let plain = LyricsFileParser.plainText(from: lyricsfile),
+           !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return plain
+        }
         return nil
     }
 
     var isWordSynced: Bool {
-        guard instrumental != true else { return false }
-        guard hasWordSync == true else { return false }
-        return !(lyricsfile ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        guard instrumental != true,
+              let lyricsfile,
+              !lyricsfile.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let document = LyricsFileParser.parse(lyricsfile)
+        else { return false }
+        return document.isWordSynced
     }
 
     var hasUsableLyrics: Bool {
@@ -36,8 +55,20 @@ struct LyricsRecord: Identifiable, Codable, Hashable {
 
     var isSynced: Bool {
         if isWordSynced { return true }
+        if let lyricsfile,
+           let document = LyricsFileParser.parse(lyricsfile),
+           document.isSynced {
+            return true
+        }
         guard let syncedLyrics else { return false }
         return !syncedLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var syncLevel: LyricsSyncLevel {
+        if isWordSynced { return .wordSynced }
+        if isSynced { return .lineSynced }
+        if lyricsText != nil { return .plain }
+        return .none
     }
 
     var durationText: String {
@@ -79,9 +110,9 @@ enum LyricsService {
 
     /// Finds the best available lyrics record for a library track.
     ///
-    /// When the audio duration is known, candidates that do not fit the track
-    /// or whose lyric timestamps run past the audio are rejected. This prevents
-    /// a live or remix version from winning just because it is the only result.
+    /// The exact endpoint is only one candidate. Search results are merged in
+    /// so a word-synced file can beat an exact plain-text match. Every timed
+    /// candidate must fit the actual audio duration before it is considered.
     static func findLyrics(
         for track: Track,
         audioDuration: TimeInterval? = nil
@@ -109,22 +140,81 @@ enum LyricsService {
             ))
         }
 
-        if let exact = try await fetchRecord(path: "/api/get", queryItems: exactItems),
-           exact.hasUsableLyrics,
-           isAcceptable(exact, for: track, duration: duration) {
-            return exact
+        var candidates: [LyricsRecord] = []
+        var exactError: Error?
+
+        do {
+            if let exact = try await fetchRecord(path: "/api/get", queryItems: exactItems),
+               exact.hasUsableLyrics {
+                if exact.syncLevel == .wordSynced,
+                   isAcceptable(exact, for: track, duration: duration) {
+                    return exact
+                }
+                candidates.append(exact)
+            }
+        } catch {
+            exactError = error
         }
 
-        let candidates = try await search(title: title, artist: artist)
-        return candidates
-            .filter {
-                $0.hasUsableLyrics
-                    && isAcceptable($0, for: track, duration: duration)
+        do {
+            candidates.append(contentsOf: try await search(title: title, artist: artist))
+        } catch {
+            guard !candidates.isEmpty else {
+                throw exactError ?? error
             }
-            .max {
-                score($0, for: track, duration: duration)
-                    < score($1, for: track, duration: duration)
+        }
+
+        var unique: [Int: LyricsRecord] = [:]
+        for candidate in candidates where candidate.hasUsableLyrics {
+            if let existing = unique[candidate.id], existing.syncLevel >= candidate.syncLevel {
+                continue
             }
+            unique[candidate.id] = candidate
+        }
+
+        let eligible = unique.values.filter {
+            isAcceptable($0, for: track, duration: duration)
+        }
+        guard !eligible.isEmpty else { return nil }
+
+        if let wordSynced = best(in: eligible.filter { $0.syncLevel == .wordSynced }, for: track, duration: duration) {
+            return wordSynced
+        }
+        if let lineSynced = best(in: eligible.filter { $0.syncLevel == .lineSynced }, for: track, duration: duration) {
+            return lineSynced
+        }
+        return best(in: eligible, for: track, duration: duration)
+    }
+
+    /// The quality currently stored on a library track.
+    static func syncLevel(for track: Track) -> LyricsSyncLevel {
+        var level: LyricsSyncLevel = .none
+
+        if let lyricsFile = track.lyricsFile,
+           let document = LyricsFileParser.parse(lyricsFile) {
+            if document.isWordSynced { return .wordSynced }
+            if document.isSynced { level = .lineSynced }
+        }
+
+        if let lyrics = track.lyrics, !lyrics.isEmpty {
+            let document = LyricsParser.parse(lyrics)
+            if document.isWordSynced { return .wordSynced }
+            if document.isSynced, level < .lineSynced { level = .lineSynced }
+            if level == .none { level = .plain }
+        }
+
+        return level
+    }
+
+    private static func best(
+        in candidates: [LyricsRecord],
+        for track: Track,
+        duration: TimeInterval?
+    ) -> LyricsRecord? {
+        candidates.max {
+            score($0, for: track, duration: duration)
+                < score($1, for: track, duration: duration)
+        }
     }
 
     /// Searches LRCLIB using editable title and artist fields.
@@ -165,6 +255,7 @@ enum LyricsService {
         duration: TimeInterval?
     ) -> Bool {
         guard record.hasUsableLyrics else { return false }
+        guard matchesTrackMetadata(record, track: track) else { return false }
         guard !hasAlternateVersionMismatch(record, track: track) else { return false }
 
         if let duration {
@@ -181,32 +272,79 @@ enum LyricsService {
         return true
     }
 
+    private static func matchesTrackMetadata(_ record: LyricsRecord, track: Track) -> Bool {
+        let recordTitle = normalize(record.trackName)
+        let trackTitle = normalize(track.title)
+        guard !recordTitle.isEmpty, !trackTitle.isEmpty else { return false }
+        guard recordTitle == trackTitle
+            || recordTitle.contains(trackTitle)
+            || trackTitle.contains(recordTitle)
+        else { return false }
+
+        let recordArtist = normalize(record.artistName)
+        let trackArtist = normalize(track.artist)
+        if !recordArtist.isEmpty, !trackArtist.isEmpty {
+            guard recordArtist == trackArtist
+                || recordArtist.contains(trackArtist)
+                || trackArtist.contains(recordArtist)
+            else { return false }
+        }
+
+        return true
+    }
+
     private static func timestampsFit(_ record: LyricsRecord, duration: TimeInterval) -> Bool {
-        let document: LyricsDocument?
-        if record.isWordSynced, let lyricsfile = record.lyricsfile {
-            document = LyricsFileParser.parse(lyricsfile)
-        } else if let syncedLyrics = record.syncedLyrics {
-            document = LyricsParser.parse(syncedLyrics)
-        } else {
-            return true
+        guard let document = lyricsDocument(for: record) else {
+            return record.syncLevel < .lineSynced
         }
+        guard document.isSynced else { return true }
 
-        guard let document, document.isSynced else { return true }
-        guard let first = document.lines.first?.timestamp,
-              let last = document.lines.last?.timestamp
-        else { return true }
+        let timedLines = document.lines.filter { $0.timestamp != nil }
+        guard timedLines.count >= 2,
+              let first = timedLines.first?.timestamp,
+              let last = timedLines.last?.timestamp
+        else { return false }
 
-        guard first >= -1, first <= duration + 2, last <= duration + 2 else {
-            return false
-        }
+        // A word-synced file should start near the top of the song and cover
+        // most of it. This rejects partial files and wildly offset timestamps.
+        let introTolerance = max(12, duration * 0.35)
+        guard first >= -1,
+              first <= introTolerance,
+              last >= duration * 0.35,
+              last <= duration + 2
+        else { return false }
 
-        let wordEndsOutOfBounds = document.lines.contains { line in
-            line.words.contains { word in
-                word.start > duration + 2
-                    || (word.end ?? word.start) > duration + 3
+        var previousStart = -Double.infinity
+        for line in timedLines {
+            guard let start = line.timestamp,
+                  start >= -1,
+                  start >= previousStart - 0.05
+            else { return false }
+
+            if let end = line.end,
+               end < start - 0.05 || end > duration + 2 {
+                return false
             }
+
+            var previousWordStart = -Double.infinity
+            for word in line.words {
+                guard word.start >= -0.5,
+                      word.start <= duration + 2,
+                      word.start >= start - 1.5,
+                      word.start >= previousWordStart - 0.05
+                else { return false }
+
+                if let end = word.end,
+                   end < word.start - 0.05 || end > duration + 3 {
+                    return false
+                }
+                previousWordStart = word.start
+            }
+
+            previousStart = start
         }
-        return !wordEndsOutOfBounds
+
+        return true
     }
 
     private static func score(
@@ -237,10 +375,13 @@ enum LyricsService {
             score -= abs(recordDuration - duration) * 100
         }
 
-        if record.isWordSynced {
-            score += 35
-        } else if record.isSynced {
-            score += 12
+        switch record.syncLevel {
+        case .wordSynced:
+            score += 400
+        case .lineSynced:
+            score += 80
+        case .plain, .none:
+            break
         }
 
         if let duration {
@@ -259,8 +400,9 @@ enum LyricsService {
     }
 
     private static func lyricsDocument(for record: LyricsRecord) -> LyricsDocument? {
-        if record.isWordSynced, let lyricsfile = record.lyricsfile {
-            return LyricsFileParser.parse(lyricsfile)
+        if let lyricsfile = record.lyricsfile,
+           let document = LyricsFileParser.parse(lyricsfile) {
+            return document
         }
         if let syncedLyrics = record.syncedLyrics {
             return LyricsParser.parse(syncedLyrics)
