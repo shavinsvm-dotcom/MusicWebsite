@@ -112,72 +112,26 @@ struct PlaylistsView: View {
         NavigationStack {
             List {
                 Section("Smart Playlists") {
-                    ForEach(SmartPlaylist.allCases) { smart in
-                        NavigationLink {
-                            SmartPlaylistDetailView(
-                                smart: smart,
-                                showNowPlaying: $showNowPlaying
-                            )
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: smart.icon)
-                                    .font(.body.weight(.medium))
-                                    .foregroundStyle(smart.tint)
-                                    .frame(width: 24)
-
-                                Text(smart.title)
-                            }
-                        }
-                    }
+                    SmartPlaylistShelf(showNowPlaying: $showNowPlaying)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 12, trailing: 0))
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
                 }
 
-                if library.playlists.isEmpty {
-                    Section {
+                Section("Your Playlists") {
+                    if library.playlists.isEmpty {
                         emptyState
                             .listRowBackground(Color.clear)
-                    }
-                } else {
-                    Section("Your Playlists") {
+                    } else {
                         ForEach(library.playlists) { playlist in
-                            let tracks = library.tracks(in: playlist)
-                            NavigationLink {
-                                PlaylistDetailView(
-                                    playlistID: playlist.id,
-                                    showNowPlaying: $showNowPlaying
-                                )
-                            } label: {
-                                PlaylistRow(playlist: playlist, tracks: tracks)
-                            }
-                            .contextMenu {
-                                Button {
-                                    play(playlist)
-                                } label: {
-                                    Label("Play", systemImage: "play.fill")
-                                }
-
-                                if tracks.contains(where: { $0.isCloud && !library.isDownloaded($0) }) {
-                                    Button {
-                                        Task {
-                                            await library.downloadAll(
-                                                tracks.filter { $0.isCloud && !library.isDownloaded($0) }
-                                            )
-                                        }
-                                    } label: {
-                                        Label("Download playlist", systemImage: "arrow.down.circle")
-                                    }
-                                }
-
-                                Button(role: .destructive) {
-                                    library.deletePlaylist(playlist)
-                                } label: {
-                                    Label("Delete playlist", systemImage: "trash")
-                                }
-                            }
+                            playlistRow(playlist)
                         }
                     }
                 }
             }
-            .listStyle(.insetGrouped)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(AppBackground())
             .navigationTitle("Playlists")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -195,19 +149,65 @@ struct PlaylistsView: View {
         }
     }
 
+    @ViewBuilder
+    private func playlistRow(_ playlist: Playlist) -> some View {
+        let tracks = library.tracks(in: playlist)
+
+        NavigationLink {
+            PlaylistDetailView(
+                playlistID: playlist.id,
+                showNowPlaying: $showNowPlaying
+            )
+        } label: {
+            PlaylistRow(playlist: playlist, tracks: tracks)
+        }
+        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+        .contextMenu {
+            Button {
+                play(playlist)
+            } label: {
+                Label("Play", systemImage: "play.fill")
+            }
+
+            if tracks.contains(where: { $0.isCloud && !library.isDownloaded($0) }) {
+                Button {
+                    Task {
+                        await library.downloadAll(
+                            tracks.filter { $0.isCloud && !library.isDownloaded($0) }
+                        )
+                    }
+                } label: {
+                    Label("Download playlist", systemImage: "arrow.down.circle")
+                }
+            }
+
+            Button(role: .destructive) {
+                library.deletePlaylist(playlist)
+            } label: {
+                Label("Delete playlist", systemImage: "trash")
+            }
+        }
+    }
+
     private var emptyState: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             Image(systemName: "music.note.list")
-                .font(.system(size: 30, weight: .light))
+                .font(.system(size: 28, weight: .light))
                 .foregroundStyle(.tertiary)
 
             Text("No playlists yet")
                 .font(.headline)
 
-            Text("Create a playlist and it will appear here.")
+            Text("Create a playlist from your library and it will appear here.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+
+            Button("New Playlist") {
+                showCreatePlaylist = true
+            }
+            .buttonStyle(.bordered)
+            .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -221,25 +221,91 @@ struct PlaylistsView: View {
     }
 }
 
+private struct SmartPlaylistShelf: View {
+    @EnvironmentObject private var library: LibraryStore
+    @Binding var showNowPlaying: Bool
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(alignment: .top, spacing: 14) {
+                ForEach(SmartPlaylist.allCases) { smart in
+                    NavigationLink {
+                        SmartPlaylistDetailView(
+                            smart: smart,
+                            showNowPlaying: $showNowPlaying
+                        )
+                    } label: {
+                        SmartPlaylistShelfItem(
+                            smart: smart,
+                            tracks: smart.tracks(in: library)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 2)
+        }
+    }
+}
+
+private struct SmartPlaylistShelfItem: View {
+    let smart: SmartPlaylist
+    let tracks: [Track]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SmartPlaylistCover(smart: smart, tracks: tracks)
+                .frame(width: 104, height: 104)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            Text(smart.title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .frame(width: 104, alignment: .leading)
+        }
+        .frame(width: 104, alignment: .leading)
+    }
+}
+
 private struct PlaylistRow: View {
     let playlist: Playlist
     let tracks: [Track]
 
-    var body: some View {
-        HStack(spacing: 12) {
-            PlaylistArtwork(playlist: playlist, tracks: tracks)
-                .frame(width: 52, height: 52)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    private var metadata: String {
+        let countText = tracks.count == 1 ? "1 song" : "\(tracks.count) songs"
+        let total = Int(tracks.reduce(0) { $0 + $1.duration }.rounded())
+        guard total > 0 else { return countText }
+        if total < 60 { return "\(countText) · <1 min" }
 
-            VStack(alignment: .leading, spacing: 2) {
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        if hours > 0 {
+            return "\(countText) · \(hours) hr \(minutes) min"
+        }
+        return "\(countText) · \(minutes) min"
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            PlaylistArtwork(playlist: playlist, tracks: tracks)
+                .frame(width: 64, height: 64)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
                 Text(playlist.name)
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                Text(tracks.count == 1 ? "1 song" : "\(tracks.count) songs")
-                    .font(.caption)
+                Text(metadata)
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
+
+            Spacer(minLength: 8)
         }
         .padding(.vertical, 3)
     }
@@ -379,11 +445,11 @@ struct PlaylistDetailView: View {
     var body: some View {
         List {
             Section {
-                VStack(spacing: 14) {
+                VStack(spacing: 12) {
                     PlaylistArtwork(playlist: playlist ?? Playlist(name: "Playlist"), tracks: tracks)
-                        .frame(width: 168, height: 168)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        .shadow(color: .black.opacity(0.16), radius: 12, y: 6)
+                        .frame(width: 220, height: 220)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .shadow(color: .black.opacity(0.18), radius: 18, y: 9)
 
                     if let description = playlist?.description, !description.isEmpty {
                         Text(description)
@@ -398,13 +464,13 @@ struct PlaylistDetailView: View {
                         .foregroundStyle(.secondary)
 
                     if !tracks.isEmpty {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 10) {
                             Button {
                                 play(shuffled: false)
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                                     .font(.subheadline.weight(.semibold))
-                                    .frame(minWidth: 84)
+                                    .frame(minWidth: 88)
                             }
                             .buttonStyle(.borderedProminent)
                             .buttonBorderShape(.capsule)
@@ -443,7 +509,8 @@ struct PlaylistDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
+                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 18, trailing: 20))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
@@ -470,6 +537,8 @@ struct PlaylistDetailView: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(AppBackground())
         .navigationTitle(playlist?.name ?? "Playlist")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -574,17 +643,17 @@ private struct PlaylistTrackRow: View {
                 HStack(spacing: 12) {
                     ZStack {
                         ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                            .frame(width: 46, height: 46)
-                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .frame(width: 52, height: 52)
+                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                         if isCurrent {
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
                                 .fill(.black.opacity(0.42))
                             PlayingWaveform(color: .white)
                         }
                     }
                     .overlay {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
                             .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
                     }
 
@@ -893,47 +962,36 @@ struct SmartPlaylistCover: View {
         GeometryReader { geometry in
             let side = min(geometry.size.width, geometry.size.height)
 
-            ZStack {
+            ZStack(alignment: .bottomLeading) {
                 if tracks.isEmpty {
                     LinearGradient(
                         colors: [
-                            smart.tint.opacity(0.95),
-                            smart.tint.opacity(0.48),
-                            Color(white: 0.06)
+                            smart.tint.opacity(0.92),
+                            smart.tint.opacity(0.40),
+                            Color(white: 0.07)
                         ],
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     )
 
                     Image(systemName: smart.icon)
-                        .font(.system(size: side * 0.30, weight: .light))
+                        .font(.system(size: side * 0.28, weight: .light))
                         .foregroundStyle(.white.opacity(0.92))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     PlaylistMosaic(tracks: Array(tracks.prefix(4)))
 
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.16), .black.opacity(0.48)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Image(systemName: smart.icon)
-                                .font(.system(size: max(10, side * 0.095), weight: .semibold))
-                                .foregroundStyle(.white)
-                                .frame(width: side * 0.18, height: side * 0.18)
-                                .background(.black.opacity(0.44), in: Circle())
-                            Spacer()
-                        }
+                    Image(systemName: smart.icon)
+                        .font(.system(size: max(10, side * 0.08), weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: side * 0.17, height: side * 0.17)
+                        .background(.black.opacity(0.38), in: Circle())
                         .padding(side * 0.07)
-                    }
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .background(smart.tint.opacity(0.22))
+        .background(smart.tint.opacity(0.16))
     }
 }
 
@@ -961,22 +1019,22 @@ struct SmartPlaylistDetailView: View {
             Section {
                 VStack(spacing: 12) {
                     SmartPlaylistCover(smart: smart, tracks: tracks)
-                        .frame(width: 156, height: 156)
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .shadow(color: .black.opacity(0.16), radius: 12, y: 6)
+                        .frame(width: 180, height: 180)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
 
                     Text(subtitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
                     if !tracks.isEmpty {
-                        HStack(spacing: 12) {
+                        HStack(spacing: 10) {
                             Button {
                                 play(shuffled: false)
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                                     .font(.subheadline.weight(.semibold))
-                                    .frame(minWidth: 84)
+                                    .frame(minWidth: 88)
                             }
                             .buttonStyle(.borderedProminent)
                             .buttonBorderShape(.capsule)
@@ -1015,7 +1073,8 @@ struct SmartPlaylistDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
+                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 18, trailing: 20))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
@@ -1048,6 +1107,8 @@ struct SmartPlaylistDetailView: View {
             }
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(AppBackground())
         .navigationTitle(smart.title)
         .navigationBarTitleDisplayMode(.inline)
     }

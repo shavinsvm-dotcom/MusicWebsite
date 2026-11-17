@@ -769,66 +769,64 @@ private struct NowPlayingScrubber: View {
     @State private var isScrubbing = false
     @State private var scrubValue = 0.0
 
-    var body: some View {
-        VStack(spacing: 8) {
-            GeometryReader { geometry in
-                let width = max(geometry.size.width, 1)
-                let duration = max(player.duration, 0)
-                let displayed = isScrubbing ? scrubValue : progress.elapsed
-                let fraction = duration > 0
-                    ? CGFloat(min(max(displayed / duration, 0), 1))
-                    : 0
+    private var duration: Double {
+        max(player.duration, 0)
+    }
 
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.24))
-                        .frame(height: 4)
+    private var displayedTime: Double {
+        let value = isScrubbing ? scrubValue : progress.elapsed
+        return min(max(value, 0), duration)
+    }
 
-                    Capsule()
-                        .fill(Color.white)
-                        .frame(width: width * fraction, height: 4)
+    private var sliderRange: ClosedRange<Double> {
+        0...max(duration, 1)
+    }
 
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 9, height: 9)
-                        .position(
-                            x: min(max(width * fraction, 4.5), max(width - 4.5, 4.5)),
-                            y: geometry.size.height / 2
-                        )
+    private var sliderBinding: Binding<Double> {
+        Binding(
+            get: { displayedTime },
+            set: { newValue in
+                guard duration > 0 else { return }
+                scrubValue = min(max(newValue, 0), duration)
+                if !isScrubbing {
+                    isScrubbing = true
                 }
-                .frame(height: geometry.size.height)
-                .animation(
-                    isScrubbing ? nil : .linear(duration: 0.12),
-                    value: fraction
-                )
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            guard player.duration > 0 else { return }
-                            if !isScrubbing {
-                                scrubValue = progress.elapsed
-                                isScrubbing = true
-                            }
-                            let fraction = min(max(value.location.x / width, 0), 1)
-                            scrubValue = fraction * player.duration
-                        }
-                        .onEnded { _ in
-                            guard player.duration > 0 else { return }
-                            player.seek(to: scrubValue)
-                            isScrubbing = false
-                        }
-                )
             }
-            .frame(height: 18)
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Slider(
+                value: sliderBinding,
+                in: sliderRange,
+                onEditingChanged: { editing in
+                    guard duration > 0 else { return }
+
+                    if editing {
+                        if !isScrubbing {
+                            scrubValue = min(max(progress.elapsed, 0), duration)
+                        }
+                        isScrubbing = true
+                    } else {
+                        player.seek(to: scrubValue)
+                        isScrubbing = false
+                    }
+                }
+            )
+            .tint(.white)
+            .disabled(duration <= 0)
+            .accessibilityLabel("Playback position")
+            .accessibilityValue("\(timeText(displayedTime)) of \(timeText(duration))")
 
             HStack {
-                Text(timeText(isScrubbing ? scrubValue : progress.elapsed))
+                Text(timeText(displayedTime))
                 Spacer()
-                Text(timeText(max(player.duration - (isScrubbing ? scrubValue : progress.elapsed), 0)))
+                Text(timeText(max(duration - displayedTime, 0)))
             }
             .font(.system(size: 12, weight: .regular, design: .monospaced))
             .foregroundStyle(.white.opacity(0.54))
+            .padding(.horizontal, 2)
         }
     }
 
