@@ -585,6 +585,7 @@ struct PlaylistDetailView: View {
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 6)
+                        .listRowBackground(Color.clear)
                 }
             } else {
                 Section {
@@ -595,6 +596,7 @@ struct PlaylistDetailView: View {
                             playlistID: playlistID,
                             showNowPlaying: $showNowPlaying
                         )
+                        .listRowBackground(Color.clear)
                     }
                 } header: {
                     Text("Tracks")
@@ -1261,6 +1263,7 @@ struct SmartPlaylistDetailView: View {
                 Section {
                     ForEach(tracks) { track in
                         TrackRow(track: track, queue: tracks)
+                            .listRowBackground(Color.clear)
                     }
                 } header: {
                     Text("Tracks")

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import UIKit
 
@@ -170,6 +171,7 @@ struct NowPlayingView: View {
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
     @State private var livingArtworkActive = false
+    @State private var transportReady = false
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
@@ -198,16 +200,26 @@ struct NowPlayingView: View {
         }
         .preferredColorScheme(.dark)
         .task {
-            // Keep the expensive living-artwork pass out of the presentation
-            // transition. The static cover is already on screen, so the wash
-            // can fade in once the zoom has settled.
-            guard !reduceMotion else { return }
-            try? await Task.sleep(nanoseconds: 650_000_000)
+            // Let the zoom land before mounting the dense transport bar, and
+            // keep the living-artwork pass out of the transition entirely.
+            guard !reduceMotion else {
+                transportReady = true
+                return
+            }
+
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.18)) {
+                transportReady = true
+            }
+
+            try? await Task.sleep(nanoseconds: 350_000_000)
             guard !Task.isCancelled else { return }
             livingArtworkActive = true
         }
         .onDisappear {
             livingArtworkActive = false
+            transportReady = false
         }
         .sheet(isPresented: $showQueue) {
             UpNextView()
@@ -371,13 +383,18 @@ struct NowPlayingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
 
-                        NowPlayingScrubber()
-                            .padding(.horizontal, 24)
-                            .padding(.top, 10)
+                        if transportReady {
+                            VStack(spacing: 0) {
+                                NowPlayingScrubber()
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, 10)
 
-                        controls(track)
-                            .padding(.horizontal, 22)
-                            .padding(.top, 12)
+                                controls(track)
+                                    .padding(.horizontal, 22)
+                                    .padding(.top, 12)
+                            }
+                            .transition(.opacity)
+                        }
 
                     Spacer(minLength: 0)
                 }
@@ -754,91 +771,41 @@ private struct NowPlayingScrubber: View {
 
     @State private var isScrubbing = false
     @State private var sliderValue = 0.0
+    @State private var lastSeekAt = Date.distantPast
 
     private var duration: Double {
         max(player.duration, 0)
     }
 
-    private var fraction: CGFloat {
-        guard duration > 0 else { return 0 }
-        return CGFloat(min(max(sliderValue / duration, 0), 1))
+    private var range: ClosedRange<Double> {
+        0...max(duration, 1)
     }
 
     var body: some View {
-        VStack(spacing: 5) {
-            GeometryReader { geometry in
-                let width = max(geometry.size.width, 1)
-                let thumbSize: CGFloat = 20
-                let travel = max(width - thumbSize, 1)
-                let fraction = self.fraction
-
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(Color.white.opacity(0.13))
-                        .frame(height: 6)
-
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(0.96),
-                                    Color.white.opacity(0.72)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(
-                            width: max(6, thumbSize / 2 + travel * fraction),
-                            height: 6
-                        )
-
-                    Circle()
-                        .fill(Color.white.opacity(0.16))
-                        .frame(width: thumbSize, height: thumbSize)
-                        .nativeGlass(Circle(), interactive: true)
-                        .overlay {
-                            Circle()
-                                .strokeBorder(Color.white.opacity(0.65), lineWidth: 0.7)
-                        }
-                        .shadow(color: .black.opacity(0.22), radius: 6, y: 3)
-                        .offset(x: travel * fraction)
+        VStack(spacing: 2) {
+            Slider(
+                value: $sliderValue,
+                in: range,
+                onEditingChanged: { editing in
+                    if editing {
+                        isScrubbing = true
+                    } else {
+                        player.seek(to: sliderValue)
+                        lastSeekAt = Date()
+                        isScrubbing = false
+                    }
                 }
-                .frame(height: thumbSize)
-                .frame(maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            guard duration > 0 else { return }
-                            isScrubbing = true
-                            let x = min(max(value.location.x - thumbSize / 2, 0), travel)
-                            sliderValue = duration * Double(x / travel)
-                        }
-                        .onEnded { _ in
-                            guard duration > 0 else { return }
-                            player.seek(to: sliderValue)
-                            isScrubbing = false
-                        }
-                )
-            }
-            .frame(height: 30)
-            .accessibilityElement()
+            )
+            .tint(.white)
+            .disabled(duration <= 0)
+            // Bridge the 4 Hz progress ticks without animating the thumb
+            // while a finger is on it.
+            .animation(
+                isScrubbing ? nil : .linear(duration: 0.24),
+                value: sliderValue
+            )
             .accessibilityLabel("Playback position")
             .accessibilityValue("\(timeText(sliderValue)) of \(timeText(duration))")
-            .accessibilityAdjustableAction { direction in
-                guard duration > 0 else { return }
-                let step = max(duration * 0.02, 5)
-                switch direction {
-                case .increment:
-                    sliderValue = min(sliderValue + step, duration)
-                case .decrement:
-                    sliderValue = max(sliderValue - step, 0)
-                @unknown default:
-                    return
-                }
-                player.seek(to: sliderValue)
-            }
 
             HStack {
                 Text(timeText(sliderValue))
@@ -852,12 +819,22 @@ private struct NowPlayingScrubber: View {
         .onAppear {
             sliderValue = clamped(progress.elapsed)
         }
+        .onChange(of: player.current?.id) { _ in
+            sliderValue = 0
+            lastSeekAt = Date()
+        }
         .onChange(of: progress.elapsed) { elapsed in
-            guard !isScrubbing else { return }
-            sliderValue = clamped(elapsed)
+            guard !isScrubbing,
+                  Date().timeIntervalSince(lastSeekAt) > 0.35
+            else { return }
+            let next = clamped(elapsed)
+            guard abs(next - sliderValue) > 0.02 else { return }
+            sliderValue = next
         }
         .onChange(of: duration) { _ in
-            guard !isScrubbing else { return }
+            guard !isScrubbing,
+                  Date().timeIntervalSince(lastSeekAt) > 0.35
+            else { return }
             sliderValue = clamped(progress.elapsed)
         }
     }
