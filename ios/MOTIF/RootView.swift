@@ -65,6 +65,17 @@ struct RootView: View {
                     break
                 }
             }
+            .alert(
+                "Playback stopped",
+                isPresented: Binding(
+                    get: { player.playbackError != nil },
+                    set: { if !$0 { player.clearPlaybackError() } }
+                )
+            ) {
+                Button("OK") { player.clearPlaybackError() }
+            } message: {
+                Text(player.playbackError ?? "")
+            }
             .task {
                 player.onTrackStarted = { track in
                     library.recordPlay(track)

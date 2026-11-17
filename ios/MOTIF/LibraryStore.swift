@@ -29,6 +29,9 @@ final class LibraryStore: ObservableObject {
     private var downloadTasks: [UUID: Task<Void, Never>] = [:]
     private var activeDownloadCount = 0
     private var isPumpingDownloads = false
+    private var trackIndex: [UUID: Track] = [:]
+    private var trackByRemoteID: [String: Track] = [:]
+    private var playlistTrackCache: [UUID: [Track]] = [:]
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -48,7 +51,7 @@ final class LibraryStore: ObservableObject {
     }
 
     var recentTracks: [Track] {
-        recentTrackIDs.compactMap { id in tracks.first(where: { $0.id == id }) }
+        recentTrackIDs.compactMap { trackIndex[$0] }
     }
 
     var mostPlayed: [Track] {
@@ -80,7 +83,7 @@ final class LibraryStore: ObservableObject {
     func isFavorite(_ track: Track) -> Bool {
         if favoriteIDs.contains(track.id) { return true }
         guard let remoteID = track.remoteID,
-              let existing = tracks.first(where: { $0.remoteID == remoteID }) else {
+              let existing = trackByRemoteID[remoteID] else {
             return false
         }
         return favoriteIDs.contains(existing.id)
@@ -91,7 +94,13 @@ final class LibraryStore: ObservableObject {
     }
 
     func tracks(in playlist: Playlist) -> [Track] {
-        playlist.trackIDs.compactMap { id in tracks.first(where: { $0.id == id }) }
+        if let cached = playlistTrackCache[playlist.id] {
+            return cached
+        }
+
+        let resolved = playlist.trackIDs.compactMap { trackIndex[$0] }
+        playlistTrackCache[playlist.id] = resolved
+        return resolved
     }
 
     func isDownloaded(_ track: Track) -> Bool {
@@ -118,6 +127,13 @@ final class LibraryStore: ObservableObject {
 
         for index in tracks.indices where tracks[index].source == .local {
             let track = tracks[index]
+
+            // Re-reading every local file on every launch is expensive. Only
+            // revisit files that still need tags, artwork or lyrics.
+            guard track.metadataSource == "filename" || track.artworkURL == nil else {
+                continue
+            }
+
             let asset = AVURLAsset(url: track.mediaURL)
             let items = (try? await asset.load(.commonMetadata)) ?? []
             let allItems = (try? await asset.load(.metadata)) ?? items
@@ -1050,11 +1066,23 @@ final class LibraryStore: ObservableObject {
     }
 
     private func canonicalTrack(for track: Track) -> Track? {
-        tracks.first { existing in
-            if existing.id == track.id { return true }
-            guard let remoteID = track.remoteID else { return false }
-            return existing.remoteID == remoteID
+        if let exact = trackIndex[track.id] { return exact }
+        guard let remoteID = track.remoteID else { return nil }
+        return trackByRemoteID[remoteID]
+    }
+
+    private func rebuildIndexes() {
+        trackIndex.removeAll(keepingCapacity: true)
+        trackByRemoteID.removeAll(keepingCapacity: true)
+
+        for track in tracks {
+            trackIndex[track.id] = track
+            if let remoteID = track.remoteID, trackByRemoteID[remoteID] == nil {
+                trackByRemoteID[remoteID] = track
+            }
         }
+
+        playlistTrackCache.removeAll(keepingCapacity: true)
     }
 
     private func load() {
@@ -1115,6 +1143,7 @@ final class LibraryStore: ObservableObject {
         let identifiers = Set(tracks.map(\.id))
         playCounts = snapshot.playCounts.filter { identifiers.contains($0.key) }
 
+        rebuildIndexes()
         if migrated { save() }
     }
 
@@ -1130,6 +1159,8 @@ final class LibraryStore: ObservableObject {
     }
 
     private func save() {
+        rebuildIndexes()
+
         let snapshot = LibrarySnapshot(
             tracks: tracks,
             favoriteIDs: Array(favoriteIDs),

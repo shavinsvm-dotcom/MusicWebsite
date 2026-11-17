@@ -6,28 +6,32 @@ struct ForYouView: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
     var openSearch: () -> Void
+    @State private var compactHeaderVisible = false
 
     var body: some View {
+        let data = ForYouSnapshot(library: library)
+
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 30) {
                     header
+                        .trackHeaderBottom(in: "forYouScroll")
 
-                    if library.tracks.isEmpty {
+                    if data.tracks.isEmpty {
                         emptyState
                     } else {
-                        if !mixTracks.isEmpty {
-                            dailyMix
+                        if !data.mixTracks.isEmpty {
+                            dailyMix(data)
                         }
 
-                        if let artist = topArtist, topArtistTracks.count > 1 {
-                            becauseYouLike(artist)
+                        if let artist = data.topArtist, data.topArtistTracks.count > 1 {
+                            becauseYouLike(artist, tracks: data.topArtistTracks)
                         }
 
-                        onRepeat
+                        onRepeat(data)
 
-                        if artistSummaries.count > 1 {
-                            topArtists
+                        if data.artists.count > 1 {
+                            topArtists(data.artists)
                         }
                     }
                 }
@@ -37,8 +41,19 @@ struct ForYouView: View {
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
+            .coordinateSpace(name: "forYouScroll")
+            .onPreferenceChange(HeaderBottomPreferenceKey.self) { value in
+                compactHeaderVisible = value < 30
+            }
             .background(AppBackground())
             .toolbar(.hidden, for: .navigationBar)
+            .overlay(alignment: .top) {
+                if compactHeaderVisible {
+                    CompactPageHeader(title: "For You")
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: compactHeaderVisible)
         }
     }
 
@@ -54,10 +69,10 @@ struct ForYouView: View {
         }
     }
 
-    private var dailyMix: some View {
+    private func dailyMix(_ data: ForYouSnapshot) -> some View {
         Button {
-            guard let first = mixTracks.first else { return }
-            player.play(first, queue: mixTracks)
+            guard let first = data.mixTracks.first else { return }
+            player.play(first, queue: data.mixTracks)
             showNowPlaying = true
         } label: {
             ZStack(alignment: .bottomLeading) {
@@ -69,7 +84,7 @@ struct ForYouView: View {
                     spacing: 0
                 ) {
                     ForEach(0..<4, id: \.self) { index in
-                        mixArtwork(index)
+                        mixArtwork(index, tracks: data.mixTracks)
                     }
                 }
                 .frame(height: 244)
@@ -92,7 +107,7 @@ struct ForYouView: View {
                         .tracking(-0.8)
                         .foregroundStyle(.white)
 
-                    Text(mixSubtitle)
+                    Text(data.mixSubtitle)
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.72))
                         .lineLimit(1)
@@ -116,23 +131,23 @@ struct ForYouView: View {
         .buttonStyle(MotifPressStyle(scale: 0.985))
     }
 
-    private func mixArtwork(_ index: Int) -> some View {
-        let track = mixTracks[index % max(mixTracks.count, 1)]
+    private func mixArtwork(_ index: Int, tracks: [Track]) -> some View {
+        let track = tracks[index % max(tracks.count, 1)]
         return ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
             .frame(maxWidth: .infinity)
             .frame(height: 122)
             .clipped()
     }
 
-    private func becauseYouLike(_ artist: ArtistSummary) -> some View {
+    private func becauseYouLike(_ artist: ArtistSummary, tracks: [Track]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: "Because you like \(artist.name)")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 14) {
-                    ForEach(topArtistTracks) { track in
+                    ForEach(tracks) { track in
                         Button {
-                            player.play(track, queue: topArtistTracks)
+                            player.play(track, queue: tracks)
                             showNowPlaying = true
                         } label: {
                             VStack(alignment: .leading, spacing: 8) {
@@ -159,14 +174,14 @@ struct ForYouView: View {
         }
     }
 
-    private var onRepeat: some View {
+    private func onRepeat(_ data: ForYouSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 SectionTitle(title: "On repeat")
                 Spacer()
                 Button {
-                    guard let first = repeatTracks.first else { return }
-                    player.play(first, queue: repeatTracks)
+                    guard let first = data.repeatTracks.first else { return }
+                    player.play(first, queue: data.repeatTracks)
                     showNowPlaying = true
                 } label: {
                     Label("Play all", systemImage: "play.fill")
@@ -177,9 +192,9 @@ struct ForYouView: View {
             }
 
             LazyVStack(spacing: 0) {
-                ForEach(repeatTracks) { track in
-                    TrackRow(track: track, queue: repeatTracks)
-                    if track.id != repeatTracks.last?.id {
+                ForEach(data.repeatTracks) { track in
+                    TrackRow(track: track, queue: data.repeatTracks)
+                    if track.id != data.repeatTracks.last?.id {
                         Divider().opacity(0.35)
                     }
                 }
@@ -187,13 +202,13 @@ struct ForYouView: View {
         }
     }
 
-    private var topArtists: some View {
+    private func topArtists(_ artists: [ArtistSummary]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: "Your artists")
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 20) {
-                    ForEach(artistSummaries.prefix(8)) { artist in
+                    ForEach(artists.prefix(8)) { artist in
                         NavigationLink {
                             ArtistTracksView(
                                 artistName: artist.name,
@@ -253,45 +268,55 @@ struct ForYouView: View {
         .glassSurface(radius: 26)
     }
 
-    private var mixTracks: [Track] {
+}
+
+private struct ForYouSnapshot {
+    let tracks: [Track]
+    let mixTracks: [Track]
+    let mixSubtitle: String
+    let repeatTracks: [Track]
+    let artists: [ArtistSummary]
+    let topArtist: ArtistSummary?
+    let topArtistTracks: [Track]
+
+    @MainActor
+    init(library: LibraryStore) {
         let all = library.tracks
-        guard !all.isEmpty else { return [] }
-        let count = min(8, all.count)
-        let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
-        return (0..<count).map { all[(day + $0 * 7) % all.count] }
-    }
+        tracks = all
 
-    private var mixSubtitle: String {
-        var seen = Set<String>()
-        let names = mixTracks.compactMap { track -> String? in
-            guard seen.insert(track.artist).inserted else { return nil }
-            return track.artist
+        if all.isEmpty {
+            mixTracks = []
+            mixSubtitle = ""
+        } else {
+            let count = min(8, all.count)
+            let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+            let mix = (0..<count).map { all[(day + $0 * 7) % all.count] }
+            mixTracks = mix
+
+            var seen = Set<String>()
+            mixSubtitle = mix
+                .compactMap { track -> String? in
+                    guard seen.insert(track.artist).inserted else { return nil }
+                    return track.artist
+                }
+                .prefix(3)
+                .joined(separator: ", ")
         }
-        return names.prefix(3).joined(separator: ", ")
-    }
 
-    private var topArtistTracks: [Track] {
-        guard let topArtist else { return [] }
-        return Array(library.tracks.filter { $0.artist == topArtist.name }.prefix(6))
-    }
-
-    private var repeatTracks: [Track] {
         var picked: [Track] = []
-        var seen = Set<UUID>()
-        for track in library.favorites + library.tracks {
-            guard seen.insert(track.id).inserted else { continue }
+        var pickedIDs = Set<UUID>()
+        for track in library.favorites + all {
+            guard pickedIDs.insert(track.id).inserted else { continue }
             picked.append(track)
             if picked.count == 6 { break }
         }
-        return picked
-    }
+        repeatTracks = picked
 
-    private var artistSummaries: [ArtistSummary] {
         var counts: [String: Int] = [:]
         var artwork: [String: URL] = [:]
         var order: [String] = []
 
-        for track in library.tracks {
+        for track in all {
             let name = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !name.isEmpty, name != "Imported" else { continue }
             if counts[name] == nil {
@@ -301,7 +326,7 @@ struct ForYouView: View {
             counts[name, default: 0] += 1
         }
 
-        return order
+        let summaries = order
             .map {
                 ArtistSummary(
                     name: $0,
@@ -313,10 +338,13 @@ struct ForYouView: View {
                 if $0.count == $1.count { return $0.name < $1.name }
                 return $0.count > $1.count
             }
-    }
 
-    private var topArtist: ArtistSummary? {
-        artistSummaries.first
+        artists = summaries
+        let top = summaries.first
+        topArtist = top
+        topArtistTracks = top.map { artist in
+            Array(all.filter { $0.artist == artist.name }.prefix(6))
+        } ?? []
     }
 }
 

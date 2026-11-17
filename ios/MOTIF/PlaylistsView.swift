@@ -23,7 +23,7 @@ private enum PlaylistSort: String, CaseIterable, Identifiable {
     }
 }
 
-enum SmartPlaylist: String, CaseIterable, Identifiable {
+enum SmartPlaylist: String, CaseIterable, Identifiable, Hashable {
     case recentlyPlayed
     case favorites
     case downloaded
@@ -122,6 +122,40 @@ enum SmartPlaylist: String, CaseIterable, Identifiable {
     }
 }
 
+private struct PlaylistsSnapshot {
+    let playlists: [Playlist]
+    let tracksByPlaylist: [UUID: [Track]]
+    let smartTracks: [SmartPlaylist: [Track]]
+    let totalSongs: Int
+
+    @MainActor
+    init(library: LibraryStore, sort: PlaylistSort) {
+        switch sort {
+        case .recent:
+            playlists = library.playlists.sorted { $0.createdAt > $1.createdAt }
+        case .name:
+            playlists = library.playlists.sorted {
+                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+        case .manual:
+            playlists = library.playlists
+        }
+
+        var resolved: [UUID: [Track]] = [:]
+        for playlist in playlists {
+            resolved[playlist.id] = library.tracks(in: playlist)
+        }
+        tracksByPlaylist = resolved
+
+        var smart: [SmartPlaylist: [Track]] = [:]
+        for item in SmartPlaylist.allCases {
+            smart[item] = item.tracks(in: library)
+        }
+        smartTracks = smart
+        totalSongs = Set(playlists.flatMap { $0.trackIDs }).count
+    }
+}
+
 struct PlaylistsView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
@@ -136,61 +170,27 @@ struct PlaylistsView: View {
         GridItem(.flexible(), spacing: 18)
     ]
 
-    private var sortedPlaylists: [Playlist] {
-        switch sort {
-        case .recent:
-            return library.playlists.sorted { $0.createdAt > $1.createdAt }
-        case .name:
-            return library.playlists.sorted {
-                $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-            }
-        case .manual:
-            return library.playlists
-        }
-    }
-
     var body: some View {
+        let data = PlaylistsSnapshot(library: library, sort: sort)
+
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 26) {
-                    smartPlaylistsSection
+                LazyVStack(
+                    alignment: .leading,
+                    spacing: 26,
+                    pinnedViews: [.sectionHeaders]
+                ) {
+                    collectionSummary(data)
+                    smartPlaylistsSection(data)
 
-                    if library.playlists.isEmpty {
+                    if data.playlists.isEmpty {
                         emptyState
+                            .padding(.horizontal, 20)
                             .padding(.top, 18)
                     } else {
-                        sectionHeader
-
-                        if layout == .grid {
-                            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 24) {
-                                ForEach(sortedPlaylists) { playlist in
-                                    playlistLink(playlist) {
-                                        PlaylistTile(
-                                            playlist: playlist,
-                                            tracks: library.tracks(in: playlist)
-                                        )
-                                    }
-                                }
-                            }
-                        } else {
-                            LazyVStack(spacing: 0) {
-                                ForEach(sortedPlaylists) { playlist in
-                                    playlistLink(playlist) {
-                                        PlaylistListRow(
-                                            playlist: playlist,
-                                            tracks: library.tracks(in: playlist)
-                                        )
-                                    }
-
-                                    if playlist.id != sortedPlaylists.last?.id {
-                                        Divider().opacity(0.35)
-                                    }
-                                }
-                            }
-                        }
+                        playlistsSection(data)
                     }
                 }
-                .padding(.horizontal, 20)
                 .padding(.top, 6)
                 .padding(.bottom, 120)
             }
@@ -199,97 +199,168 @@ struct PlaylistsView: View {
             .navigationTitle("Playlists")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 14) {
-                        Menu {
-                            Section("View") {
-                                Button {
-                                    layout = .grid
-                                } label: {
-                                    Label("Grid", systemImage: layout == .grid ? "checkmark" : "square.grid.2x2")
-                                }
-                                Button {
-                                    layout = .list
-                                } label: {
-                                    Label("List", systemImage: layout == .list ? "checkmark" : "list.bullet")
-                                }
-                            }
-
-                            Section("Sort") {
-                                ForEach(PlaylistSort.allCases) { option in
-                                    Button {
-                                        sort = option
-                                    } label: {
-                                        Label(
-                                            option.title,
-                                            systemImage: sort == option ? "checkmark" : "arrow.up.arrow.down"
-                                        )
-                                    }
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                                .font(.body.weight(.semibold))
-                        }
-                        .accessibilityLabel("Playlist options")
-
-                        Button {
-                            showCreatePlaylist = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .font(.body.weight(.semibold))
-                        }
-                        .accessibilityLabel("New playlist")
-                    }
-                }
-            }
             .sheet(isPresented: $showCreatePlaylist) {
                 PlaylistEditorView()
             }
         }
     }
 
-    private var sectionHeader: some View {
-        HStack(alignment: .firstTextBaseline) {
-            SectionTitle(title: "Your Playlists")
-            Spacer()
-            Text("\(library.playlists.count)")
-                .font(.caption.weight(.medium))
-                .foregroundStyle(.secondary)
+    private func collectionSummary(_ data: PlaylistsSnapshot) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(data.playlists.count == 1 ? "1 playlist" : "\(data.playlists.count) playlists")
+                    .font(.system(size: 20, weight: .semibold))
+                    .tracking(-0.35)
+
+                Text(data.totalSongs == 1 ? "1 song across your collection" : "\(data.totalSongs) songs across your collection")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                showCreatePlaylist = true
+            } label: {
+                Label("New", systemImage: "plus")
+                    .font(.caption.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+            }
+            .buttonStyle(MotifPressStyle(scale: 0.94))
+            .nativeGlass(Capsule(), interactive: true)
+            .accessibilityLabel("New playlist")
         }
+        .padding(.horizontal, 20)
     }
 
-    private var smartPlaylistsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionTitle(title: "Smart Playlists")
-                Spacer()
+    private func smartPlaylistsSection(_ data: PlaylistsSnapshot) -> some View {
+        Section {
+            LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 18) {
+                ForEach(Array(SmartPlaylist.allCases.enumerated()), id: \.offset) { index, smart in
+                    NavigationLink {
+                        SmartPlaylistDetailView(
+                            smart: smart,
+                            showNowPlaying: $showNowPlaying
+                        )
+                    } label: {
+                        SmartPlaylistCard(
+                            smart: smart,
+                            tracks: data.smartTracks[smart] ?? []
+                        )
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.975, opacity: 0.92))
+                    .liltEntrance(index: index)
+                    .liltCardScrollTransition()
+                }
+            }
+            .padding(.horizontal, 20)
+        } header: {
+            PinnedSectionHeader(title: "Smart Playlists") {
                 Text("AUTOMATIC")
                     .font(.system(size: 9, weight: .semibold))
                     .tracking(1.2)
                     .foregroundStyle(.tertiary)
             }
+        }
+    }
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: .top, spacing: 14) {
-                    ForEach(SmartPlaylist.allCases) { smart in
-                        NavigationLink {
-                            SmartPlaylistDetailView(
-                                smart: smart,
-                                showNowPlaying: $showNowPlaying
-                            )
-                        } label: {
-                            SmartPlaylistTile(
-                                smart: smart,
-                                tracks: smart.tracks(in: library)
-                            )
+    private func playlistsSection(_ data: PlaylistsSnapshot) -> some View {
+        Section {
+            if layout == .grid {
+                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: 24) {
+                    ForEach(data.playlists) { playlist in
+                        let tracks = data.tracksByPlaylist[playlist.id] ?? []
+                        playlistLink(playlist, tracks: tracks) {
+                            PlaylistTile(playlist: playlist, tracks: tracks)
                         }
-                        .buttonStyle(MotifPressStyle(scale: 0.975, opacity: 0.9))
+                        .liltCardScrollTransition()
                     }
                 }
-                .padding(.horizontal, 2)
+                .padding(.horizontal, 20)
+            } else {
+                LazyVStack(spacing: 0) {
+                    ForEach(data.playlists) { playlist in
+                        let tracks = data.tracksByPlaylist[playlist.id] ?? []
+                        playlistLink(playlist, tracks: tracks) {
+                            PlaylistListRow(playlist: playlist, tracks: tracks)
+                        }
+
+                        if playlist.id != data.playlists.last?.id {
+                            Divider().opacity(0.35)
+                        }
+                    }
+                }
+                .padding(.horizontal, 20)
             }
+        } header: {
+            PinnedSectionHeader(title: "Your Playlists", count: data.playlists.count) {
+                playlistControls
+            }
+        }
+    }
+
+    private var playlistControls: some View {
+        HStack(spacing: 5) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { layout = .grid }
+            } label: {
+                Image(systemName: "square.grid.2x2")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(layout == .grid ? Color.primary : Color.secondary)
+                    .frame(width: 27, height: 27)
+                    .background(
+                        layout == .grid ? Color.primary.opacity(0.08) : Color.clear,
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(MotifPressStyle(scale: 0.9))
+            .accessibilityLabel("Grid layout")
+
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) { layout = .list }
+            } label: {
+                Image(systemName: "list.bullet")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(layout == .list ? Color.primary : Color.secondary)
+                    .frame(width: 27, height: 27)
+                    .background(
+                        layout == .list ? Color.primary.opacity(0.08) : Color.clear,
+                        in: Capsule()
+                    )
+            }
+            .buttonStyle(MotifPressStyle(scale: 0.9))
+            .accessibilityLabel("List layout")
+
+            Menu {
+                ForEach(PlaylistSort.allCases) { option in
+                    Button {
+                        sort = option
+                    } label: {
+                        Label(
+                            option.title,
+                            systemImage: sort == option ? "checkmark" : "arrow.up.arrow.down"
+                        )
+                    }
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 27, height: 27)
+            }
+            .accessibilityLabel("Sort playlists")
+
+            Button {
+                showCreatePlaylist = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 27, height: 27)
+            }
+            .buttonStyle(MotifPressStyle(scale: 0.9))
+            .accessibilityLabel("New playlist")
         }
     }
 
@@ -328,6 +399,7 @@ struct PlaylistsView: View {
     @ViewBuilder
     private func playlistLink<Content: View>(
         _ playlist: Playlist,
+        tracks: [Track],
         @ViewBuilder content: () -> Content
     ) -> some View {
         NavigationLink {
@@ -346,7 +418,6 @@ struct PlaylistsView: View {
                 Label("Play", systemImage: "play.fill")
             }
 
-            let tracks = library.tracks(in: playlist)
             if tracks.contains(where: { $0.isCloud && !library.isDownloaded($0) }) {
                 Button {
                     Task {
@@ -622,22 +693,29 @@ struct PlaylistDetailView: View {
                     emptyState
                         .padding(.horizontal, 20)
                 } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
-                            PlaylistTrackRow(
-                                index: index,
-                                track: track,
-                                queue: tracks,
-                                playlistID: playlistID,
-                                showNowPlaying: $showNowPlaying
-                            )
+                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        Section {
+                            ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
+                                PlaylistTrackRow(
+                                    index: index,
+                                    track: track,
+                                    queue: tracks,
+                                    playlistID: playlistID,
+                                    showNowPlaying: $showNowPlaying
+                                )
+                                .padding(.horizontal, 20)
 
-                            if track.id != tracks.last?.id {
-                                Divider().opacity(0.32)
+                                if track.id != tracks.last?.id {
+                                    Divider().opacity(0.32)
+                                        .padding(.horizontal, 20)
+                                }
+                            }
+                        } header: {
+                            PinnedSectionHeader(title: "Tracks", count: tracks.count) {
+                                EmptyView()
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
                 }
 
                 Spacer(minLength: 120)
@@ -889,9 +967,7 @@ private struct PlaylistTrackRow: View {
         HStack(spacing: 10) {
             Group {
                 if isCurrent {
-                    Image(systemName: "waveform")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.primary)
+                    PlayingWaveform()
                 } else {
                     Text("\(index + 1)")
                         .font(.system(size: 12, weight: .medium, design: .monospaced))
@@ -1202,6 +1278,49 @@ struct PlaylistEditorView: View {
     }
 }
 
+struct SmartPlaylistCard: View {
+    let smart: SmartPlaylist
+    let tracks: [Track]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            SmartPlaylistCover(smart: smart, tracks: tracks)
+                .aspectRatio(1, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.11), lineWidth: 0.7)
+                }
+                .shadow(color: smart.tint.opacity(0.22), radius: 18, y: 9)
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(smart.title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .tracking(-0.2)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                Text(countText)
+                    .font(.system(size: 11, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+            }
+
+            Text(smart == .favorites ? "The songs you keep coming back to." : "A living collection from your library.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var countText: String {
+        tracks.count == 1 ? "1 song" : "\(tracks.count) songs"
+    }
+}
+
 struct SmartPlaylistTile: View {
     let smart: SmartPlaylist
     let tracks: [Track]
@@ -1330,16 +1449,23 @@ struct SmartPlaylistDetailView: View {
                     emptyState
                         .padding(.horizontal, 20)
                 } else {
-                    LazyVStack(spacing: 0) {
-                        ForEach(tracks) { track in
-                            TrackRow(track: track, queue: tracks)
+                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        Section {
+                            ForEach(tracks) { track in
+                                TrackRow(track: track, queue: tracks)
+                                    .padding(.horizontal, 20)
 
-                            if track.id != tracks.last?.id {
-                                Divider().opacity(0.32)
+                                if track.id != tracks.last?.id {
+                                    Divider().opacity(0.32)
+                                        .padding(.horizontal, 20)
+                                }
+                            }
+                        } header: {
+                            PinnedSectionHeader(title: "Tracks", count: tracks.count) {
+                                EmptyView()
                             }
                         }
                     }
-                    .padding(.horizontal, 20)
                 }
 
                 Spacer(minLength: 120)

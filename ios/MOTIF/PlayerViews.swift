@@ -762,7 +762,7 @@ private struct NowPlayingScrubber: View {
     var body: some View {
         VStack(spacing: 8) {
             GeometryReader { geometry in
-                let width = geometry.size.width
+                let width = max(geometry.size.width, 1)
                 let duration = max(player.duration, 0)
                 let displayed = isScrubbing ? scrubValue : progress.elapsed
                 let fraction = duration > 0

@@ -9,12 +9,14 @@ struct HomeView: View {
 
     @State private var showImporter = false
     @State private var importError: String?
+    @State private var compactHeaderVisible = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 28) {
                     header
+                        .trackHeaderBottom(in: "homeScroll")
 
                     if let featured = library.tracks.first {
                         featuredCard(featured)
@@ -36,8 +38,19 @@ struct HomeView: View {
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
+            .coordinateSpace(name: "homeScroll")
+            .onPreferenceChange(HeaderBottomPreferenceKey.self) { value in
+                compactHeaderVisible = value < 30
+            }
             .background(AppBackground())
             .toolbar(.hidden, for: .navigationBar)
+            .overlay(alignment: .top) {
+                if compactHeaderVisible {
+                    CompactPageHeader(title: "Home")
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeInOut(duration: 0.2), value: compactHeaderVisible)
             .fileImporter(
                 isPresented: $showImporter,
                 allowedContentTypes: [.audio],

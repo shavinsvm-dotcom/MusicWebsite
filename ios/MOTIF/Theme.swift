@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import ImageIO
 import SwiftUI
 import UIKit
 
@@ -221,28 +222,15 @@ struct ArtworkView: View {
         image = nil
         failed = false
 
-        if url.isFileURL {
-            if let local = UIImage(contentsOfFile: url.path) {
-                ArtworkImageCache.shared.store(local, for: url)
-                image = local
-                onImageLoaded?(local)
-            } else {
-                failed = true
-            }
-            return
-        }
-
-        guard let (data, _) = try? await URLSession.shared.data(from: url),
-              !Task.isCancelled,
-              let remote = UIImage(data: data)
+        guard let loaded = await ArtworkImageCache.shared.loadImage(for: url),
+              !Task.isCancelled
         else {
             if !Task.isCancelled { failed = true }
             return
         }
 
-        ArtworkImageCache.shared.store(remote, for: url)
-        image = remote
-        onImageLoaded?(remote)
+        image = loaded
+        onImageLoaded?(loaded)
     }
 
     private var fallback: some View {
@@ -272,6 +260,8 @@ final class ArtworkImageCache {
     static let shared = ArtworkImageCache()
 
     private let cache = NSCache<NSURL, UIImage>()
+    private let taskLock = NSLock()
+    private var loadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
 
     private init() {
         cache.countLimit = 160
@@ -285,6 +275,68 @@ final class ArtworkImageCache {
     func store(_ image: UIImage, for url: URL) {
         let cost = Int(image.size.width * image.size.height * 4)
         cache.setObject(image, forKey: url as NSURL, cost: cost)
+    }
+
+    /// Loads and downsamples artwork once per URL. Playlist mosaics often ask
+    /// for the same covers several times in one frame; sharing the task keeps
+    /// those cells from starting duplicate network and decode work.
+    func loadImage(for url: URL, maxPixelSize: Int = 900) async -> UIImage? {
+        if let cached = image(for: url) { return cached }
+
+        let key = url as NSURL
+        taskLock.lock()
+        if let existing = loadingTasks[key] {
+            taskLock.unlock()
+            return await existing.value
+        }
+
+        let task = Task.detached(priority: .utility) {
+            await Self.downsample(url: url, maxPixelSize: maxPixelSize)
+        }
+        loadingTasks[key] = task
+        taskLock.unlock()
+
+        let image = await task.value
+
+        taskLock.lock()
+        loadingTasks[key] = nil
+        taskLock.unlock()
+
+        if let image {
+            store(image, for: url)
+        }
+        return image
+    }
+
+    private static func downsample(url: URL, maxPixelSize: Int) async -> UIImage? {
+        let data: Data?
+        if url.isFileURL {
+            data = try? Data(contentsOf: url, options: .mappedIfSafe)
+        } else {
+            data = try? await URLSession.shared.data(from: url).0
+        }
+
+        guard let data else { return nil }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else {
+            return UIImage(data: data)
+        }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(
+            source,
+            0,
+            options as CFDictionary
+        ) else {
+            return UIImage(data: data)
+        }
+
+        return UIImage(cgImage: cgImage)
     }
 }
 

@@ -31,6 +31,7 @@ final class PlayerManager: ObservableObject {
     @Published private(set) var crossfadeDuration: TimeInterval = UserDefaults.standard.double(forKey: "motif.crossfadeDuration")
     @Published private(set) var automixEnabled = UserDefaults.standard.bool(forKey: "motif.automixEnabled")
     @Published private(set) var sleepTimerEnd: Date?
+    @Published private(set) var playbackError: String?
 
     var onTrackStarted: ((Track) -> Void)?
     var automixContinuationProvider: ((Track, Set<UUID>) -> Track?)?
@@ -70,6 +71,15 @@ final class PlayerManager: ObservableObject {
     private var currentIndex = 0
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
+    private var interruptionObserver: NSObjectProtocol?
+    private var routeChangeObserver: NSObjectProtocol?
+    private var itemStatusObservation: NSKeyValueObservation?
+    private var wasPlayingBeforeInterruption = false
+    private var navigationHistory: [Int] = []
+    private var lastWidgetSurfaceUpdate = Date.distantPast
+    private var lastWidgetTrackID: UUID?
+    private var lastWidgetIsPlaying: Bool?
+    private var nowPlayingArtworkLoadingURL: URL?
     private var infoTick = 0
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var nowPlayingArtworkURL: URL?
@@ -87,6 +97,7 @@ final class PlayerManager: ObservableObject {
     init() {
         configureAudioSession()
         configureRemoteCommands()
+        installSystemObservers()
         installTimeObserver()
 
         if #available(iOS 16.2, *) {
@@ -95,18 +106,30 @@ final class PlayerManager: ObservableObject {
     }
 
     func play(_ track: Track, queue newQueue: [Track]? = nil) {
+        if let newQueue, !newQueue.isEmpty {
+            queue = newQueue
+            navigationHistory.removeAll()
+            if !queue.contains(where: { $0.id == track.id }) {
+                queue.insert(track, at: 0)
+            }
+        } else if !queue.contains(where: { $0.id == track.id }) {
+            queue = [track]
+            navigationHistory.removeAll()
+        }
+
+        // Re-selecting the current song from another playlist should still
+        // adopt that playlist's queue instead of silently keeping the old one.
         if current?.id == track.id {
+            currentIndex = queue.firstIndex(where: { $0.id == track.id }) ?? currentIndex
+            prepareAutomixAnalysis()
+            prepareNextTrack()
             if !isPlaying { resume() }
             return
         }
 
-        if let newQueue, !newQueue.isEmpty {
-            queue = newQueue
-        } else if !queue.contains(where: { $0.id == track.id }) {
-            queue = [track]
-        }
-
         currentIndex = queue.firstIndex(where: { $0.id == track.id }) ?? 0
+        navigationHistory.removeAll()
+        playbackError = nil
         load(track)
     }
 
@@ -122,6 +145,7 @@ final class PlayerManager: ObservableObject {
         queue.removeAll { $0.id == track.id }
         let insertIndex = min(currentIndex + 1, queue.count)
         queue.insert(track, at: insertIndex)
+        navigationHistory.removeAll()
         automixNextIndex = nil
         prepareAutomixAnalysis()
         prepareNextTrack()
@@ -134,6 +158,7 @@ final class PlayerManager: ObservableObject {
         }
         guard !queue.contains(where: { $0.id == track.id }) else { return }
         queue.append(track)
+        navigationHistory.removeAll()
         automixNextIndex = nil
         prepareAutomixAnalysis()
         prepareNextTrack()
@@ -143,6 +168,7 @@ final class PlayerManager: ObservableObject {
         let upcoming = upNextTracks
         let ids = Set(offsets.compactMap { upcoming.indices.contains($0) ? upcoming[$0].id : nil })
         queue.removeAll { ids.contains($0.id) && $0.id != current?.id }
+        navigationHistory.removeAll()
         automixNextIndex = nil
         prepareAutomixAnalysis()
         prepareNextTrack()
@@ -156,6 +182,7 @@ final class PlayerManager: ObservableObject {
         var upcoming = Array(queue.dropFirst(currentIndex + 1))
         upcoming.move(fromOffsets: source, toOffset: destination)
         queue = Array(queue.prefix(currentIndex + 1)) + upcoming
+        navigationHistory.removeAll()
         automixNextIndex = nil
         prepareAutomixAnalysis()
         prepareNextTrack()
@@ -185,6 +212,7 @@ final class PlayerManager: ObservableObject {
     func setSleepTimer(minutes: Int) {
         sleepTask?.cancel()
         sleepTask = nil
+        cancelCrossfade()
         player.volume = 1
         guard minutes > 0 else {
             sleepTimerEnd = nil
@@ -239,10 +267,15 @@ final class PlayerManager: ObservableObject {
             if let first = queue.first { play(first) }
             return
         }
+        playbackError = nil
         try? AVAudioSession.sharedInstance().setActive(true)
         player.play()
         isPlaying = true
         updateNowPlaying()
+    }
+
+    func clearPlaybackError() {
+        playbackError = nil
     }
 
     func pause() {
@@ -259,13 +292,33 @@ final class PlayerManager: ObservableObject {
     func previous() {
         if elapsed > 3 {
             seek(to: 0)
-        } else {
-            advance(by: -1)
+            return
         }
+
+        if let previousIndex = navigationHistory.popLast(),
+           queue.indices.contains(previousIndex),
+           previousIndex != currentIndex {
+            currentIndex = previousIndex
+            load(queue[previousIndex])
+            return
+        }
+
+        if currentIndex == 0 {
+            if repeatMode == .all, queue.count > 1 {
+                currentIndex = queue.count - 1
+                load(queue[currentIndex])
+            } else {
+                seek(to: 0)
+            }
+            return
+        }
+
+        advance(by: -1)
     }
 
     func toggleShuffle() {
         isShuffled.toggle()
+        navigationHistory.removeAll()
         automixNextIndex = nil
         prepareAutomixAnalysis()
         prepareNextTrack()
@@ -301,6 +354,7 @@ final class PlayerManager: ObservableObject {
     private func load(_ track: Track) {
         cancelCrossfade()
         automixNextIndex = nil
+        playbackError = nil
         current = track
         progress.elapsed = 0
         duration = max(track.duration, 0)
@@ -315,6 +369,7 @@ final class PlayerManager: ObservableObject {
         let item = makePlayerItem(for: track)
         player.replaceCurrentItem(with: item)
         installEndObserver(for: item)
+        observeItemStatus(item)
 
         try? AVAudioSession.sharedInstance().setActive(true)
         player.play()
@@ -338,6 +393,10 @@ final class PlayerManager: ObservableObject {
     private func advance(by offset: Int) {
         guard !queue.isEmpty else { return }
         cancelCrossfade()
+
+        if offset > 0 {
+            navigationHistory.append(currentIndex)
+        }
 
         if isShuffled, queue.count > 1, offset > 0 {
             let choices = queue.indices.filter { $0 != currentIndex }
@@ -380,7 +439,7 @@ final class PlayerManager: ObservableObject {
 
     private func installTimeObserver() {
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.1, preferredTimescale: 600),
+            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             Task { @MainActor in
@@ -406,7 +465,7 @@ final class PlayerManager: ObservableObject {
                 }
 
                 self.infoTick += 1
-                if self.infoTick % 50 == 0 { self.updateNowPlaying() }
+                if self.infoTick % 20 == 0 { self.updateNowPlaying() }
                 self.maybeBeginCrossfade()
             }
         }
@@ -426,9 +485,30 @@ final class PlayerManager: ObservableObject {
         }
     }
 
+    private func observeItemStatus(_ item: AVPlayerItem) {
+        itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self, weak item] _, _ in
+            guard let self, let item else { return }
+            Task { @MainActor in
+                guard self.player.currentItem === item,
+                      item.status == .failed
+                else { return }
+                self.handlePlaybackFailure(item.error)
+            }
+        }
+    }
+
+    private func handlePlaybackFailure(_ error: Error?) {
+        cancelCrossfade()
+        player.pause()
+        isPlaying = false
+        playbackError = error?.localizedDescription ?? "This track couldn’t be played."
+        updateNowPlaying()
+    }
+
     private func maybeBeginCrossfade() {
         guard isPlaying,
               !isCrossfading,
+              sleepTimerEnd == nil,
               repeatMode != .one,
               duration > 0
         else { return }
@@ -624,10 +704,13 @@ final class PlayerManager: ObservableObject {
         let nextItem = makePlayerItem(for: next)
         player.replaceCurrentItem(with: nextItem)
         installEndObserver(for: nextItem)
+        observeItemStatus(nextItem)
         player.volume = 1
 
+        navigationHistory.append(currentIndex)
         currentIndex = nextIndex
         current = next
+        playbackError = nil
         duration = max(next.duration, 0)
         isDurationLoaded = false
         progress.elapsed = resumeAt
@@ -730,10 +813,13 @@ final class PlayerManager: ObservableObject {
         nextItem.audioTimePitchAlgorithm = .spectral
         player.replaceCurrentItem(with: nextItem)
         installEndObserver(for: nextItem)
+        observeItemStatus(nextItem)
         player.volume = 1
 
+        navigationHistory.append(currentIndex)
         currentIndex = plan.nextIndex
         current = next
+        playbackError = nil
         duration = max(next.duration, 0)
         isDurationLoaded = false
         progress.elapsed = resumeAt
@@ -799,6 +885,60 @@ final class PlayerManager: ObservableObject {
         try? session.setCategory(.playback, mode: .default)
     }
 
+    private func installSystemObservers() {
+        let session = AVAudioSession.sharedInstance()
+
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification,
+            object: session,
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleAudioInterruption(notification)
+            }
+        }
+
+        routeChangeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: session,
+            queue: .main
+        ) { [weak self] notification in
+            Task { @MainActor in
+                self?.handleAudioRouteChange(notification)
+            }
+        }
+    }
+
+    private func handleAudioInterruption(_ notification: Notification) {
+        guard let rawType = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: rawType)
+        else { return }
+
+        switch type {
+        case .began:
+            wasPlayingBeforeInterruption = isPlaying
+            pause()
+        case .ended:
+            let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
+            if wasPlayingBeforeInterruption, options.contains(.shouldResume) {
+                resume()
+            }
+            wasPlayingBeforeInterruption = false
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleAudioRouteChange(_ notification: Notification) {
+        guard let rawReason = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason),
+              reason == .oldDeviceUnavailable
+        else { return }
+
+        if isPlaying { pause() }
+    }
+
     private func configureRemoteCommands() {
         let center = MPRemoteCommandCenter.shared()
 
@@ -853,6 +993,7 @@ final class PlayerManager: ObservableObject {
         guard let track = current else {
             nowPlayingArtwork = nil
             nowPlayingArtworkURL = nil
+            nowPlayingArtworkLoadingURL = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             SharedNowPlaying.clear()
             WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
@@ -879,6 +1020,7 @@ final class PlayerManager: ObservableObject {
         guard let artworkURL = track.artworkURL else {
             nowPlayingArtwork = nil
             nowPlayingArtworkURL = nil
+            nowPlayingArtworkLoadingURL = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
             return
         }
@@ -893,10 +1035,19 @@ final class PlayerManager: ObservableObject {
         nowPlayingArtwork = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
+        if nowPlayingArtworkLoadingURL == artworkURL { return }
+        nowPlayingArtworkLoadingURL = artworkURL
+
         URLSession.shared.dataTask(with: artworkURL) { [weak self] data, _, _ in
-            guard let data, let image = UIImage(data: data) else { return }
             Task { @MainActor [weak self] in
-                guard let self, self.current?.artworkURL == artworkURL else { return }
+                guard let self else { return }
+                if self.nowPlayingArtworkLoadingURL == artworkURL {
+                    self.nowPlayingArtworkLoadingURL = nil
+                }
+                guard let data,
+                      let image = UIImage(data: data),
+                      self.current?.artworkURL == artworkURL
+                else { return }
                 self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
                 self.updateNowPlaying()
             }
@@ -914,8 +1065,19 @@ final class PlayerManager: ObservableObject {
             duration: duration,
             updatedAt: Date()
         )
-        SharedNowPlaying.save(snapshot)
-        WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
+        let now = Date()
+        let trackChanged = lastWidgetTrackID != track.id
+        let playbackChanged = lastWidgetIsPlaying != isPlaying
+        let progressRefreshDue = now.timeIntervalSince(lastWidgetSurfaceUpdate) > 15
+
+        if trackChanged || playbackChanged || progressRefreshDue {
+            SharedNowPlaying.save(snapshot)
+            WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
+            lastWidgetSurfaceUpdate = now
+            lastWidgetTrackID = track.id
+            lastWidgetIsPlaying = isPlaying
+        }
+
         syncLiveActivity(for: track)
     }
 
