@@ -165,20 +165,19 @@ private enum EqualizerTap {
             process: equalizerTapProcess
         )
 
-        var unmanagedTap: Unmanaged<MTAudioProcessingTap>?
+        var tap: MTAudioProcessingTap?
         let status = MTAudioProcessingTapCreate(
             kCFAllocatorDefault,
             &callbacks,
             kMTAudioProcessingTapCreationFlag_PostEffects,
-            &unmanagedTap
+            &tap
         )
 
-        guard status == noErr, let unmanagedTap else {
+        guard status == noErr, let tap else {
             Unmanaged<EqualizerTapState>.fromOpaque(clientInfo).release()
             return
         }
 
-        let tap = unmanagedTap.takeRetainedValue()
         let input = AVMutableAudioMixInputParameters(track: track)
         input.audioTapProcessor = tap
 
