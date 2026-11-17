@@ -614,8 +614,7 @@ final class PlayerManager: ObservableObject {
         guard next.id != current?.id else { return }
 
         if preloadedNextID != next.id {
-            let item = AVPlayerItem(url: next.mediaURL)
-            item.preferredForwardBufferDuration = 2
+            let item = makeFreshPlayerItem(for: next)
             preloadedNextID = next.id
             preloadedItem = item
         }
@@ -634,8 +633,13 @@ final class PlayerManager: ObservableObject {
             return preloadedItem
         }
 
+        return makeFreshPlayerItem(for: track)
+    }
+
+    private func makeFreshPlayerItem(for track: Track) -> AVPlayerItem {
         let item = AVPlayerItem(url: track.mediaURL)
         item.preferredForwardBufferDuration = 2
+        Equalizer.shared.attach(to: item)
         return item
     }
 

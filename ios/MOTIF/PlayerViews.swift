@@ -169,6 +169,7 @@ struct NowPlayingView: View {
     @State private var playPulse = 0
     @State private var skipPulse = 0
     @State private var showQueue = false
+    @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
     @State private var transitionSettled = false
@@ -216,6 +217,9 @@ struct NowPlayingView: View {
         .sheet(isPresented: $showQueue) {
             UpNextView()
                 .environmentObject(player)
+        }
+        .sheet(isPresented: $showEqualizer) {
+            EqualizerView()
         }
         .sheet(item: $lyricsTrack) { track in
             LyricsView(track: track)
@@ -510,6 +514,12 @@ struct NowPlayingView: View {
                             set: { player.setAutomix($0) }
                         )) {
                             Label("Automix", systemImage: "waveform.path.ecg")
+                        }
+
+                        Button {
+                            showEqualizer = true
+                        } label: {
+                            Label("Equalizer", systemImage: "slider.vertical.3")
                         }
 
                         Menu {

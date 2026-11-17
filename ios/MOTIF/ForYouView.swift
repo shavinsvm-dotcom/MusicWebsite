@@ -6,7 +6,6 @@ struct ForYouView: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
     var openSearch: () -> Void
-    @State private var compactHeaderVisible = false
 
     var body: some View {
         let data = ForYouSnapshot(library: library)
@@ -14,9 +13,6 @@ struct ForYouView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 30) {
-                    header
-                        .trackHeaderBottom(in: "forYouScroll")
-
                     if data.tracks.isEmpty {
                         emptyState
                     } else {
@@ -37,35 +33,13 @@ struct ForYouView: View {
                 }
                 .screenEntrance()
                 .padding(.horizontal, 20)
-                .padding(.top, 10)
+                .padding(.top, 8)
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
-            .coordinateSpace(name: "forYouScroll")
-            .onPreferenceChange(HeaderBottomPreferenceKey.self) { value in
-                compactHeaderVisible = value < 30
-            }
             .background(AppBackground())
-            .toolbar(.hidden, for: .navigationBar)
-            .overlay(alignment: .top) {
-                if compactHeaderVisible {
-                    CompactPageHeader(title: "For You")
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .animation(.easeInOut(duration: 0.2), value: compactHeaderVisible)
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            LiltWordmark()
-                .opacity(0.92)
-
-            Text("For you.")
-                .font(.system(size: 33, weight: .semibold))
-                .tracking(-1.2)
-                .foregroundStyle(.primary)
+            .navigationTitle("For You")
+            .navigationBarTitleDisplayMode(.large)
         }
     }
 

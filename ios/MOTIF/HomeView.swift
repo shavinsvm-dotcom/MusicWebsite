@@ -9,15 +9,11 @@ struct HomeView: View {
 
     @State private var showImporter = false
     @State private var importError: String?
-    @State private var compactHeaderVisible = false
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 28) {
-                    header
-                        .trackHeaderBottom(in: "homeScroll")
-
                     if let featured = library.tracks.first {
                         featuredCard(featured)
                     } else {
@@ -34,23 +30,23 @@ struct HomeView: View {
                 }
                 .screenEntrance()
                 .padding(.horizontal, 20)
-                .padding(.top, 10)
+                .padding(.top, 8)
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
-            .coordinateSpace(name: "homeScroll")
-            .onPreferenceChange(HeaderBottomPreferenceKey.self) { value in
-                compactHeaderVisible = value < 30
-            }
             .background(AppBackground())
-            .toolbar(.hidden, for: .navigationBar)
-            .overlay(alignment: .top) {
-                if compactHeaderVisible {
-                    CompactPageHeader(title: "Home")
-                        .transition(.move(edge: .top).combined(with: .opacity))
+            .navigationTitle("Home")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showImporter = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Import music")
                 }
             }
-            .animation(.easeInOut(duration: 0.2), value: compactHeaderVisible)
             .fileImporter(
                 isPresented: $showImporter,
                 allowedContentTypes: [.audio],
@@ -74,43 +70,6 @@ struct HomeView: View {
             } message: {
                 Text(importError ?? "")
             }
-        }
-    }
-
-    private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 6) {
-                LiltWordmark()
-                    .opacity(0.92)
-
-                Text(greeting)
-                    .font(.system(size: 33, weight: .semibold))
-                    .tracking(-1.2)
-                    .foregroundStyle(.primary)
-            }
-
-            Spacer()
-
-            Button {
-                showImporter = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 16, weight: .semibold))
-                    .frame(width: 42, height: 42)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(MotifPressStyle(scale: 0.9))
-            .glassSurface(radius: 21)
-            .accessibilityLabel("Import music")
-        }
-    }
-
-    private var greeting: String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<12: return "Good morning."
-        case 12..<18: return "Good afternoon."
-        default: return "Good evening."
         }
     }
 
