@@ -129,7 +129,7 @@ final class LibraryStore: ObservableObject {
             let track = tracks[index]
 
             // Re-reading every local file on every launch is expensive. Only
-            // revisit files that still need tags, artwork or lyrics.
+            // revisit files that still need tags or artwork.
             guard track.metadataSource == "filename" || track.artworkURL == nil else {
                 continue
             }

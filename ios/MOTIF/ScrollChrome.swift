@@ -31,6 +31,7 @@ struct CompactPageHeader: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Lilt, \(title)")
+        .allowsHitTesting(false)
     }
 }
 
