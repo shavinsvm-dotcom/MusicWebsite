@@ -121,11 +121,17 @@ struct PlaylistsView: View {
                 Section("Your Playlists") {
                     if library.playlists.isEmpty {
                         emptyState
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity)
+                            .nativeGlass(
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            )
+                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 18, trailing: 20))
                             .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
                     } else {
-                        ForEach(library.playlists) { playlist in
-                            playlistRow(playlist)
-                        }
+                        playlistPanel
                     }
                 }
             }
@@ -161,7 +167,8 @@ struct PlaylistsView: View {
         } label: {
             PlaylistRow(playlist: playlist, tracks: tracks)
         }
-        .listRowInsets(EdgeInsets(top: 5, leading: 20, bottom: 5, trailing: 20))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .contextMenu {
             Button {
                 play(playlist)
@@ -187,6 +194,29 @@ struct PlaylistsView: View {
                 Label("Delete playlist", systemImage: "trash")
             }
         }
+    }
+
+    private var playlistPanel: some View {
+        VStack(spacing: 0) {
+            ForEach(library.playlists) { playlist in
+                playlistRow(playlist)
+
+                if playlist.id != library.playlists.last?.id {
+                    Divider()
+                        .padding(.leading, 84)
+                        .padding(.trailing, 12)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity)
+        .nativeGlass(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+        )
+        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 18, trailing: 20))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
     }
 
     private var emptyState: some View {
@@ -464,25 +494,28 @@ struct PlaylistDetailView: View {
                         .foregroundStyle(.secondary)
 
                     if !tracks.isEmpty {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 2) {
                             Button {
                                 play(shuffled: false)
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                                     .font(.subheadline.weight(.semibold))
-                                    .frame(minWidth: 88)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .buttonBorderShape(.capsule)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Play playlist")
+
+                            Divider()
+                                .frame(height: 18)
 
                             Button {
                                 play(shuffled: true)
                             } label: {
                                 Image(systemName: "shuffle")
-                                    .frame(width: 22)
+                                    .frame(width: 38, height: 36)
                             }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.capsule)
+                            .buttonStyle(.plain)
                             .accessibilityLabel("Shuffle playlist")
 
                             if tracks.contains(where: { $0.isCloud }) {
@@ -495,16 +528,19 @@ struct PlaylistDetailView: View {
                                                 .controlSize(.small)
                                         } else {
                                             Image(systemName: downloadable.isEmpty ? "checkmark.circle.fill" : "arrow.down.circle")
-                                                .frame(width: 22)
+                                                .frame(width: 38, height: 36)
                                         }
                                     }
                                 }
-                                .buttonStyle(.bordered)
-                                .buttonBorderShape(.capsule)
+                                .buttonStyle(.plain)
                                 .disabled(downloadable.isEmpty || isDownloading)
                                 .accessibilityLabel(downloadable.isEmpty ? "Playlist downloaded" : "Download playlist")
                             }
                         }
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .nativeGlass(Capsule(), interactive: true)
                         .padding(.top, 2)
                     }
                 }
@@ -1028,25 +1064,28 @@ struct SmartPlaylistDetailView: View {
                         .foregroundStyle(.secondary)
 
                     if !tracks.isEmpty {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 2) {
                             Button {
                                 play(shuffled: false)
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                                     .font(.subheadline.weight(.semibold))
-                                    .frame(minWidth: 88)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .buttonBorderShape(.capsule)
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("Play \(smart.title)")
+
+                            Divider()
+                                .frame(height: 18)
 
                             Button {
                                 play(shuffled: true)
                             } label: {
                                 Image(systemName: "shuffle")
-                                    .frame(width: 22)
+                                    .frame(width: 38, height: 36)
                             }
-                            .buttonStyle(.bordered)
-                            .buttonBorderShape(.capsule)
+                            .buttonStyle(.plain)
                             .accessibilityLabel("Shuffle \(smart.title)")
 
                             if !downloadable.isEmpty {
@@ -1059,16 +1098,19 @@ struct SmartPlaylistDetailView: View {
                                                 .controlSize(.small)
                                         } else {
                                             Image(systemName: "arrow.down.circle")
-                                                .frame(width: 22)
+                                                .frame(width: 38, height: 36)
                                         }
                                     }
                                 }
-                                .buttonStyle(.bordered)
-                                .buttonBorderShape(.capsule)
+                                .buttonStyle(.plain)
                                 .disabled(isDownloading)
                                 .accessibilityLabel("Download \(smart.title)")
                             }
                         }
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .nativeGlass(Capsule(), interactive: true)
                         .padding(.top, 2)
                     }
                 }

@@ -767,49 +767,26 @@ private struct NowPlayingScrubber: View {
     @EnvironmentObject private var progress: PlaybackProgress
 
     @State private var isScrubbing = false
-    @State private var scrubValue = 0.0
+    @State private var sliderValue = 0.0
 
     private var duration: Double {
         max(player.duration, 0)
     }
 
-    private var displayedTime: Double {
-        let value = isScrubbing ? scrubValue : progress.elapsed
-        return min(max(value, 0), duration)
-    }
-
-    private var sliderRange: ClosedRange<Double> {
+    private var range: ClosedRange<Double> {
         0...max(duration, 1)
-    }
-
-    private var sliderBinding: Binding<Double> {
-        Binding(
-            get: { displayedTime },
-            set: { newValue in
-                guard duration > 0 else { return }
-                scrubValue = min(max(newValue, 0), duration)
-                if !isScrubbing {
-                    isScrubbing = true
-                }
-            }
-        )
     }
 
     var body: some View {
         VStack(spacing: 2) {
             Slider(
-                value: sliderBinding,
-                in: sliderRange,
+                value: $sliderValue,
+                in: range,
                 onEditingChanged: { editing in
-                    guard duration > 0 else { return }
-
                     if editing {
-                        if !isScrubbing {
-                            scrubValue = min(max(progress.elapsed, 0), duration)
-                        }
                         isScrubbing = true
                     } else {
-                        player.seek(to: scrubValue)
+                        player.seek(to: sliderValue)
                         isScrubbing = false
                     }
                 }
@@ -817,17 +794,32 @@ private struct NowPlayingScrubber: View {
             .tint(.white)
             .disabled(duration <= 0)
             .accessibilityLabel("Playback position")
-            .accessibilityValue("\(timeText(displayedTime)) of \(timeText(duration))")
+            .accessibilityValue("\(timeText(sliderValue)) of \(timeText(duration))")
+            .onAppear {
+                sliderValue = clamped(progress.elapsed)
+            }
+            .onChange(of: progress.elapsed) { elapsed in
+                guard !isScrubbing else { return }
+                sliderValue = clamped(elapsed)
+            }
+            .onChange(of: duration) { _ in
+                guard !isScrubbing else { return }
+                sliderValue = clamped(progress.elapsed)
+            }
 
             HStack {
-                Text(timeText(displayedTime))
+                Text(timeText(sliderValue))
                 Spacer()
-                Text(timeText(max(duration - displayedTime, 0)))
+                Text(timeText(max(duration - sliderValue, 0)))
             }
             .font(.system(size: 12, weight: .regular, design: .monospaced))
             .foregroundStyle(.white.opacity(0.54))
             .padding(.horizontal, 2)
         }
+    }
+
+    private func clamped(_ value: Double) -> Double {
+        min(max(value, 0), duration)
     }
 
     private func timeText(_ seconds: Double) -> String {
