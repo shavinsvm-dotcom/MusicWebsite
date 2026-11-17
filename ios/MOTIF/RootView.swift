@@ -162,7 +162,10 @@ struct RootView: View {
 
     private var currentBackdrop: UIImage? {
         guard let url = player.current?.artworkURL else { return nil }
-        return PlaybackBackdropCache.shared.preparedImage(for: url)
+        // Cache-only: rendering the backdrop synchronously would stall the
+        // unfold animation. The async preparation task fills this in ahead
+        // of the tap, and the artwork view is the fallback when it is cold.
+        return PlaybackBackdropCache.shared.image(for: url)
     }
 
     @ViewBuilder

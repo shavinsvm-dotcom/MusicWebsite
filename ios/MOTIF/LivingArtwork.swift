@@ -15,6 +15,7 @@ struct LivingArtworkView: View {
     let url: URL?
     let seed: String
     let isPlaying: Bool
+    let isActive: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
@@ -28,10 +29,11 @@ struct LivingArtworkView: View {
 
     private let particles: [LivingArtworkParticle]
 
-    init(url: URL?, seed: String, isPlaying: Bool = true) {
+    init(url: URL?, seed: String, isPlaying: Bool = true, isActive: Bool = true) {
         self.url = url
         self.seed = seed
         self.isPlaying = isPlaying
+        self.isActive = isActive
         _image = State(initialValue: url.flatMap { ArtworkImageCache.shared.image(for: $0) })
         _palette = State(initialValue: LivingArtworkPalette.fallback(seed: seed))
         particles = LivingArtworkParticle.field(seed: seed)
@@ -43,6 +45,7 @@ struct LivingArtworkView: View {
 
     private var shouldAnimate: Bool {
         enabled
+            && isActive
             && isPlaying
             && isVisible
             && scenePhase == .active
@@ -60,7 +63,7 @@ struct LivingArtworkView: View {
             }
 
             if shouldAnimate, let image {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { timeline in
+                TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: false)) { timeline in
                     LivingArtworkScene(
                         image: image,
                         palette: palette,

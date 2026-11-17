@@ -15,9 +15,6 @@ struct MiniPlayer: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
-                        if let url = track.artworkURL {
-                            _ = PlaybackBackdropCache.shared.preparedImage(for: url)
-                        }
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
@@ -172,7 +169,7 @@ struct NowPlayingView: View {
     @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
-    @State private var transitionSettled = false
+    @State private var livingArtworkActive = false
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
@@ -201,18 +198,16 @@ struct NowPlayingView: View {
         }
         .preferredColorScheme(.dark)
         .task {
-            if reduceMotion {
-                transitionSettled = true
-                return
-            }
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            // Keep the expensive living-artwork pass out of the presentation
+            // transition. The static cover is already on screen, so the wash
+            // can fade in once the zoom has settled.
+            guard !reduceMotion else { return }
+            try? await Task.sleep(nanoseconds: 650_000_000)
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.28)) {
-                transitionSettled = true
-            }
+            livingArtworkActive = true
         }
         .onDisappear {
-            transitionSettled = false
+            livingArtworkActive = false
         }
         .sheet(isPresented: $showQueue) {
             UpNextView()
@@ -303,7 +298,8 @@ struct NowPlayingView: View {
                     LivingArtworkView(
                         url: track.artworkURL,
                         seed: track.title + track.artist,
-                        isPlaying: player.isPlaying
+                        isPlaying: player.isPlaying,
+                        isActive: livingArtworkActive
                     )
                         .frame(width: geometry.size.width, height: artHeight)
                         .mask(
@@ -359,46 +355,36 @@ struct NowPlayingView: View {
                             .foregroundStyle(.white.opacity(0.52))
                             .padding(.top, 2)
 
-                            if transitionSettled {
-                                Menu {
-                                    lyricsOptions(track)
-                                } label: {
-                                    Label(
-                                        track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
-                                        systemImage: "quote.bubble"
-                                    )
-                                    .font(.system(size: 13, weight: .medium))
-                                    .foregroundStyle(.white.opacity(0.70))
-                                    .padding(.top, 3)
-                                }
-                                .buttonStyle(MotifPressStyle(scale: 0.94))
-                                .transition(.opacity)
+                            Menu {
+                                lyricsOptions(track)
+                            } label: {
+                                Label(
+                                    track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
+                                    systemImage: "quote.bubble"
+                                )
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.70))
+                                .padding(.top, 3)
                             }
+                            .buttonStyle(MotifPressStyle(scale: 0.94))
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
 
-                        if transitionSettled {
-                            NowPlayingScrubber()
-                                .padding(.horizontal, 24)
-                                .padding(.top, 10)
-                                .transition(.opacity)
+                        NowPlayingScrubber()
+                            .padding(.horizontal, 24)
+                            .padding(.top, 10)
 
-                            controls(track)
-                                .padding(.horizontal, 22)
-                                .padding(.top, 12)
-                                .transition(.opacity)
-                        }
+                        controls(track)
+                            .padding(.horizontal, 22)
+                            .padding(.top, 12)
 
                     Spacer(minLength: 0)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
 
-                if transitionSettled {
-                    topBar(track)
-                        .padding(.top, 4)
-                        .transition(.opacity)
-                }
+                topBar(track)
+                    .padding(.top, 4)
             }
         }
     }
@@ -773,38 +759,85 @@ private struct NowPlayingScrubber: View {
         max(player.duration, 0)
     }
 
-    private var range: ClosedRange<Double> {
-        0...max(duration, 1)
+    private var fraction: CGFloat {
+        guard duration > 0 else { return 0 }
+        return CGFloat(min(max(sliderValue / duration, 0), 1))
     }
 
     var body: some View {
-        VStack(spacing: 2) {
-            Slider(
-                value: $sliderValue,
-                in: range,
-                onEditingChanged: { editing in
-                    if editing {
-                        isScrubbing = true
-                    } else {
-                        player.seek(to: sliderValue)
-                        isScrubbing = false
-                    }
+        VStack(spacing: 5) {
+            GeometryReader { geometry in
+                let width = max(geometry.size.width, 1)
+                let thumbSize: CGFloat = 20
+                let travel = max(width - thumbSize, 1)
+                let fraction = self.fraction
+
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.13))
+                        .frame(height: 6)
+
+                    Capsule()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.96),
+                                    Color.white.opacity(0.72)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(
+                            width: max(6, thumbSize / 2 + travel * fraction),
+                            height: 6
+                        )
+
+                    Circle()
+                        .fill(Color.white.opacity(0.16))
+                        .frame(width: thumbSize, height: thumbSize)
+                        .nativeGlass(Circle(), interactive: true)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(Color.white.opacity(0.65), lineWidth: 0.7)
+                        }
+                        .shadow(color: .black.opacity(0.22), radius: 6, y: 3)
+                        .offset(x: travel * fraction)
                 }
-            )
-            .tint(.white)
-            .disabled(duration <= 0)
+                .frame(height: thumbSize)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            guard duration > 0 else { return }
+                            isScrubbing = true
+                            let x = min(max(value.location.x - thumbSize / 2, 0), travel)
+                            sliderValue = duration * Double(x / travel)
+                        }
+                        .onEnded { _ in
+                            guard duration > 0 else { return }
+                            player.seek(to: sliderValue)
+                            isScrubbing = false
+                        }
+                )
+            }
+            .frame(height: 30)
+            .accessibilityElement()
             .accessibilityLabel("Playback position")
             .accessibilityValue("\(timeText(sliderValue)) of \(timeText(duration))")
-            .onAppear {
-                sliderValue = clamped(progress.elapsed)
-            }
-            .onChange(of: progress.elapsed) { elapsed in
-                guard !isScrubbing else { return }
-                sliderValue = clamped(elapsed)
-            }
-            .onChange(of: duration) { _ in
-                guard !isScrubbing else { return }
-                sliderValue = clamped(progress.elapsed)
+            .accessibilityAdjustableAction { direction in
+                guard duration > 0 else { return }
+                let step = max(duration * 0.02, 5)
+                switch direction {
+                case .increment:
+                    sliderValue = min(sliderValue + step, duration)
+                case .decrement:
+                    sliderValue = max(sliderValue - step, 0)
+                @unknown default:
+                    return
+                }
+                player.seek(to: sliderValue)
             }
 
             HStack {
@@ -812,9 +845,20 @@ private struct NowPlayingScrubber: View {
                 Spacer()
                 Text(timeText(max(duration - sliderValue, 0)))
             }
-            .font(.system(size: 12, weight: .regular, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.54))
+            .font(.system(size: 11, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.56))
             .padding(.horizontal, 2)
+        }
+        .onAppear {
+            sliderValue = clamped(progress.elapsed)
+        }
+        .onChange(of: progress.elapsed) { elapsed in
+            guard !isScrubbing else { return }
+            sliderValue = clamped(elapsed)
+        }
+        .onChange(of: duration) { _ in
+            guard !isScrubbing else { return }
+            sliderValue = clamped(progress.elapsed)
         }
     }
 

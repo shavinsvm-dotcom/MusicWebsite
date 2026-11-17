@@ -452,6 +452,7 @@ struct PlaylistDetailView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     let playlistID: UUID
     @Binding var showNowPlaying: Bool
@@ -481,9 +482,26 @@ struct PlaylistDetailView: View {
             Section {
                 VStack(spacing: 12) {
                     PlaylistArtwork(playlist: playlist ?? Playlist(name: "Playlist"), tracks: tracks)
-                        .frame(width: 220, height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .frame(width: 240, height: 240)
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.34),
+                                            Color.white.opacity(0.06),
+                                            Color.white.opacity(0.16)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 0.8
+                                )
+                        }
                         .shadow(color: .black.opacity(0.18), radius: 18, y: 9)
+                        .padding(7)
+                        .nativeGlass(RoundedRectangle(cornerRadius: 28, style: .continuous))
 
                     if let description = playlist?.description, !description.isEmpty {
                         Text(description)
@@ -494,8 +512,11 @@ struct PlaylistDetailView: View {
                     }
 
                     Text(subtitle)
-                        .font(.subheadline)
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 4)
+                        .nativeGlass(Capsule())
 
                     if !tracks.isEmpty {
                         HStack(spacing: 2) {
@@ -552,9 +573,6 @@ struct PlaylistDetailView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 20)
-                .background(alignment: .top) {
-                    playlistAmbience
-                }
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 18, trailing: 0))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -569,7 +587,7 @@ struct PlaylistDetailView: View {
                         .padding(.vertical, 6)
                 }
             } else {
-                Section("Tracks") {
+                Section {
                     ForEach(tracks) { track in
                         PlaylistTrackRow(
                             track: track,
@@ -578,12 +596,26 @@ struct PlaylistDetailView: View {
                             showNowPlaying: $showNowPlaying
                         )
                     }
+                } header: {
+                    Text("Tracks")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 4)
+                        .nativeGlass(Capsule())
+                        .padding(.leading, 4)
                 }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AppBackground())
+        .background {
+            ZStack {
+                AppBackground()
+                playlistAmbience
+            }
+        }
         .navigationTitle(playlist?.name ?? "Playlist")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -645,15 +677,26 @@ struct PlaylistDetailView: View {
                 tracks: tracks
             )
             .frame(width: geometry.size.width, height: geometry.size.height)
-            .scaleEffect(1.18)
-            .blur(radius: 42)
-            .opacity(0.58)
-            .mask(
+            .scaleEffect(1.4)
+            .blur(radius: 52)
+            .opacity(colorScheme == .dark ? 0.54 : 0.32)
+            .overlay {
                 LinearGradient(
                     stops: [
                         .init(color: .clear, location: 0),
-                        .init(color: .black, location: 0.12),
-                        .init(color: .black, location: 0.62),
+                        .init(color: .clear, location: 0.46),
+                        .init(color: Color(uiColor: .systemBackground).opacity(0.42), location: 0.78),
+                        .init(color: Color(uiColor: .systemBackground).opacity(0.7), location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .black, location: 0),
+                        .init(color: .black, location: 0.70),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .top,
@@ -661,6 +704,7 @@ struct PlaylistDetailView: View {
                 )
             )
         }
+        .ignoresSafeArea()
         .allowsHitTesting(false)
     }
 
@@ -720,8 +764,10 @@ private struct PlaylistTrackRow: View {
                         if isCurrent {
                             PlayingWaveform(color: .white)
                                 .frame(width: 22, height: 22)
-                                .background(.black.opacity(0.42), in: Circle())
-                                .padding(4)
+                                .background(.black.opacity(0.36), in: Circle())
+                                .padding(3)
+                                .nativeGlass(Circle())
+                                .padding(2)
                         }
                     }
                     .overlay {
@@ -837,7 +883,12 @@ private struct PlaylistTrackRow: View {
         .background {
             if isCurrent {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.primary.opacity(0.055))
+                    .fill(Color.clear)
+                    .nativeGlass(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.5)
+                    }
             }
         }
     }
@@ -1077,6 +1128,7 @@ struct SmartPlaylistCover: View {
 struct SmartPlaylistDetailView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
+    @Environment(\.colorScheme) private var colorScheme
 
     let smart: SmartPlaylist
     @Binding var showNowPlaying: Bool
@@ -1098,13 +1150,33 @@ struct SmartPlaylistDetailView: View {
             Section {
                 VStack(spacing: 12) {
                     SmartPlaylistCover(smart: smart, tracks: tracks)
-                        .frame(width: 180, height: 180)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .frame(width: 200, height: 200)
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.white.opacity(0.32),
+                                            Color.white.opacity(0.05),
+                                            Color.white.opacity(0.14)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 0.8
+                                )
+                        }
                         .shadow(color: .black.opacity(0.18), radius: 16, y: 8)
+                        .padding(7)
+                        .nativeGlass(RoundedRectangle(cornerRadius: 26, style: .continuous))
 
                     Text(subtitle)
-                        .font(.subheadline)
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 4)
+                        .nativeGlass(Capsule())
 
                     if !tracks.isEmpty {
                         HStack(spacing: 2) {
@@ -1161,9 +1233,6 @@ struct SmartPlaylistDetailView: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 8)
                 .padding(.bottom, 20)
-                .background(alignment: .top) {
-                    smartAmbience
-                }
                 .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 18, trailing: 0))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
@@ -1189,16 +1258,30 @@ struct SmartPlaylistDetailView: View {
                     .listRowBackground(Color.clear)
                 }
             } else {
-                Section("Tracks") {
+                Section {
                     ForEach(tracks) { track in
                         TrackRow(track: track, queue: tracks)
                     }
+                } header: {
+                    Text("Tracks")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 4)
+                        .nativeGlass(Capsule())
+                        .padding(.leading, 4)
                 }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-        .background(AppBackground())
+        .background {
+            ZStack {
+                AppBackground()
+                smartAmbience
+            }
+        }
         .navigationTitle(smart.title)
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -1207,15 +1290,26 @@ struct SmartPlaylistDetailView: View {
         GeometryReader { geometry in
             SmartPlaylistCover(smart: smart, tracks: tracks)
                 .frame(width: geometry.size.width, height: geometry.size.height)
-                .scaleEffect(1.18)
-                .blur(radius: 42)
-                .opacity(0.52)
-                .mask(
+                .scaleEffect(1.4)
+                .blur(radius: 52)
+                .opacity(colorScheme == .dark ? 0.5 : 0.3)
+                .overlay {
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.12),
-                            .init(color: .black, location: 0.62),
+                            .init(color: .clear, location: 0.46),
+                            .init(color: Color(uiColor: .systemBackground).opacity(0.42), location: 0.78),
+                            .init(color: Color(uiColor: .systemBackground).opacity(0.7), location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .black, location: 0),
+                            .init(color: .black, location: 0.70),
                             .init(color: .clear, location: 1)
                         ],
                         startPoint: .top,
@@ -1223,6 +1317,7 @@ struct SmartPlaylistDetailView: View {
                     )
                 )
         }
+        .ignoresSafeArea()
         .allowsHitTesting(false)
     }
 
