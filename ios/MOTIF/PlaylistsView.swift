@@ -113,7 +113,11 @@ struct PlaylistsView: View {
             List {
                 Section("Smart Playlists") {
                     SmartPlaylistShelf(showNowPlaying: $showNowPlaying)
-                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 12, trailing: 0))
+                        .padding(.vertical, 10)
+                        .nativeGlass(
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        )
+                        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 14, trailing: 20))
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                 }
@@ -273,7 +277,7 @@ private struct SmartPlaylistShelf: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 20)
+            .padding(.horizontal, 12)
             .padding(.vertical, 2)
         }
     }
