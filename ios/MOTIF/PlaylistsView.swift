@@ -580,9 +580,10 @@ struct PlaylistMosaic: View {
 
             if tracks.isEmpty {
                 placeholder
-            } else if tracks.count < 4, let track = tracks.first {
+            } else if tracks.count < 4 {
                 // A two- or three-song playlist looks best as one strong cover.
                 // Splitting a single square into thin strips crops artwork badly.
+                let track = tracks.first(where: { $0.artworkURL != nil }) ?? tracks[0]
                 ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                     .frame(width: width, height: height)
             } else {
@@ -910,10 +911,6 @@ struct PlaylistDetailView: View {
         var parts = [songText]
         if let durationText {
             parts.append(durationText)
-        }
-        let cloudCount = tracks.filter(\.isCloud).count
-        if cloudCount > 0 {
-            parts.append("\(cloudCount) cloud")
         }
         return parts.joined(separator: " · ")
     }
