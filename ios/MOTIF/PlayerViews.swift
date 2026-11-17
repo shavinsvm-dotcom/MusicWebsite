@@ -171,7 +171,6 @@ struct NowPlayingView: View {
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
     @State private var livingArtworkActive = false
-    @State private var transportReady = false
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
@@ -200,26 +199,18 @@ struct NowPlayingView: View {
         }
         .preferredColorScheme(.dark)
         .task {
-            // Let the zoom land before mounting the dense transport bar, and
-            // keep the living-artwork pass out of the transition entirely.
+            // The artwork scene is already mounted and paused, so starting it
+            // does not swap or fade a second full-screen layer mid-transition.
             guard !reduceMotion else {
-                transportReady = true
+                livingArtworkActive = true
                 return
             }
-
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.18)) {
-                transportReady = true
-            }
-
-            try? await Task.sleep(nanoseconds: 350_000_000)
+            try? await Task.sleep(nanoseconds: 650_000_000)
             guard !Task.isCancelled else { return }
             livingArtworkActive = true
         }
         .onDisappear {
             livingArtworkActive = false
-            transportReady = false
         }
         .sheet(isPresented: $showQueue) {
             UpNextView()
@@ -327,18 +318,6 @@ struct NowPlayingView: View {
                                 endPoint: .bottom
                             )
                         )
-                        .mask(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .clear, location: 0),
-                                    .init(color: .black, location: 0.11),
-                                    .init(color: .black, location: 0.89),
-                                    .init(color: .clear, location: 1)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
                         .padding(.top, 4)
 
                     Spacer().frame(height: gap)
@@ -383,18 +362,13 @@ struct NowPlayingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
 
-                        if transportReady {
-                            VStack(spacing: 0) {
-                                NowPlayingScrubber()
-                                    .padding(.horizontal, 24)
-                                    .padding(.top, 10)
+                        NowPlayingScrubber()
+                            .padding(.horizontal, 24)
+                            .padding(.top, 10)
 
-                                controls(track)
-                                    .padding(.horizontal, 22)
-                                    .padding(.top, 12)
-                            }
-                            .transition(.opacity)
-                        }
+                        controls(track)
+                            .padding(.horizontal, 22)
+                            .padding(.top, 12)
 
                     Spacer(minLength: 0)
                 }

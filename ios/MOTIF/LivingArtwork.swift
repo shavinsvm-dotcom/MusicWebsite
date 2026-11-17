@@ -45,7 +45,6 @@ struct LivingArtworkView: View {
 
     private var shouldAnimate: Bool {
         enabled
-            && isActive
             && isPlaying
             && isVisible
             && scenePhase == .active
@@ -63,21 +62,19 @@ struct LivingArtworkView: View {
             }
 
             if shouldAnimate, let image {
-                TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: false)) { timeline in
+                TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isActive)) { timeline in
                     LivingArtworkScene(
                         image: image,
                         palette: palette,
                         particles: particles,
                         time: timeline.date.timeIntervalSinceReferenceDate
                     )
-                    .transition(.opacity)
                 }
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
             }
         }
         .clipped()
-        .animation(.easeInOut(duration: 0.45), value: shouldAnimate)
         .onAppear {
             isVisible = true
         }
@@ -142,6 +139,8 @@ private struct LivingArtworkScene: View {
 
         drawVignette(in: &context, size: size, rect: rect)
         drawLight(in: &context, size: size, rect: rect, time: elapsed)
+        drawEdgeBloom(in: &context, size: size, rect: rect, time: elapsed)
+        drawSheen(in: &context, size: size, rect: rect, time: elapsed)
         drawParticles(in: &context, size: size)
     }
 
@@ -220,6 +219,50 @@ private struct LivingArtworkScene: View {
         context.blendMode = .normal
     }
 
+    private func drawEdgeBloom(in context: inout GraphicsContext, size: CGSize, rect: CGRect, time elapsed: CGFloat) {
+        let pulse = 0.09 + 0.025 * sin(elapsed * 0.21)
+
+        context.blendMode = .screen
+        context.fill(
+            Path(rect),
+            with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: palette.primary.opacity(pulse), location: 0.62),
+                    .init(color: palette.secondary.opacity(pulse * 0.9), location: 0.84),
+                    .init(color: .clear, location: 1)
+                ]),
+                center: CGPoint(x: size.width * 0.5, y: size.height * 0.46),
+                startRadius: 0,
+                endRadius: max(size.width, size.height) * 0.74
+            )
+        )
+        context.blendMode = .normal
+    }
+
+    private func drawSheen(in context: inout GraphicsContext, size: CGSize, rect: CGRect, time elapsed: CGFloat) {
+        let travel = CGFloat((Double(elapsed) * 0.055).truncatingRemainder(dividingBy: 1))
+        let x = -size.width * 0.55 + travel * size.width * 2.1
+        let halfBand = size.width * 0.16
+
+        context.blendMode = .screen
+        context.fill(
+            Path(rect),
+            with: .linearGradient(
+                Gradient(stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .clear, location: 0.38),
+                    .init(color: palette.highlight.opacity(0.13), location: 0.5),
+                    .init(color: .clear, location: 0.62),
+                    .init(color: .clear, location: 1)
+                ]),
+                startPoint: CGPoint(x: x - halfBand, y: 0),
+                endPoint: CGPoint(x: x + halfBand, y: size.height)
+            )
+        )
+        context.blendMode = .normal
+    }
+
     private func drawParticles(in context: inout GraphicsContext, size: CGSize) {
         let elapsed = CGFloat(time)
         let scale = min(size.width, size.height) / 320
@@ -232,6 +275,10 @@ private struct LivingArtworkScene: View {
                     .truncatingRemainder(dividingBy: 1)
             )
             let fade = sin(progress * .pi)
+            let twinkle = 0.66 + 0.34 * sin(
+                elapsed * CGFloat(0.7 + particle.speed * 34)
+                    + CGFloat(particle.phase) * .pi * 2
+            )
             guard fade > 0.01 else { continue }
 
             let x = size.width * CGFloat(particle.x)
@@ -264,7 +311,11 @@ private struct LivingArtworkScene: View {
 
             context.fill(
                 Path(ellipseIn: particleRect),
-                with: .color(palette.particle.opacity(Double(particle.alpha) * Double(fade)))
+                with: .color(
+                    palette.particle.opacity(
+                        Double(particle.alpha) * Double(fade) * Double(twinkle)
+                    )
+                )
             )
         }
 
@@ -407,7 +458,7 @@ struct LivingArtworkParticle {
 
     static func field(seed: String) -> [LivingArtworkParticle] {
         var random = LivingArtworkRandom(state: LivingArtworkSeed.hash(seed) | 1)
-        return (0..<26).map { index in
+        return (0..<34).map { index in
             let depth = Double.random(in: 0...1, using: &random)
             return LivingArtworkParticle(
                 x: Double.random(in: 0.04...0.96, using: &random),
@@ -418,7 +469,7 @@ struct LivingArtworkParticle {
                 wobble: 0.10 + depth * 0.22,
                 drift: 0.004 + depth * 0.012,
                 alpha: 0.16 + depth * 0.30,
-                glow: index % 6 == 0
+                glow: index % 5 == 0
             )
         }
     }

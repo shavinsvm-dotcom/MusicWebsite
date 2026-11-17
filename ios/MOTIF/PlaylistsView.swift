@@ -705,6 +705,7 @@ struct PlaylistDetailView: View {
                     endPoint: .bottom
                 )
             )
+            .drawingGroup(opaque: false)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
@@ -893,6 +894,7 @@ private struct PlaylistTrackRow: View {
                     }
             }
         }
+        .animation(.easeOut(duration: 0.22), value: isCurrent)
     }
 }
 
@@ -1319,6 +1321,7 @@ struct SmartPlaylistDetailView: View {
                         endPoint: .bottom
                     )
                 )
+                .drawingGroup(opaque: false)
         }
         .ignoresSafeArea()
         .allowsHitTesting(false)
