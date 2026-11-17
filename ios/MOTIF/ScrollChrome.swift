@@ -151,6 +151,8 @@ private struct StaggeredAppearance: ViewModifier {
 
 /// A compact four-bar indicator for the row that is currently playing.
 struct PlayingWaveform: View {
+    var color: Color = .primary
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var active = false
 
@@ -160,7 +162,7 @@ struct PlayingWaveform: View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(Array(heights.enumerated()), id: \.offset) { index, height in
                 Capsule()
-                    .fill(Color.primary)
+                    .fill(color)
                     .frame(width: 2, height: 11 * height)
                     .scaleEffect(y: active ? 1 : 0.35, anchor: .bottom)
                     .animation(

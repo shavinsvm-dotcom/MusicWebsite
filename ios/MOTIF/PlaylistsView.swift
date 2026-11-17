@@ -580,23 +580,11 @@ struct PlaylistMosaic: View {
 
             if tracks.isEmpty {
                 placeholder
-            } else if tracks.count == 1, let track = tracks.first {
+            } else if tracks.count < 4, let track = tracks.first {
+                // A two- or three-song playlist looks best as one strong cover.
+                // Splitting a single square into thin strips crops artwork badly.
                 ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                     .frame(width: width, height: height)
-            } else if tracks.count == 2 {
-                VStack(spacing: 0) {
-                    cell(0, width: width, height: height / 2)
-                    cell(1, width: width, height: height / 2)
-                }
-            } else if tracks.count == 3 {
-                let topHeight = height * 0.56
-                VStack(spacing: 0) {
-                    cell(0, width: width, height: topHeight)
-                    HStack(spacing: 0) {
-                        cell(1, width: width / 2, height: height - topHeight)
-                        cell(2, width: width / 2, height: height - topHeight)
-                    }
-                }
             } else {
                 VStack(spacing: 0) {
                     HStack(spacing: 0) {
@@ -695,9 +683,8 @@ struct PlaylistDetailView: View {
                 } else {
                     LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                         Section {
-                            ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
+                            ForEach(tracks) { track in
                                 PlaylistTrackRow(
-                                    index: index,
                                     track: track,
                                     queue: tracks,
                                     playlistID: playlistID,
@@ -706,8 +693,9 @@ struct PlaylistDetailView: View {
                                 .padding(.horizontal, 20)
 
                                 if track.id != tracks.last?.id {
-                                    Divider().opacity(0.32)
-                                        .padding(.horizontal, 20)
+                                    Divider().opacity(0.3)
+                                        .padding(.leading, 78)
+                                        .padding(.trailing, 20)
                                 }
                             }
                         } header: {
@@ -880,8 +868,10 @@ struct PlaylistDetailView: View {
             ZStack {
                 PlaylistArtwork(playlist: playlist ?? Playlist(name: "Playlist"), tracks: tracks)
                     .frame(width: geometry.size.width, height: geometry.size.height)
+                    .scaleEffect(1.12)
+                    .blur(radius: 28)
                     .clipped()
-                    .opacity(0.52)
+                    .opacity(0.46)
 
                 LinearGradient(
                     stops: [
@@ -953,7 +943,6 @@ private struct PlaylistTrackRow: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
 
-    let index: Int
     let track: Track
     let queue: [Track]
     let playlistID: UUID
@@ -964,27 +953,32 @@ private struct PlaylistTrackRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Group {
-                if isCurrent {
-                    PlayingWaveform()
-                } else {
-                    Text("\(index + 1)")
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                }
-            }
-            .frame(width: 20)
-
+        HStack(spacing: 12) {
             Button {
                 player.play(track, queue: queue)
                 showNowPlaying = true
             } label: {
-                HStack(spacing: 10) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                            .frame(width: 46, height: 46)
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+
+                        if isCurrent {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(.black.opacity(0.42))
+                            PlayingWaveform(color: .white)
+                        }
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.5)
+                    }
+
                     VStack(alignment: .leading, spacing: 3) {
                         Text(track.title)
                             .font(.system(size: 15, weight: isCurrent ? .semibold : .medium))
-                            .foregroundStyle(isCurrent ? .primary : .primary)
+                            .foregroundStyle(.primary)
                             .lineLimit(1)
 
                         Text(track.artist)
