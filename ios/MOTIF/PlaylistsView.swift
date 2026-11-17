@@ -549,8 +549,13 @@ struct PlaylistDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 18, trailing: 20))
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+                .background(alignment: .top) {
+                    playlistAmbience
+                }
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 18, trailing: 0))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
@@ -633,6 +638,32 @@ struct PlaylistDetailView: View {
         }
     }
 
+    private var playlistAmbience: some View {
+        GeometryReader { geometry in
+            PlaylistArtwork(
+                playlist: playlist ?? Playlist(name: "Playlist"),
+                tracks: tracks
+            )
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .scaleEffect(1.18)
+            .blur(radius: 42)
+            .opacity(0.58)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0),
+                        .init(color: .black, location: 0.12),
+                        .init(color: .black, location: 0.62),
+                        .init(color: .clear, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+        }
+        .allowsHitTesting(false)
+    }
+
     private var subtitle: String {
         let count = tracks.count
         let songText = count == 1 ? "1 song" : "\(count) songs"
@@ -681,15 +712,16 @@ private struct PlaylistTrackRow: View {
                 showNowPlaying = true
             } label: {
                 HStack(spacing: 12) {
-                    ZStack {
+                    ZStack(alignment: .bottomTrailing) {
                         ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
                             .frame(width: 52, height: 52)
                             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                         if isCurrent {
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .fill(.black.opacity(0.42))
                             PlayingWaveform(color: .white)
+                                .frame(width: 22, height: 22)
+                                .background(.black.opacity(0.42), in: Circle())
+                                .padding(4)
                         }
                     }
                     .overlay {
@@ -800,7 +832,14 @@ private struct PlaylistTrackRow: View {
                     .contentShape(Rectangle())
             }
         }
+        .padding(.horizontal, 8)
         .padding(.vertical, 7)
+        .background {
+            if isCurrent {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.primary.opacity(0.055))
+            }
+        }
     }
 }
 
@@ -1119,8 +1158,13 @@ struct SmartPlaylistDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 18, trailing: 20))
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 20)
+                .background(alignment: .top) {
+                    smartAmbience
+                }
+                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 18, trailing: 0))
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
             }
@@ -1157,6 +1201,29 @@ struct SmartPlaylistDetailView: View {
         .background(AppBackground())
         .navigationTitle(smart.title)
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var smartAmbience: some View {
+        GeometryReader { geometry in
+            SmartPlaylistCover(smart: smart, tracks: tracks)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .scaleEffect(1.18)
+                .blur(radius: 42)
+                .opacity(0.52)
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0),
+                            .init(color: .black, location: 0.12),
+                            .init(color: .black, location: 0.62),
+                            .init(color: .clear, location: 1)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+        }
+        .allowsHitTesting(false)
     }
 
     private var subtitle: String {
