@@ -61,6 +61,23 @@ private struct MOTIFNowPlayingWidgetView: View {
                 endPoint: .bottomTrailing
             )
 
+            if let snapshot = entry.snapshot,
+               let value = snapshot.artworkURL,
+               let url = URL(string: value) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+                .blur(radius: 28)
+                .opacity(0.62)
+                .overlay(Color.black.opacity(0.28))
+            }
+
             if let snapshot = entry.snapshot {
                 content(snapshot)
             } else {
@@ -319,10 +336,12 @@ struct MOTIFLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .padding(.leading, 4)
+                    LiveActivityArtwork(
+                        urlString: context.state.artworkURL,
+                        size: 28,
+                        cornerRadius: 7
+                    )
+                    .padding(.leading, 4)
                 }
 
                 DynamicIslandExpandedRegion(.center) {
@@ -338,11 +357,18 @@ struct MOTIFLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
-                    ProgressView(
-                        value: progress(context.state)
-                    )
-                    .tint(.white)
-                    .padding(.horizontal, 4)
+                    if context.state.isPlaying {
+                        ProgressView(
+                            timerInterval: timerRange(context.state),
+                            countsDown: false
+                        )
+                        .tint(.white)
+                        .padding(.horizontal, 4)
+                    } else {
+                        ProgressView(value: progress(context.state))
+                            .tint(.white)
+                            .padding(.horizontal, 4)
+                    }
                 }
             } compactLeading: {
                 Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
@@ -369,6 +395,47 @@ struct MOTIFLiveActivity: Widget {
         let value = max(0, Int(seconds))
         return String(format: "%d:%02d", value / 60, value % 60)
     }
+
+    private func timerRange(_ state: MusicActivityAttributes.ContentState) -> ClosedRange<Date> {
+        let start = state.updatedAt.addingTimeInterval(-state.elapsed)
+        let end = start.addingTimeInterval(max(state.duration, 1))
+        return start...end
+    }
+}
+
+@available(iOS 16.1, *)
+private struct LiveActivityArtwork: View {
+    let urlString: String?
+    let size: CGFloat
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        Group {
+            if let urlString, let url = URL(string: urlString) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        fallback
+                    }
+                }
+            } else {
+                fallback
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    private var fallback: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(Color.white.opacity(0.12))
+            .overlay {
+                Image(systemName: "music.note")
+                    .font(.system(size: size * 0.4, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+            }
+    }
 }
 
 @available(iOS 16.1, *)
@@ -377,11 +444,11 @@ private struct LiveActivityLockScreenView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: state.isPlaying ? "waveform" : "pause.fill")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
-                .frame(width: 40, height: 40)
-                .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            LiveActivityArtwork(
+                urlString: state.artworkURL,
+                size: 46,
+                cornerRadius: 10
+            )
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(state.title)
@@ -392,9 +459,18 @@ private struct LiveActivityLockScreenView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.6))
                     .lineLimit(1)
-                ProgressView(value: progress)
+                if state.isPlaying {
+                    ProgressView(
+                        timerInterval: timerRange,
+                        countsDown: false
+                    )
                     .tint(.white)
                     .padding(.top, 2)
+                } else {
+                    ProgressView(value: progress)
+                        .tint(.white)
+                        .padding(.top, 2)
+                }
             }
 
             Spacer(minLength: 8)
@@ -409,6 +485,12 @@ private struct LiveActivityLockScreenView: View {
     private var progress: Double {
         guard state.duration > 0 else { return 0 }
         return min(1, max(0, state.elapsed / state.duration))
+    }
+
+    private var timerRange: ClosedRange<Date> {
+        let start = state.updatedAt.addingTimeInterval(-state.elapsed)
+        let end = start.addingTimeInterval(max(state.duration, 1))
+        return start...end
     }
 
     private var timeText: String {

@@ -1092,7 +1092,9 @@ final class PlayerManager: ObservableObject {
     private func syncLiveActivity(for track: Track) {
         guard #available(iOS 16.2, *) else { return }
 
-        let signature = "\(track.id.uuidString)-\(isPlaying)-\(Int(elapsed))\(Int(duration))"
+        // The Live Activity paints progress from its own timer, so it only
+        // needs state changes and a slow seek check, not a tick every second.
+        let signature = "\(track.id.uuidString)-\(isPlaying)-\(Int(elapsed / 5))\(Int(duration))"
         guard signature != liveActivitySignature else { return }
         liveActivitySignature = signature
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
@@ -1101,6 +1103,7 @@ final class PlayerManager: ObservableObject {
             title: track.title,
             artist: track.artist,
             album: track.album,
+            artworkURL: track.artworkURL?.absoluteString,
             isPlaying: isPlaying,
             elapsed: elapsed,
             duration: duration,

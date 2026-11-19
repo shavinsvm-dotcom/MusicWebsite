@@ -176,6 +176,7 @@ struct NowPlayingView: View {
     @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
+    private static let controlHaptics = UIImpactFeedbackGenerator(style: .light)
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
@@ -257,6 +258,8 @@ struct NowPlayingView: View {
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
+                .scaleEffect(1.2)
+                .blur(radius: 38)
                 .clipped()
                 .opacity(0.96)
 
@@ -290,14 +293,16 @@ struct NowPlayingView: View {
                     url: track.artworkURL,
                     seed: track.title + track.artist
                 )
+                .id(track.id)
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 .frame(width: artSide, height: artSide)
                 .mask(
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0),
-                            .init(color: .black, location: 0.16),
-                            .init(color: .black, location: 0.64),
-                            .init(color: .black.opacity(0.5), location: 0.84),
+                            .init(color: .black, location: 0.24),
+                            .init(color: .black, location: 0.58),
+                            .init(color: .black.opacity(0.24), location: 0.86),
                             .init(color: .clear, location: 1)
                         ],
                         startPoint: .top,
@@ -307,6 +312,10 @@ struct NowPlayingView: View {
                 .position(
                     x: geometry.size.width / 2,
                     y: geometry.size.height * 0.38
+                )
+                .animation(
+                    .spring(response: 0.46, dampingFraction: 0.86),
+                    value: track.id
                 )
 
                 VStack(spacing: 0) {
@@ -377,6 +386,7 @@ struct NowPlayingView: View {
             GlassGroup(spacing: 10) {
                 HStack {
                     Button {
+                        haptic()
                         onClose()
                 } label: {
                     Image(systemName: "chevron.down")
@@ -392,6 +402,7 @@ struct NowPlayingView: View {
 
                 HStack(spacing: 6) {
                     Button {
+                        haptic()
                         withAnimation(.spring(response: 0.26, dampingFraction: 0.72)) {
                             player.setAutomix(!player.automixEnabled)
                         }
@@ -409,6 +420,7 @@ struct NowPlayingView: View {
                     .accessibilityLabel(player.automixEnabled ? "Turn Automix off" : "Turn Automix on")
 
                     Button {
+                        haptic()
                         showEqualizer = true
                     } label: {
                         Image(systemName: "slider.vertical.3")
@@ -587,6 +599,7 @@ struct NowPlayingView: View {
                 icon: library.isFavorite(track) ? "heart.fill" : "heart",
                 active: library.isFavorite(track)
             ) {
+                haptic()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
                     library.toggleFavorite(track)
                 }
@@ -594,6 +607,7 @@ struct NowPlayingView: View {
             .accessibilityLabel(library.isFavorite(track) ? "Remove favorite" : "Favorite")
 
             circularButton(icon: "shuffle", active: player.isShuffled) {
+                haptic()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
                     player.toggleShuffle()
                 }
@@ -605,6 +619,7 @@ struct NowPlayingView: View {
             Spacer(minLength: 2)
 
             Button {
+                haptic()
                 skipPulse += 1
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.74)) {
                     player.previous()
@@ -621,6 +636,7 @@ struct NowPlayingView: View {
             .accessibilityLabel("Previous")
 
             Button {
+                haptic()
                 playPulse += 1
                 withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
                     player.toggle()
@@ -638,6 +654,7 @@ struct NowPlayingView: View {
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
+                haptic()
                 skipPulse += 1
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.74)) {
                     player.next()
@@ -675,6 +692,7 @@ struct NowPlayingView: View {
 
     private var repeatButton: some View {
         Button {
+            haptic()
             withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
                 player.cycleRepeat()
             }
@@ -728,6 +746,11 @@ struct NowPlayingView: View {
                 systemImage: "globe"
             )
         }
+    }
+
+    private func haptic() {
+        Self.controlHaptics.impactOccurred(intensity: 0.62)
+        Self.controlHaptics.prepare()
     }
 
     private func metadataText(_ track: Track) -> String {

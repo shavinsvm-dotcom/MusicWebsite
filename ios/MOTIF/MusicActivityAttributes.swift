@@ -7,6 +7,7 @@ struct MusicActivityAttributes: ActivityAttributes {
         var title: String
         var artist: String
         var album: String
+        var artworkURL: String?
         var isPlaying: Bool
         var elapsed: Double
         var duration: Double
