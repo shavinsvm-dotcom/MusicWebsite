@@ -47,23 +47,7 @@ struct RootView: View {
                 }
             }
             .fullScreenCover(isPresented: $showNowPlaying) {
-                NowPlayingView(
-                    backdropImage: currentBackdrop,
-                    onClose: { showNowPlaying = false }
-                )
-                .environmentObject(library)
-                .environmentObject(player)
-                .environmentObject(player.progress)
-                .overlay(alignment: .top) {
-                    AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
-                }
-                .interactiveDismissDisabled()
-                .modifier(
-                    PlayerZoomDestination(
-                        sourceID: playerTransitionID,
-                        namespace: playerTransition
-                    )
-                )
+                playerCover
             }
             .onOpenURL { url in
                 guard url.scheme == "motif" else { return }
@@ -237,6 +221,30 @@ struct RootView: View {
         "now-playing-\(selectedTab.rawValue)"
     }
 
+    private var playerCoverContent: some View {
+        NowPlayingView(
+            backdropImage: currentBackdrop,
+            onClose: { showNowPlaying = false }
+        )
+        .environmentObject(library)
+        .environmentObject(player)
+        .environmentObject(player.progress)
+        .overlay(alignment: .top) {
+            AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
+        }
+    }
+
+    @ViewBuilder
+    private var playerCover: some View {
+        if #available(iOS 18.0, *) {
+            playerCoverContent.navigationTransition(
+                .zoom(sourceID: playerTransitionID, in: playerTransition)
+            )
+        } else {
+            playerCoverContent
+        }
+    }
+
     private var forYouTab: some View {
         ForYouView(
             showNowPlaying: playerPresented,
@@ -288,20 +296,6 @@ struct RootView: View {
                 transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
                 transitionNamespace: playerTransition
             ))
-    }
-}
-
-private struct PlayerZoomDestination: ViewModifier {
-    let sourceID: String
-    let namespace: Namespace.ID
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
-        } else {
-            content
-        }
     }
 }
 
