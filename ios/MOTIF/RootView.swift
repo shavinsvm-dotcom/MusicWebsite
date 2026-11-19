@@ -28,41 +28,25 @@ struct RootView: View {
     @State private var attemptedLyricsIDs: Set<UUID> = []
     @Namespace private var playerTransition
 
-    private static let playerOpenAnimation = Animation.spring(
-        response: 0.52,
-        dampingFraction: 0.96,
-        blendDuration: 0.18
-    )
-
     private var playerPresented: Binding<Bool> {
         Binding(
             get: { showNowPlaying },
-            set: { presented in
-                if presented {
-                    withAnimation(Self.playerOpenAnimation) {
-                        showNowPlaying = true
-                    }
-                } else {
-                    showNowPlaying = false
-                }
-            }
+            set: { showNowPlaying = $0 }
         )
     }
 
     var body: some View {
-        ZStack {
-            tabs
-                .tint(.primary)
-                .environmentObject(library)
-                .environmentObject(player)
-                .environmentObject(player.progress)
-                .overlay(alignment: .top) {
-                    if !showNowPlaying {
-                        AirPodsConnectOverlay(monitor: routeMonitor)
-                    }
+        tabs
+            .tint(.primary)
+            .environmentObject(library)
+            .environmentObject(player)
+            .environmentObject(player.progress)
+            .overlay(alignment: .top) {
+                if !showNowPlaying {
+                    AirPodsConnectOverlay(monitor: routeMonitor)
                 }
-
-            if showNowPlaying {
+            }
+            .fullScreenCover(isPresented: $showNowPlaying) {
                 NowPlayingView(
                     backdropImage: currentBackdrop,
                     onClose: { showNowPlaying = false }
@@ -73,23 +57,25 @@ struct RootView: View {
                 .overlay(alignment: .top) {
                     AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
                 }
-                .zIndex(1)
-                .transition(.move(edge: .bottom))
+                .interactiveDismissDisabled()
+                .modifier(
+                    PlayerZoomDestination(
+                        sourceID: playerTransitionID,
+                        namespace: playerTransition
+                    )
+                )
             }
-        }
-        .onOpenURL { url in
-            guard url.scheme == "motif" else { return }
-            switch url.host {
-            case "nowplaying":
-                withAnimation(Self.playerOpenAnimation) {
+            .onOpenURL { url in
+                guard url.scheme == "motif" else { return }
+                switch url.host {
+                case "nowplaying":
                     showNowPlaying = true
+                case "library":
+                    selectedTab = .library
+                default:
+                    break
                 }
-            case "library":
-                selectedTab = .library
-            default:
-                break
             }
-        }
             .alert(
                 "Playback stopped",
                 isPresented: Binding(
@@ -247,6 +233,10 @@ struct RootView: View {
         }
     }
 
+    private var playerTransitionID: String {
+        "now-playing-\(selectedTab.rawValue)"
+    }
+
     private var forYouTab: some View {
         ForYouView(
             showNowPlaying: playerPresented,
@@ -298,6 +288,20 @@ struct RootView: View {
                 transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
                 transitionNamespace: playerTransition
             ))
+    }
+}
+
+private struct PlayerZoomDestination: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            content
+        }
     }
 }
 
