@@ -9,7 +9,6 @@ struct MiniPlayer: View {
     let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
-    @State private var simplifySurface = false
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
@@ -17,7 +16,6 @@ struct MiniPlayer: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
-                        simplifySurface = true
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
@@ -46,7 +44,8 @@ struct MiniPlayer: View {
                     .buttonStyle(MotifPressStyle(scale: 0.98, opacity: 0.9))
                     .layoutPriority(1)
 
-                    HStack(spacing: 8) {
+                    GlassGroup(spacing: 8) {
+                        HStack(spacing: 8) {
                         Button {
                             tapFeedback()
                             skipPulse += 1
@@ -98,6 +97,7 @@ struct MiniPlayer: View {
                         .buttonStyle(MotifPressStyle(scale: 0.8))
                         .playerGlass(Circle())
                         .accessibilityLabel("Next")
+                        }
                     }
                 }
                 .padding(.leading, 8)
@@ -119,37 +119,12 @@ struct MiniPlayer: View {
                 .move(edge: .bottom)
                     .combined(with: .opacity)
             )
-            .onChange(of: showNowPlaying) { presented in
-                if presented {
-                    simplifySurface = true
-                } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
-                        withAnimation(.easeOut(duration: 0.14)) {
-                            simplifySurface = false
-                        }
-                    }
-                }
-            }
         }
     }
 
-    /// Keep the zoom source free of a live glass blur, then bring the native
-    /// pill back once the player is gone.
-    @ViewBuilder
     private var miniPlayerSurface: some View {
-        if simplifySurface {
-            Capsule()
-                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
-                .overlay {
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
-                }
-                .transition(.opacity)
-        } else {
-            Color.clear
-                .playerGlass(Capsule())
-                .transition(.opacity)
-        }
+        Color.clear
+            .playerGlass(Capsule())
     }
 
     private func tapFeedback() {
