@@ -245,31 +245,23 @@ struct NowPlayingView: View {
                 )
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .scaleEffect(1.06)
+                .offset(y: -geometry.size.height * 0.06)
                 .saturation(1.08)
-                .contrast(1.02)
+                .brightness(-0.04)
 
+                // Same scrim as the web player: let the poster breathe in the
+                // middle, then sink into the controls without a card edge.
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.30), location: 0),
-                        .init(color: .black.opacity(0.05), location: 0.18),
-                        .init(color: .clear, location: 0.36),
-                        .init(color: .black.opacity(0.10), location: 0.62),
-                        .init(color: .black.opacity(0.62), location: 0.82),
-                        .init(color: .black.opacity(0.96), location: 0.96),
-                        .init(color: .black, location: 1)
+                        .init(color: .black.opacity(0.50), location: 0),
+                        .init(color: .black.opacity(0.06), location: 0.18),
+                        .init(color: .clear, location: 0.38),
+                        .init(color: .black.opacity(0.52), location: 0.66),
+                        .init(color: .black.opacity(0.93), location: 0.88),
+                        .init(color: Color(red: 0.039, green: 0.043, blue: 0.055), location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
-                )
-
-                RadialGradient(
-                    colors: [
-                        Color.clear,
-                        Color.black.opacity(0.34)
-                    ],
-                    center: .center,
-                    startRadius: min(geometry.size.width, geometry.size.height) * 0.34,
-                    endRadius: max(geometry.size.width, geometry.size.height) * 0.78
                 )
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
