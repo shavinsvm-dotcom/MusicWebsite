@@ -234,26 +234,22 @@ struct NowPlayingView: View {
 
     private func backdrop(_ track: Track) -> some View {
         GeometryReader { geometry in
-            let prepared = backdropImage
-            let image = prepared ?? track.artworkURL.flatMap {
-                ArtworkImageCache.shared.image(for: $0)
-            }
-
             ZStack {
                 Color.black
 
-                if let image {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(
-                            width: geometry.size.width * 1.35,
-                            height: geometry.size.height * 1.35
-                        )
-                        .blur(radius: prepared == nil ? 55 : 0)
-                        .saturation(prepared == nil ? 1.35 : 1.18)
-                        .opacity(prepared == nil ? 0.46 : 0.82)
-                }
+                // Load the cover here as well so the background is never a
+                // black hole while the centered artwork is still decoding.
+                ArtworkView(
+                    url: track.artworkURL,
+                    seed: track.title + track.artist
+                )
+                .frame(
+                    width: geometry.size.width * 1.45,
+                    height: geometry.size.height * 1.45
+                )
+                .blur(radius: 62)
+                .saturation(1.28)
+                .opacity(0.72)
 
                 // Soft bloom that makes the cover feel like it extends past
                 // the edges instead of sitting on a flat black rectangle.
@@ -298,88 +294,86 @@ struct NowPlayingView: View {
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
-            let artSide = min(
-                geometry.size.width - 56,
-                geometry.size.height * 0.40
-            )
-            let artTop = max(
-                48,
-                geometry.size.height * 0.36 - artSide / 2
-            )
+            // Reserve the bottom block for the title, scrubber and transport,
+            // then center the cover in the space that remains above it.
+            let bottomReserved: CGFloat = 340
+            let available = max(180, geometry.size.height - bottomReserved - 56)
+            let artSide = min(geometry.size.width - 56, available * 0.96)
+            let artCenterY = 56 + available / 2
 
             ZStack(alignment: .top) {
+                ArtworkView(
+                    url: track.artworkURL,
+                    seed: track.title + track.artist
+                )
+                .frame(width: artSide, height: artSide)
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                }
+                .shadow(color: .black.opacity(0.52), radius: 38, y: 22)
+                .position(x: geometry.size.width / 2, y: artCenterY)
+
                 VStack(spacing: 0) {
-                    Spacer().frame(height: artTop)
-
-                    ArtworkView(
-                        url: track.artworkURL,
-                        seed: track.title + track.artist
-                    )
-                    .frame(width: artSide, height: artSide)
-                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 26, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
-                    }
-                    .shadow(color: .black.opacity(0.52), radius: 38, y: 22)
-                    .frame(maxWidth: .infinity)
-
-                    Spacer().frame(height: 26)
+                    Spacer(minLength: 0)
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(track.title)
-                                .font(.system(size: 44, weight: .heavy))
-                                .tracking(-1.8)
-                                .foregroundStyle(.white)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.68)
-                                .fixedSize(horizontal: false, vertical: true)
+                            .font(.system(size: 44, weight: .heavy))
+                            .tracking(-1.8)
+                            .foregroundStyle(.white)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.68)
+                            .fixedSize(horizontal: false, vertical: true)
 
-                            Text(track.artist)
-                                .font(.system(size: 20, weight: .regular))
-                                .foregroundStyle(.white.opacity(0.66))
+                        Text(track.artist)
+                            .font(.system(size: 20, weight: .regular))
+                            .foregroundStyle(.white.opacity(0.66))
+                            .lineLimit(1)
+
+                        HStack(spacing: 8) {
+                            Image(systemName: "opticaldisc")
+                                .font(.system(size: 13, weight: .regular))
+                            Text(metadataText(track))
                                 .lineLimit(1)
-
-                            HStack(spacing: 8) {
-                                Image(systemName: "opticaldisc")
-                                    .font(.system(size: 13, weight: .regular))
-                                Text(metadataText(track))
-                                    .lineLimit(1)
-                            }
-                            .font(.system(size: 14, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.52))
-                            .padding(.top, 2)
-
-                            Menu {
-                                lyricsOptions(track)
-                            } label: {
-                                Label(
-                                    track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
-                                    systemImage: "quote.bubble"
-                                )
-                                .font(.system(size: 13, weight: .medium))
-                                .foregroundStyle(.white.opacity(0.70))
-                                .padding(.top, 3)
-                            }
-                            .buttonStyle(MotifPressStyle(scale: 0.94))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.52))
+                        .padding(.top, 2)
+
+                        Menu {
+                            lyricsOptions(track)
+                        } label: {
+                            Label(
+                                track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
+                                systemImage: "quote.bubble"
+                            )
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.70))
+                            .padding(.top, 3)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.94))
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 24)
+
+                    NowPlayingScrubber()
                         .padding(.horizontal, 24)
+                        .padding(.top, 10)
 
-                        NowPlayingScrubber()
-                            .padding(.horizontal, 24)
-                            .padding(.top, 10)
-
-                        controls(track)
-                            .padding(.horizontal, 22)
-                            .padding(.top, 12)
-
-                    Spacer(minLength: 0)
+                    controls(track)
+                        .padding(.horizontal, 22)
+                        .padding(.top, 12)
+                        .padding(.bottom, 8)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
 
-                topBar(track)
-                    .padding(.top, 4)
+                VStack(spacing: 0) {
+                    topBar(track)
+                        .padding(.top, 4)
+                    Spacer(minLength: 0)
+                }
             }
         }
     }
