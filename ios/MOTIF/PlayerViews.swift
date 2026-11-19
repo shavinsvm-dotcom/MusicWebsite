@@ -243,22 +243,22 @@ struct NowPlayingView: View {
                     url: track.artworkURL,
                     seed: track.title + track.artist
                 )
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .scaleEffect(1.06)
-                .offset(y: -geometry.size.height * 0.06)
-                .saturation(1.08)
-                .brightness(-0.04)
+                .frame(
+                    width: geometry.size.width * 1.7,
+                    height: geometry.size.height * 1.7
+                )
+                .blur(radius: 72)
+                .saturation(1.22)
+                .brightness(-0.07)
 
-                // Same scrim as the web player: let the poster breathe in the
-                // middle, then sink into the controls without a card edge.
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.50), location: 0),
-                        .init(color: .black.opacity(0.06), location: 0.18),
-                        .init(color: .clear, location: 0.38),
-                        .init(color: .black.opacity(0.52), location: 0.66),
-                        .init(color: .black.opacity(0.93), location: 0.88),
-                        .init(color: Color(red: 0.039, green: 0.043, blue: 0.055), location: 1)
+                        .init(color: .black.opacity(0.42), location: 0),
+                        .init(color: .black.opacity(0.05), location: 0.22),
+                        .init(color: .clear, location: 0.42),
+                        .init(color: .black.opacity(0.48), location: 0.68),
+                        .init(color: .black.opacity(0.92), location: 0.90),
+                        .init(color: .black, location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -272,7 +272,38 @@ struct NowPlayingView: View {
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
+            let artSide = min(
+                geometry.size.width - 48,
+                geometry.size.height * 0.42
+            )
+
             ZStack(alignment: .top) {
+                ZStack {
+                    // The same full-resolution cover, enlarged and blurred, so
+                    // its colors continue past the sharp center copy.
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist
+                    )
+                    .frame(width: artSide * 1.18, height: artSide * 1.18)
+                    .blur(radius: 30)
+                    .opacity(0.62)
+
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist
+                    )
+                    .frame(width: artSide, height: artSide)
+                    .clipShape(
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    )
+                }
+                .frame(width: artSide * 1.32, height: artSide * 1.32)
+                .position(
+                    x: geometry.size.width / 2,
+                    y: geometry.size.height * 0.40
+                )
+
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
