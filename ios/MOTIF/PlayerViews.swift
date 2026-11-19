@@ -161,6 +161,62 @@ private struct MiniArtworkProgressRing: View {
     }
 }
 
+/// A sharp cover that dissolves into its own unclipped blurred copies. The
+/// blur layer is the exact same image, size and position, so the feathered
+/// edge lands on matching color instead of a visible card boundary.
+private struct SeamlessArtwork: View {
+    let url: URL?
+    let seed: String
+    let size: CGFloat
+
+    @State private var image: UIImage?
+
+    init(url: URL?, seed: String, size: CGFloat) {
+        self.url = url
+        self.seed = seed
+        self.size = size
+        _image = State(initialValue: url.flatMap { ArtworkImageCache.shared.image(for: $0) })
+    }
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size * 1.7, height: size * 1.7)
+                    .blur(radius: 62)
+                    .opacity(0.55)
+
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .blur(radius: 34)
+
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: size, height: size)
+                    .mask(
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                            .fill(Color.black)
+                            .blur(radius: 30)
+                    )
+            } else {
+                ArtworkView(url: url, seed: seed)
+                    .frame(width: size, height: size)
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            }
+        }
+        .frame(width: size, height: size)
+        .task(id: url) {
+            guard image == nil, let url else { return }
+            image = await ArtworkImageCache.shared.loadImage(for: url)
+        }
+    }
+}
+
 struct NowPlayingView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var library: LibraryStore
@@ -273,44 +329,16 @@ struct NowPlayingView: View {
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
             let artSide = min(
-                geometry.size.width - 48,
-                geometry.size.height * 0.42
+                geometry.size.width - 56,
+                geometry.size.height * 0.46
             )
 
             ZStack(alignment: .top) {
-                ZStack {
-                    // The same full-resolution cover, enlarged and blurred, so
-                    // its colors continue past the sharp center copy.
-                    ArtworkView(
-                        url: track.artworkURL,
-                        seed: track.title + track.artist
-                    )
-                    .frame(width: artSide * 1.34, height: artSide * 1.34)
-                    .blur(radius: 44)
-                    .opacity(0.58)
-
-                    // Same size and position as the sharp cover, so the feathered
-                    // edge fades into identical colors instead of a card seam.
-                    ArtworkView(
-                        url: track.artworkURL,
-                        seed: track.title + track.artist
-                    )
-                    .frame(width: artSide, height: artSide)
-                    .blur(radius: 18)
-                    .opacity(0.96)
-
-                    ArtworkView(
-                        url: track.artworkURL,
-                        seed: track.title + track.artist
-                    )
-                    .frame(width: artSide, height: artSide)
-                    .mask(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .fill(Color.black)
-                            .blur(radius: 16)
-                    )
-                }
-                .frame(width: artSide * 1.32, height: artSide * 1.32)
+                SeamlessArtwork(
+                    url: track.artworkURL,
+                    seed: track.title + track.artist,
+                    size: artSide
+                )
                 .position(
                     x: geometry.size.width / 2,
                     y: geometry.size.height * 0.40
