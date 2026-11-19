@@ -452,10 +452,9 @@ struct LibraryAlbumDetailView: View {
 
     private var header: some View {
         VStack(spacing: 16) {
-            LivingArtworkView(
+            ArtworkView(
                 url: album.artworkURL,
-                seed: album.title + album.artist,
-                isPlaying: player.isPlaying
+                seed: album.title + album.artist
             )
                 .frame(width: 220, height: 220)
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))

@@ -556,17 +556,21 @@ final class PlayerManager: ObservableObject {
         guard rate.isFinite, rate >= 0.85, rate <= 1.18 else { return nil }
 
         let currentDuration = max(duration, currentGrid.duration)
-        let beats = 8
+        // Four bars is the shortest transition that still lands on a real
+        // phrase boundary in most dance/pop arrangements.
+        let beats = 16
         let transitionDuration = (60 / currentGrid.bpm) * Double(beats)
         guard currentDuration > transitionDuration + 1 else { return nil }
 
         let targetStart = currentDuration - transitionDuration
-        let outgoingStart = currentGrid.beat(atOrBefore: targetStart)
+        let outgoingStart = currentGrid.phraseStart(atOrBefore: targetStart, bars: 4)
         guard outgoingStart > 0,
               currentDuration - outgoingStart > 0.5
         else { return nil }
 
-        let incomingStart = nextGrid.firstBeat
+        // Cue the incoming track on a phrase boundary too, so both sides of
+        // the blend stay on the same musical grid.
+        let incomingStart = nextGrid.phraseStart(atOrBefore: nextGrid.firstBeat, bars: 4)
         let nextDuration = max(next.duration, nextGrid.duration)
         let incomingAdvance = transitionDuration * Double(rate)
         guard incomingStart >= 0,

@@ -32,6 +32,8 @@ final class LibraryStore: ObservableObject {
     private var trackIndex: [UUID: Track] = [:]
     private var trackByRemoteID: [String: Track] = [:]
     private var playlistTrackCache: [UUID: [Track]] = [:]
+    private var pendingSave: LibrarySnapshot?
+    private var saveTask: Task<Void, Never>?
 
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
@@ -1161,19 +1163,14 @@ final class LibraryStore: ObservableObject {
     private func save() {
         rebuildIndexes()
 
-        let snapshot = LibrarySnapshot(
+        pendingSave = LibrarySnapshot(
             tracks: tracks,
             favoriteIDs: Array(favoriteIDs),
             playlists: playlists,
             recentTrackIDs: recentTrackIDs,
             playCounts: playCounts
         )
-        do {
-            let data = try JSONEncoder().encode(snapshot)
-            try data.write(to: libraryURL, options: .atomic)
-        } catch {
-            errorMessage = "Couldn’t save your library: \(error.localizedDescription)"
-        }
+        scheduleSave()
 
         let recent = recentTracks.prefix(4).map { track in
             SharedLibrarySnapshot.Item(
@@ -1193,5 +1190,34 @@ final class LibraryStore: ObservableObject {
                 playlistArtworkURL: firstPlaylist?.customCoverURL?.absoluteString
             )
         )
+    }
+
+    /// Coalesce library writes and move JSON encoding/disk I/O off the main
+    /// thread. Play counts and favorites can fire several save requests in a
+    /// burst, and each one previously encoded the whole library synchronously.
+    private func scheduleSave() {
+        guard saveTask == nil else { return }
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard let self else { return }
+            while let snapshot = self.pendingSave {
+                self.pendingSave = nil
+                if let error = await self.write(snapshot) {
+                    self.errorMessage = "Couldn’t save your library: \(error)"
+                }
+            }
+            self.saveTask = nil
+        }
+    }
+
+    private nonisolated func write(_ snapshot: LibrarySnapshot) async -> String? {
+        let url = libraryURL
+        do {
+            let data = try JSONEncoder().encode(snapshot)
+            try data.write(to: url, options: .atomic)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 }

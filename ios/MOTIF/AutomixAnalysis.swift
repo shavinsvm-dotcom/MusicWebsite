@@ -22,6 +22,24 @@ struct BeatGrid: Codable, Equatable {
         let steps = ceil((time - firstBeat) / beatInterval)
         return firstBeat + steps * beatInterval
     }
+
+    /// Start of the 4/4 bar containing `time`. Mixing on a bar line avoids
+    /// starting a transition on a weak beat.
+    func downbeat(atOrBefore time: TimeInterval) -> TimeInterval {
+        let bar = beatInterval * 4
+        guard time > firstBeat else { return firstBeat }
+        let steps = floor((time - firstBeat) / bar)
+        return firstBeat + steps * bar
+    }
+
+    /// Start of the phrase (a group of bars) containing `time`. Two bars is a
+    /// common, conservative phrase length for a short crossfade.
+    func phraseStart(atOrBefore time: TimeInterval, bars: Int = 2) -> TimeInterval {
+        let phrase = beatInterval * Double(max(bars, 1) * 4)
+        guard time > firstBeat else { return firstBeat }
+        let steps = floor((time - firstBeat) / phrase)
+        return firstBeat + steps * phrase
+    }
 }
 
 struct AutomixPlan {
