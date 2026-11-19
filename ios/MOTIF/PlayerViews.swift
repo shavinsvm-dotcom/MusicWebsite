@@ -189,8 +189,6 @@ private struct MiniArtworkProgressRing: View {
 struct NowPlayingView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var library: LibraryStore
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(LivingArtworkSettings.enabledKey) private var livingArtworkEnabled = LivingArtworkSettings.defaultEnabled
 
     let backdropImage: UIImage?
     let onClose: () -> Void
@@ -203,8 +201,6 @@ struct NowPlayingView: View {
     @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
-    @State private var livingArtworkActive = false
-    @State private var chromeVisible = false
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
@@ -219,10 +215,7 @@ struct NowPlayingView: View {
             Color.black.ignoresSafeArea()
 
             if let track = currentTrack {
-                if chromeVisible {
-                    backdrop(track)
-                        .transition(.opacity)
-                }
+                backdrop(track)
                 content(track)
             } else {
                 VStack(spacing: 10) {
@@ -235,28 +228,6 @@ struct NowPlayingView: View {
             }
         }
         .environment(\.colorScheme, .dark)
-        .task {
-            // Keep the zooming view to the backdrop and artwork only. The
-            // glass controls are the most expensive layers to composite while
-            // the cover is still scaling, so they arrive once it settles.
-            guard !reduceMotion else {
-                chromeVisible = true
-                livingArtworkActive = true
-                return
-            }
-            try? await Task.sleep(nanoseconds: 380_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.18)) {
-                chromeVisible = true
-            }
-            try? await Task.sleep(nanoseconds: 270_000_000)
-            guard !Task.isCancelled else { return }
-            livingArtworkActive = true
-        }
-        .onDisappear {
-            livingArtworkActive = false
-            chromeVisible = false
-        }
         .sheet(isPresented: $showQueue) {
             UpNextView()
                 .environmentObject(player)
@@ -343,38 +314,24 @@ struct NowPlayingView: View {
 
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
-                    Group {
-                        if chromeVisible {
-                            LivingArtworkView(
-                                url: track.artworkURL,
-                                seed: track.title + track.artist,
-                                isPlaying: player.isPlaying,
-                                isActive: livingArtworkActive
-                            )
-                            .mask(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .clear, location: 0),
-                                        .init(color: .black, location: 0.16),
-                                        .init(color: .black, location: 0.64),
-                                        .init(color: .black.opacity(0.5), location: 0.84),
-                                        .init(color: .clear, location: 1)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
-                            .transition(.opacity)
-                        } else {
-                            ArtworkView(
-                                url: track.artworkURL,
-                                seed: track.title + track.artist
-                            )
-                            .transition(.opacity)
-                        }
-                    }
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist
+                    )
                     .frame(width: geometry.size.width, height: artHeight)
-                    .clipped()
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0),
+                                .init(color: .black, location: 0.16),
+                                .init(color: .black, location: 0.64),
+                                .init(color: .black.opacity(0.5), location: 0.84),
+                                .init(color: .clear, location: 1)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                     .padding(.top, 4)
 
                     Spacer().frame(height: gap)
@@ -419,40 +376,20 @@ struct NowPlayingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
 
-                        Group {
-                            if chromeVisible {
-                                NowPlayingScrubber()
-                                    .transition(.opacity)
-                            } else {
-                                Color.clear
-                            }
-                        }
-                        .frame(height: 54)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 10)
-                        .allowsHitTesting(chromeVisible)
+                        NowPlayingScrubber()
+                            .padding(.horizontal, 24)
+                            .padding(.top, 10)
 
-                        if chromeVisible {
-                            controls(track)
-                                .padding(.horizontal, 22)
-                                .padding(.top, 12)
-                                .transition(.opacity)
-                        } else {
-                            Color.clear
-                                .frame(height: 68)
-                                .padding(.horizontal, 22)
-                                .padding(.top, 12)
-                        }
+                        controls(track)
+                            .padding(.horizontal, 22)
+                            .padding(.top, 12)
 
                     Spacer(minLength: 0)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
 
-                if chromeVisible {
-                    topBar(track)
-                        .padding(.top, 4)
-                        .transition(.opacity)
-                }
+                topBar(track)
+                    .padding(.top, 4)
             }
         }
     }
@@ -579,11 +516,6 @@ struct NowPlayingView: View {
                     }
 
                     Section("Playback") {
-                        Toggle(isOn: $livingArtworkEnabled) {
-                            Label("Living Artwork", systemImage: "sparkles")
-                        }
-                        .accessibilityHint("Animated lighting and particles on large album covers")
-
                         Menu {
                             if player.isSleepTimerActive {
                                 Button {
