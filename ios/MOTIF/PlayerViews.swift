@@ -9,6 +9,7 @@ struct MiniPlayer: View {
     let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
+    @State private var simplifySurface = false
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
@@ -16,6 +17,7 @@ struct MiniPlayer: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
+                        simplifySurface = true
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
@@ -25,12 +27,6 @@ struct MiniPlayer: View {
                                 .overlay {
                                     MiniArtworkProgressRing()
                                 }
-                                .modifier(
-                                    MiniArtworkTransitionSource(
-                                        sourceID: transitionSourceID,
-                                        namespace: transitionNamespace
-                                    )
-                                )
 
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(track.title)
@@ -108,7 +104,15 @@ struct MiniPlayer: View {
                 .padding(.trailing, 8)
                 .frame(height: 50)
             }
-            .background(miniPlayerSurface)
+            .background {
+                miniPlayerSurface
+                    .modifier(
+                        MiniPlayerTransitionSource(
+                            sourceID: transitionSourceID,
+                            namespace: transitionNamespace
+                        )
+                    )
+            }
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .padding(.horizontal, 20)
@@ -117,19 +121,37 @@ struct MiniPlayer: View {
                 .move(edge: .bottom)
                     .combined(with: .opacity)
             )
+            .onChange(of: showNowPlaying) { presented in
+                if presented {
+                    simplifySurface = true
+                } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+                        withAnimation(.easeOut(duration: 0.28)) {
+                            simplifySurface = false
+                        }
+                    }
+                }
+            }
         }
     }
 
-    /// A flat pill is deliberately used on the zoom source. Liquid Glass
-    /// recomputes a live blur every frame of the presentation, and the small
-    /// size makes the flat treatment visually indistinguishable at rest.
+    /// Keep the zoom source free of a live glass blur, then bring the native
+    /// pill back once the player is gone.
+    @ViewBuilder
     private var miniPlayerSurface: some View {
-        Capsule()
-            .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
-            .overlay {
-                Capsule()
-                    .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
-            }
+        if simplifySurface {
+            Capsule()
+                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
+                }
+                .transition(.opacity)
+        } else {
+            Color.clear
+                .playerGlass(Capsule())
+                .transition(.opacity)
+        }
     }
 
     private func tapFeedback() {
@@ -878,7 +900,7 @@ private struct NowPlayingScrubber: View {
     }
 }
 
-private struct MiniArtworkTransitionSource: ViewModifier {
+private struct MiniPlayerTransitionSource: ViewModifier {
     let sourceID: String
     let namespace: Namespace.ID
 
