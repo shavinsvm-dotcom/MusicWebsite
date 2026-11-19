@@ -104,17 +104,15 @@ struct MiniPlayer: View {
                 .padding(.trailing, 8)
                 .frame(height: 50)
             }
-            .background {
-                miniPlayerSurface
-                    .modifier(
-                        MiniPlayerTransitionSource(
-                            sourceID: transitionSourceID,
-                            namespace: transitionNamespace
-                        )
-                    )
-            }
+            .background(miniPlayerSurface)
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
+            .modifier(
+                MiniPlayerTransitionSource(
+                    sourceID: transitionSourceID,
+                    namespace: transitionNamespace
+                )
+            )
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
             .transition(
@@ -125,8 +123,8 @@ struct MiniPlayer: View {
                 if presented {
                     simplifySurface = true
                 } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-                        withAnimation(.easeOut(duration: 0.28)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                        withAnimation(.easeOut(duration: 0.14)) {
                             simplifySurface = false
                         }
                     }
@@ -221,7 +219,10 @@ struct NowPlayingView: View {
             Color.black.ignoresSafeArea()
 
             if let track = currentTrack {
-                backdrop(track)
+                if chromeVisible {
+                    backdrop(track)
+                        .transition(.opacity)
+                }
                 content(track)
             } else {
                 VStack(spacing: 10) {
@@ -243,12 +244,12 @@ struct NowPlayingView: View {
                 livingArtworkActive = true
                 return
             }
-            try? await Task.sleep(nanoseconds: 450_000_000)
+            try? await Task.sleep(nanoseconds: 380_000_000)
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.18)) {
                 chromeVisible = true
             }
-            try? await Task.sleep(nanoseconds: 200_000_000)
+            try? await Task.sleep(nanoseconds: 270_000_000)
             guard !Task.isCancelled else { return }
             livingArtworkActive = true
         }
@@ -342,27 +343,39 @@ struct NowPlayingView: View {
 
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
-                    LivingArtworkView(
-                        url: track.artworkURL,
-                        seed: track.title + track.artist,
-                        isPlaying: player.isPlaying,
-                        isActive: livingArtworkActive
-                    )
-                        .frame(width: geometry.size.width, height: artHeight)
-                        .mask(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .clear, location: 0),
-                                    .init(color: .black, location: 0.16),
-                                    .init(color: .black, location: 0.64),
-                                    .init(color: .black.opacity(0.5), location: 0.84),
-                                    .init(color: .clear, location: 1)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
+                    Group {
+                        if chromeVisible {
+                            LivingArtworkView(
+                                url: track.artworkURL,
+                                seed: track.title + track.artist,
+                                isPlaying: player.isPlaying,
+                                isActive: livingArtworkActive
                             )
-                        )
-                        .padding(.top, 4)
+                            .mask(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .clear, location: 0),
+                                        .init(color: .black, location: 0.16),
+                                        .init(color: .black, location: 0.64),
+                                        .init(color: .black.opacity(0.5), location: 0.84),
+                                        .init(color: .clear, location: 1)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .transition(.opacity)
+                        } else {
+                            ArtworkView(
+                                url: track.artworkURL,
+                                seed: track.title + track.artist
+                            )
+                            .transition(.opacity)
+                        }
+                    }
+                    .frame(width: geometry.size.width, height: artHeight)
+                    .clipped()
+                    .padding(.top, 4)
 
                     Spacer().frame(height: gap)
 
