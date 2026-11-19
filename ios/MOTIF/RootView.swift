@@ -221,7 +221,7 @@ struct RootView: View {
         "now-playing-\(selectedTab.rawValue)"
     }
 
-    private var playerCoverContent: some View {
+    private var playerCoverBase: some View {
         NowPlayingView(
             backdropImage: currentBackdrop,
             onClose: { showNowPlaying = false }
@@ -232,7 +232,15 @@ struct RootView: View {
         .overlay(alignment: .top) {
             AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
         }
-        .presentationBackground(.black)
+    }
+
+    @ViewBuilder
+    private var playerCoverContent: some View {
+        if #available(iOS 16.4, *) {
+            playerCoverBase.presentationBackground(.black)
+        } else {
+            playerCoverBase
+        }
     }
 
     @ViewBuilder
