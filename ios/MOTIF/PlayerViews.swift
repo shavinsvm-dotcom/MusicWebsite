@@ -285,17 +285,29 @@ struct NowPlayingView: View {
                         url: track.artworkURL,
                         seed: track.title + track.artist
                     )
-                    .frame(width: artSide * 1.18, height: artSide * 1.18)
-                    .blur(radius: 30)
-                    .opacity(0.62)
+                    .frame(width: artSide * 1.34, height: artSide * 1.34)
+                    .blur(radius: 44)
+                    .opacity(0.58)
+
+                    // Same size and position as the sharp cover, so the feathered
+                    // edge fades into identical colors instead of a card seam.
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist
+                    )
+                    .frame(width: artSide, height: artSide)
+                    .blur(radius: 18)
+                    .opacity(0.96)
 
                     ArtworkView(
                         url: track.artworkURL,
                         seed: track.title + track.artist
                     )
                     .frame(width: artSide, height: artSide)
-                    .clipShape(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .mask(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .fill(Color.black)
+                            .blur(radius: 16)
                     )
                 }
                 .frame(width: artSide * 1.32, height: artSide * 1.32)
