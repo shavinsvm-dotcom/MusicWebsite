@@ -46,6 +46,7 @@ struct LivingArtworkView: View {
     private var shouldAnimate: Bool {
         enabled
             && isPlaying
+            && isActive
             && isVisible
             && scenePhase == .active
             && !reduceMotion

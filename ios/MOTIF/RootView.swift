@@ -28,6 +28,27 @@ struct RootView: View {
     @State private var attemptedLyricsIDs: Set<UUID> = []
     @Namespace private var playerTransition
 
+    private static let playerOpenAnimation = Animation.spring(
+        response: 0.52,
+        dampingFraction: 0.96,
+        blendDuration: 0.18
+    )
+
+    private var playerPresented: Binding<Bool> {
+        Binding(
+            get: { showNowPlaying },
+            set: { presented in
+                if presented {
+                    withAnimation(Self.playerOpenAnimation) {
+                        showNowPlaying = true
+                    }
+                } else {
+                    showNowPlaying = false
+                }
+            }
+        )
+    }
+
     var body: some View {
         ZStack {
             tabs
@@ -56,18 +77,19 @@ struct RootView: View {
                 .transition(.move(edge: .bottom))
             }
         }
-        .animation(.spring(response: 0.44, dampingFraction: 0.94), value: showNowPlaying)
-            .onOpenURL { url in
-                guard url.scheme == "motif" else { return }
-                switch url.host {
-                case "nowplaying":
+        .onOpenURL { url in
+            guard url.scheme == "motif" else { return }
+            switch url.host {
+            case "nowplaying":
+                withAnimation(Self.playerOpenAnimation) {
                     showNowPlaying = true
-                case "library":
-                    selectedTab = .library
-                default:
-                    break
                 }
+            case "library":
+                selectedTab = .library
+            default:
+                break
             }
+        }
             .alert(
                 "Playback stopped",
                 isPresented: Binding(
@@ -227,11 +249,11 @@ struct RootView: View {
 
     private var forYouTab: some View {
         ForYouView(
-            showNowPlaying: $showNowPlaying,
+            showNowPlaying: playerPresented,
             openSearch: { selectedTab = .search }
         )
         .modifier(MiniPlayerInset(
-            showNowPlaying: $showNowPlaying,
+            showNowPlaying: playerPresented,
             currentID: player.current?.id,
             transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)",
             transitionNamespace: playerTransition
@@ -239,9 +261,9 @@ struct RootView: View {
     }
 
     private var homeTab: some View {
-        HomeView(showNowPlaying: $showNowPlaying)
+        HomeView(showNowPlaying: playerPresented)
             .modifier(MiniPlayerInset(
-                showNowPlaying: $showNowPlaying,
+                showNowPlaying: playerPresented,
                 currentID: player.current?.id,
                 transitionSourceID: "now-playing-\(AppTab.home.rawValue)",
                 transitionNamespace: playerTransition
@@ -249,9 +271,9 @@ struct RootView: View {
     }
 
     private var libraryTab: some View {
-        LibraryView(showNowPlaying: $showNowPlaying)
+        LibraryView(showNowPlaying: playerPresented)
             .modifier(MiniPlayerInset(
-                showNowPlaying: $showNowPlaying,
+                showNowPlaying: playerPresented,
                 currentID: player.current?.id,
                 transitionSourceID: "now-playing-\(AppTab.library.rawValue)",
                 transitionNamespace: playerTransition
@@ -259,9 +281,9 @@ struct RootView: View {
     }
 
     private var playlistsTab: some View {
-        PlaylistsView(showNowPlaying: $showNowPlaying)
+        PlaylistsView(showNowPlaying: playerPresented)
             .modifier(MiniPlayerInset(
-                showNowPlaying: $showNowPlaying,
+                showNowPlaying: playerPresented,
                 currentID: player.current?.id,
                 transitionSourceID: "now-playing-\(AppTab.playlists.rawValue)",
                 transitionNamespace: playerTransition
@@ -269,9 +291,9 @@ struct RootView: View {
     }
 
     private var searchTab: some View {
-        SearchView(showNowPlaying: $showNowPlaying)
+        SearchView(showNowPlaying: playerPresented)
             .modifier(MiniPlayerInset(
-                showNowPlaying: $showNowPlaying,
+                showNowPlaying: playerPresented,
                 currentID: player.current?.id,
                 transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
                 transitionNamespace: playerTransition

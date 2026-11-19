@@ -164,6 +164,7 @@ struct NowPlayingView: View {
     let onClose: () -> Void
 
     @StateObject private var spatialAudio = SpatialAudioMonitor()
+    @ObservedObject private var equalizer = Equalizer.shared
     @State private var playPulse = 0
     @State private var skipPulse = 0
     @State private var showQueue = false
@@ -432,19 +433,39 @@ struct NowPlayingView: View {
 
                 Spacer()
 
-                Menu {
-                    lyricsOptions(track)
-                } label: {
-                    Image(systemName: "quote.bubble")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 40, height: 40)
-                        .nativeGlass(Circle(), interactive: true)
-                }
-                .buttonStyle(MotifPressStyle(scale: 0.88))
-                .accessibilityLabel("Lyrics options")
+                HStack(spacing: 6) {
+                    Button {
+                        withAnimation(.spring(response: 0.26, dampingFraction: 0.72)) {
+                            player.setAutomix(!player.automixEnabled)
+                        }
+                    } label: {
+                        Image(systemName: "waveform.path.ecg")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(
+                                player.automixEnabled ? Color.white : Color.white.opacity(0.64)
+                            )
+                            .frame(width: 36, height: 36)
+                            .motifBounce(player.automixEnabled)
+                            .nativeGlass(Circle(), interactive: true)
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.86))
+                    .accessibilityLabel(player.automixEnabled ? "Turn Automix off" : "Turn Automix on")
 
-                Menu {
+                    Button {
+                        showEqualizer = true
+                    } label: {
+                        Image(systemName: "slider.vertical.3")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(
+                                equalizer.isEnabled ? Color.white : Color.white.opacity(0.64)
+                            )
+                            .frame(width: 36, height: 36)
+                            .nativeGlass(Circle(), interactive: true)
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.86))
+                    .accessibilityLabel("Equalizer")
+
+                    Menu {
                     if !library.playlists.isEmpty {
                         Section("Add to playlist") {
                             ForEach(library.playlists) { playlist in
@@ -521,19 +542,6 @@ struct NowPlayingView: View {
                         }
                         .accessibilityHint("Animated lighting and particles on large album covers")
 
-                        Toggle(isOn: Binding(
-                            get: { player.automixEnabled },
-                            set: { player.setAutomix($0) }
-                        )) {
-                            Label("Automix", systemImage: "waveform.path.ecg")
-                        }
-
-                        Button {
-                            showEqualizer = true
-                        } label: {
-                            Label("Equalizer", systemImage: "slider.vertical.3")
-                        }
-
                         Menu {
                             if player.isSleepTimerActive {
                                 Button {
@@ -588,6 +596,7 @@ struct NowPlayingView: View {
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("More options")
+                }
             }
 
             VStack(spacing: 1) {
