@@ -88,6 +88,37 @@ extension View {
     private func glassFallback<S: Shape>(_ shape: S) -> some View {
         background(.ultraThinMaterial, in: shape)
     }
+
+    /// Player chrome opts out of repeated material blur passes on older iOS.
+    /// A flat translucent fill keeps the same layering without recompositing
+    /// ten live blurs while a full-screen cover is scaling.
+    @ViewBuilder
+    func playerGlass<S: Shape>(_ shape: S, interactive: Bool = true) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            if interactive {
+                glassEffect(.regular.interactive(), in: shape)
+            } else {
+                glassEffect(.regular, in: shape)
+            }
+        } else {
+            playerGlassFallback(shape)
+        }
+        #else
+        playerGlassFallback(shape)
+        #endif
+    }
+
+    @ViewBuilder
+    private func playerGlassFallback<S: Shape>(_ shape: S) -> some View {
+        background {
+            shape
+                .fill(Color.white.opacity(0.09))
+                .overlay {
+                    shape.stroke(Color.white.opacity(0.14), lineWidth: 0.7)
+                }
+        }
+    }
 }
 
 extension View {

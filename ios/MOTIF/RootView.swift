@@ -232,6 +232,7 @@ struct RootView: View {
         .overlay(alignment: .top) {
             AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
         }
+        .presentationBackground(.black)
     }
 
     @ViewBuilder

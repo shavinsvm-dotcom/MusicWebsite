@@ -65,7 +65,7 @@ struct MiniPlayer: View {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.8))
-                        .nativeGlass(Circle(), interactive: true)
+                        .playerGlass(Circle())
                         .accessibilityLabel("Previous")
 
                         Button {
@@ -83,7 +83,7 @@ struct MiniPlayer: View {
                                 .motifBounce(tick: playPulse)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.8))
-                        .nativeGlass(Circle(), interactive: true)
+                        .playerGlass(Circle())
                         .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                         Button {
@@ -100,7 +100,7 @@ struct MiniPlayer: View {
                                 .contentShape(Circle())
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.8))
-                        .nativeGlass(Circle(), interactive: true)
+                        .playerGlass(Circle())
                         .accessibilityLabel("Next")
                     }
                 }
@@ -108,7 +108,7 @@ struct MiniPlayer: View {
                 .padding(.trailing, 8)
                 .frame(height: 50)
             }
-            .nativeGlass(Capsule())
+            .playerGlass(Capsule())
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .padding(.horizontal, 20)
@@ -272,7 +272,6 @@ struct NowPlayingView: View {
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .clipped()
-                .opacity(0.96)
 
                 LinearGradient(
                     stops: [
@@ -287,6 +286,7 @@ struct NowPlayingView: View {
                 )
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .drawingGroup()
         }
         .ignoresSafeArea()
     }
@@ -315,14 +315,14 @@ struct NowPlayingView: View {
                         isActive: livingArtworkActive
                     )
                         .frame(width: geometry.size.width, height: artHeight)
-                        .mask(
+                        .overlay(
                             LinearGradient(
                                 stops: [
-                                    .init(color: .clear, location: 0),
-                                    .init(color: .black, location: 0.16),
-                                    .init(color: .black, location: 0.64),
+                                    .init(color: .black, location: 0),
+                                    .init(color: .clear, location: 0.16),
+                                    .init(color: .clear, location: 0.64),
                                     .init(color: .black.opacity(0.5), location: 0.84),
-                                    .init(color: .clear, location: 1)
+                                    .init(color: .black, location: 1)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -372,9 +372,18 @@ struct NowPlayingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 24)
 
-                        NowPlayingScrubber()
-                            .padding(.horizontal, 24)
-                            .padding(.top, 10)
+                        Group {
+                            if chromeVisible {
+                                NowPlayingScrubber()
+                                    .transition(.opacity)
+                            } else {
+                                Color.clear
+                            }
+                        }
+                        .frame(height: 54)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 10)
+                        .allowsHitTesting(chromeVisible)
 
                         if chromeVisible {
                             controls(track)
@@ -412,7 +421,7 @@ struct NowPlayingView: View {
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .nativeGlass(Circle(), interactive: true)
+                        .playerGlass(Circle())
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("Close player")
@@ -432,7 +441,7 @@ struct NowPlayingView: View {
                             )
                             .frame(width: 36, height: 36)
                             .motifBounce(player.automixEnabled)
-                            .nativeGlass(Circle(), interactive: true)
+                            .playerGlass(Circle())
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.86))
                     .accessibilityLabel(player.automixEnabled ? "Turn Automix off" : "Turn Automix on")
@@ -446,7 +455,7 @@ struct NowPlayingView: View {
                                 equalizer.isEnabled ? Color.white : Color.white.opacity(0.64)
                             )
                             .frame(width: 36, height: 36)
-                            .nativeGlass(Circle(), interactive: true)
+                            .playerGlass(Circle())
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.86))
                     .accessibilityLabel("Equalizer")
@@ -578,7 +587,7 @@ struct NowPlayingView: View {
                         .font(.system(size: 19, weight: .medium))
                         .foregroundStyle(.white)
                         .frame(width: 40, height: 40)
-                        .nativeGlass(Circle(), interactive: true)
+                        .playerGlass(Circle())
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("More options")
@@ -649,7 +658,7 @@ struct NowPlayingView: View {
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
                     .motifBounce(tick: skipPulse)
-                    .nativeGlass(Circle(), interactive: true)
+                    .playerGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Previous")
@@ -666,7 +675,7 @@ struct NowPlayingView: View {
                     .frame(width: 68, height: 68)
                     .motifReplace()
                     .motifBounce(tick: playPulse)
-                    .nativeGlass(Circle(), interactive: true)
+                    .playerGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.9))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
@@ -682,7 +691,7 @@ struct NowPlayingView: View {
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
                     .motifBounce(tick: skipPulse)
-                    .nativeGlass(Circle(), interactive: true)
+                    .playerGlass(Circle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Next")
@@ -702,7 +711,7 @@ struct NowPlayingView: View {
                 .frame(width: 42, height: 42)
                 .motifReplace()
                 .motifBounce(active)
-                .nativeGlass(Circle(), interactive: true)
+                .playerGlass(Circle())
         }
         .buttonStyle(MotifPressStyle(scale: 0.88))
     }
@@ -727,7 +736,7 @@ struct NowPlayingView: View {
                 }
             }
             .frame(width: 42, height: 42)
-            .nativeGlass(Circle(), interactive: true)
+            .playerGlass(Circle())
         }
         .buttonStyle(MotifPressStyle(scale: 0.88))
         .accessibilityLabel("Repeat")
