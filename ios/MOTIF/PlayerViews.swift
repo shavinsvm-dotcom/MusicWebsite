@@ -9,7 +9,6 @@ struct MiniPlayer: View {
     let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
-    @State private var simplifySurface = false
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
@@ -17,7 +16,6 @@ struct MiniPlayer: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
-                        simplifySurface = true
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
@@ -119,37 +117,19 @@ struct MiniPlayer: View {
                 .move(edge: .bottom)
                     .combined(with: .opacity)
             )
-            .onChange(of: showNowPlaying) { presented in
-                if presented {
-                    simplifySurface = true
-                } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                        withAnimation(.easeOut(duration: 0.25)) {
-                            simplifySurface = false
-                        }
-                    }
-                }
-            }
         }
     }
 
-    /// Live Liquid Glass is the expensive part of the zoom source. Swap to a
-    /// flat pill before the cover is presented and fade the glass back in only
-    /// after dismissal, while the mini player is unobscured again.
+    /// A flat pill is deliberately used on the zoom source. Liquid Glass
+    /// recomputes a live blur every frame of the presentation, and the small
+    /// size makes the flat treatment visually indistinguishable at rest.
     private var miniPlayerSurface: some View {
-        ZStack {
-            Color.clear
-                .playerGlass(Capsule())
-                .opacity(simplifySurface ? 0 : 1)
-
-            Capsule()
-                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
-                .overlay {
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
-                }
-                .opacity(simplifySurface ? 1 : 0)
-        }
+        Capsule()
+            .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
+            .overlay {
+                Capsule()
+                    .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
+            }
     }
 
     private func tapFeedback() {
@@ -347,14 +327,14 @@ struct NowPlayingView: View {
                         isActive: livingArtworkActive
                     )
                         .frame(width: geometry.size.width, height: artHeight)
-                        .overlay(
+                        .mask(
                             LinearGradient(
                                 stops: [
-                                    .init(color: .black, location: 0),
-                                    .init(color: .clear, location: 0.16),
-                                    .init(color: .clear, location: 0.64),
+                                    .init(color: .clear, location: 0),
+                                    .init(color: .black, location: 0.16),
+                                    .init(color: .black, location: 0.64),
                                     .init(color: .black.opacity(0.5), location: 0.84),
-                                    .init(color: .black, location: 1)
+                                    .init(color: .clear, location: 1)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom

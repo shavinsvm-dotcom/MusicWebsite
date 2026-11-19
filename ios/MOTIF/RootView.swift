@@ -47,7 +47,12 @@ struct RootView: View {
                 }
             }
             .fullScreenCover(isPresented: $showNowPlaying) {
-                playerCover
+                playerCoverContent.modifier(
+                    PlayerZoomDestination(
+                        sourceID: playerTransitionID,
+                        namespace: playerTransition
+                    )
+                )
             }
             .onOpenURL { url in
                 guard url.scheme == "motif" else { return }
@@ -221,7 +226,7 @@ struct RootView: View {
         "now-playing-\(selectedTab.rawValue)"
     }
 
-    private var playerCoverBase: some View {
+    private var playerCoverContent: some View {
         NowPlayingView(
             backdropImage: currentBackdrop,
             onClose: { showNowPlaying = false }
@@ -234,23 +239,17 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder
-    private var playerCoverContent: some View {
-        if #available(iOS 16.4, *) {
-            playerCoverBase.presentationBackground(.black)
-        } else {
-            playerCoverBase
-        }
-    }
+    private struct PlayerZoomDestination: ViewModifier {
+        let sourceID: String
+        let namespace: Namespace.ID
 
-    @ViewBuilder
-    private var playerCover: some View {
-        if #available(iOS 18.0, *) {
-            playerCoverContent.navigationTransition(
-                .zoom(sourceID: playerTransitionID, in: playerTransition)
-            )
-        } else {
-            playerCoverContent
+        @ViewBuilder
+        func body(content: Content) -> some View {
+            if #available(iOS 18.0, *) {
+                content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+            } else {
+                content
+            }
         }
     }
 
