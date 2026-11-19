@@ -59,7 +59,7 @@ struct LivingArtworkView: View {
         ZStack {
             ArtworkView(url: url, seed: seed) { loaded in
                 image = loaded
-                palette = LivingArtworkPalette(image: loaded, seed: seed)
+                refreshPalette(for: loaded)
             }
 
             if shouldAnimate, let image {
@@ -82,15 +82,35 @@ struct LivingArtworkView: View {
         .onDisappear {
             isVisible = false
         }
+        .onChange(of: isActive) { active in
+            guard active, let image else { return }
+            refreshPalette(for: image)
+        }
         .onChange(of: url) { newURL in
             image = newURL.flatMap { ArtworkImageCache.shared.image(for: $0) }
             palette = .fallback(seed: seed)
+            if let image {
+                refreshPalette(for: image)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)) { _ in
             lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
         }
         .onReceive(NotificationCenter.default.publisher(for: ProcessInfo.thermalStateDidChangeNotification)) { _ in
             thermalState = ProcessInfo.processInfo.thermalState
+        }
+    }
+
+    /// CI's area average is a synchronous render. Keep it off the main thread
+    /// so the opening zoom never waits on palette extraction.
+    private func refreshPalette(for image: UIImage) {
+        guard isActive else { return }
+        let seed = seed
+        Task.detached(priority: .utility) {
+            let next = LivingArtworkPalette(image: image, seed: seed)
+            await MainActor.run {
+                palette = next
+            }
         }
     }
 }
