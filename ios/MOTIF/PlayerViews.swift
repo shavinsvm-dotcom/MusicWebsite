@@ -20,8 +20,8 @@ struct MiniPlayer: View {
                     } label: {
                         HStack(spacing: 9) {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                                .frame(width: 32, height: 32)
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .frame(width: 36, height: 36)
+                                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                                 .overlay {
                                     MiniArtworkProgressRing()
                                 }
@@ -77,7 +77,7 @@ struct MiniPlayer: View {
                         } label: {
                             Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                                 .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 32, height: 32)
+                                .frame(width: 36, height: 36)
                                 .contentShape(Circle())
                                 .motifReplace()
                                 .motifBounce(tick: playPulse)
@@ -106,7 +106,7 @@ struct MiniPlayer: View {
                 }
                 .padding(.leading, 8)
                 .padding(.trailing, 8)
-                .frame(height: 42)
+                .frame(height: 50)
             }
             .nativeGlass(Capsule())
             .contentShape(Capsule())
@@ -172,6 +172,7 @@ struct NowPlayingView: View {
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
     @State private var livingArtworkActive = false
+    @State private var chromeVisible = false
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
@@ -200,18 +201,26 @@ struct NowPlayingView: View {
         }
         .environment(\.colorScheme, .dark)
         .task {
-            // The artwork scene is already mounted and paused, so starting it
-            // does not swap or fade a second full-screen layer mid-transition.
+            // Keep the zooming view to the backdrop and artwork only. The
+            // glass controls are the most expensive layers to composite while
+            // the cover is still scaling, so they arrive once it settles.
             guard !reduceMotion else {
+                chromeVisible = true
                 livingArtworkActive = true
                 return
             }
-            try? await Task.sleep(nanoseconds: 650_000_000)
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.18)) {
+                chromeVisible = true
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
             guard !Task.isCancelled else { return }
             livingArtworkActive = true
         }
         .onDisappear {
             livingArtworkActive = false
+            chromeVisible = false
         }
         .sheet(isPresented: $showQueue) {
             UpNextView()
@@ -367,16 +376,27 @@ struct NowPlayingView: View {
                             .padding(.horizontal, 24)
                             .padding(.top, 10)
 
-                        controls(track)
-                            .padding(.horizontal, 22)
-                            .padding(.top, 12)
+                        if chromeVisible {
+                            controls(track)
+                                .padding(.horizontal, 22)
+                                .padding(.top, 12)
+                                .transition(.opacity)
+                        } else {
+                            Color.clear
+                                .frame(height: 68)
+                                .padding(.horizontal, 22)
+                                .padding(.top, 12)
+                        }
 
                     Spacer(minLength: 0)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
 
-                topBar(track)
-                    .padding(.top, 4)
+                if chromeVisible {
+                    topBar(track)
+                        .padding(.top, 4)
+                        .transition(.opacity)
+                }
             }
         }
     }
