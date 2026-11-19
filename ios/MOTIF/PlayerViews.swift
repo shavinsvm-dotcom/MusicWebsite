@@ -234,82 +234,97 @@ struct NowPlayingView: View {
 
     private func backdrop(_ track: Track) -> some View {
         GeometryReader { geometry in
+            let prepared = backdropImage
+            let image = prepared ?? track.artworkURL.flatMap {
+                ArtworkImageCache.shared.image(for: $0)
+            }
+
             ZStack {
                 Color.black
 
-                Group {
-                    if let backdropImage {
-                        Image(uiImage: backdropImage)
-                            .resizable()
-                            .scaledToFill()
-                    } else if let image = track.artworkURL.flatMap({ ArtworkImageCache.shared.image(for: $0) }) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .opacity(0.42)
-                    } else {
-                        Color.black
-                    }
+                if let image {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(
+                            width: geometry.size.width * 1.35,
+                            height: geometry.size.height * 1.35
+                        )
+                        .blur(radius: prepared == nil ? 55 : 0)
+                        .saturation(prepared == nil ? 1.35 : 1.18)
+                        .opacity(prepared == nil ? 0.46 : 0.82)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .clipped()
-                .opacity(0.96)
+
+                // Soft bloom that makes the cover feel like it extends past
+                // the edges instead of sitting on a flat black rectangle.
+                RadialGradient(
+                    colors: [
+                        Color.white.opacity(0.10),
+                        Color.clear
+                    ],
+                    center: .center,
+                    startRadius: 24,
+                    endRadius: max(geometry.size.width, geometry.size.height) * 0.55
+                )
+                .blendMode(.plusLighter)
 
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.68), location: 0),
-                        .init(color: .black.opacity(0.22), location: 0.30),
-                        .init(color: .black.opacity(0.34), location: 0.62),
-                        .init(color: .black.opacity(0.82), location: 0.90),
-                        .init(color: .black, location: 1)
+                        .init(color: .black.opacity(0.62), location: 0),
+                        .init(color: .black.opacity(0.14), location: 0.28),
+                        .init(color: .black.opacity(0.18), location: 0.55),
+                        .init(color: .black.opacity(0.76), location: 0.86),
+                        .init(color: .black.opacity(0.97), location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
+
+                RadialGradient(
+                    colors: [
+                        Color.clear,
+                        Color.black.opacity(0.58)
+                    ],
+                    center: .center,
+                    startRadius: min(geometry.size.width, geometry.size.height) * 0.28,
+                    endRadius: max(geometry.size.width, geometry.size.height) * 0.74
+                )
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
         }
         .ignoresSafeArea()
     }
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
-            let artHeight = min(
-                geometry.size.height * 0.60,
-                geometry.size.width * 1.28
+            let artSide = min(
+                geometry.size.width - 56,
+                geometry.size.height * 0.40
             )
-            let bottomHeight: CGFloat = 243
-            let gap = max(
-                42,
-                min(
-                    geometry.size.height * 0.28,
-                    geometry.size.height - artHeight - bottomHeight - 6
-                )
+            let artTop = max(
+                48,
+                geometry.size.height * 0.36 - artSide / 2
             )
 
             ZStack(alignment: .top) {
                 VStack(spacing: 0) {
+                    Spacer().frame(height: artTop)
+
                     ArtworkView(
                         url: track.artworkURL,
                         seed: track.title + track.artist
                     )
-                    .frame(width: geometry.size.width, height: artHeight)
-                    .mask(
-                        LinearGradient(
-                            stops: [
-                                .init(color: .clear, location: 0),
-                                .init(color: .black, location: 0.16),
-                                .init(color: .black, location: 0.64),
-                                .init(color: .black.opacity(0.5), location: 0.84),
-                                .init(color: .clear, location: 1)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .padding(.top, 4)
+                    .frame(width: artSide, height: artSide)
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                    }
+                    .shadow(color: .black.opacity(0.52), radius: 38, y: 22)
+                    .frame(maxWidth: .infinity)
 
-                    Spacer().frame(height: gap)
+                    Spacer().frame(height: 26)
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(track.title)
