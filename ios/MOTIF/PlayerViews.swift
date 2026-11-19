@@ -237,40 +237,26 @@ struct NowPlayingView: View {
             ZStack {
                 Color.black
 
-                // Load the cover here as well so the background is never a
-                // black hole while the centered artwork is still decoding.
+                // The cover is the background: fill the whole screen, then
+                // fade only the bottom so the artwork runs edge to edge.
                 ArtworkView(
                     url: track.artworkURL,
                     seed: track.title + track.artist
                 )
-                .frame(
-                    width: geometry.size.width * 1.45,
-                    height: geometry.size.height * 1.45
-                )
-                .blur(radius: 62)
-                .saturation(1.28)
-                .opacity(0.72)
-
-                // Soft bloom that makes the cover feel like it extends past
-                // the edges instead of sitting on a flat black rectangle.
-                RadialGradient(
-                    colors: [
-                        Color.white.opacity(0.10),
-                        Color.clear
-                    ],
-                    center: .center,
-                    startRadius: 24,
-                    endRadius: max(geometry.size.width, geometry.size.height) * 0.55
-                )
-                .blendMode(.plusLighter)
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .scaleEffect(1.06)
+                .saturation(1.08)
+                .contrast(1.02)
 
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.62), location: 0),
-                        .init(color: .black.opacity(0.14), location: 0.28),
-                        .init(color: .black.opacity(0.18), location: 0.55),
-                        .init(color: .black.opacity(0.76), location: 0.86),
-                        .init(color: .black.opacity(0.97), location: 1)
+                        .init(color: .black.opacity(0.30), location: 0),
+                        .init(color: .black.opacity(0.05), location: 0.18),
+                        .init(color: .clear, location: 0.36),
+                        .init(color: .black.opacity(0.10), location: 0.62),
+                        .init(color: .black.opacity(0.62), location: 0.82),
+                        .init(color: .black.opacity(0.96), location: 0.96),
+                        .init(color: .black, location: 1)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -279,11 +265,11 @@ struct NowPlayingView: View {
                 RadialGradient(
                     colors: [
                         Color.clear,
-                        Color.black.opacity(0.58)
+                        Color.black.opacity(0.34)
                     ],
                     center: .center,
-                    startRadius: min(geometry.size.width, geometry.size.height) * 0.28,
-                    endRadius: max(geometry.size.width, geometry.size.height) * 0.74
+                    startRadius: min(geometry.size.width, geometry.size.height) * 0.34,
+                    endRadius: max(geometry.size.width, geometry.size.height) * 0.78
                 )
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -294,48 +280,7 @@ struct NowPlayingView: View {
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
-            // Reserve the bottom block for the title, scrubber and transport,
-            // then center the cover in the space that remains above it.
-            let bottomReserved: CGFloat = 340
-            let available = max(180, geometry.size.height - bottomReserved - 56)
-            let artSide = min(geometry.size.width - 56, available * 0.96)
-            let artCenterY = 56 + available / 2
-
             ZStack(alignment: .top) {
-                ZStack {
-                    // Blurred continuation of the same cover, larger than the
-                    // sharp copy so the artwork appears to keep going.
-                    ArtworkView(
-                        url: track.artworkURL,
-                        seed: track.title + track.artist
-                    )
-                    .frame(width: artSide * 1.32, height: artSide * 1.32)
-                    .blur(radius: 46)
-                    .opacity(0.72)
-
-                    ArtworkView(
-                        url: track.artworkURL,
-                        seed: track.title + track.artist
-                    )
-                    .frame(width: artSide, height: artSide)
-                    .mask(
-                        RadialGradient(
-                            stops: [
-                                .init(color: .black, location: 0),
-                                .init(color: .black, location: 0.60),
-                                .init(color: .black.opacity(0.55), location: 0.76),
-                                .init(color: .clear, location: 0.92)
-                            ],
-                            center: .center,
-                            startRadius: artSide * 0.18,
-                            endRadius: artSide * 0.64
-                        )
-                    )
-                }
-                .frame(width: artSide * 1.38, height: artSide * 1.38)
-                .position(x: geometry.size.width / 2, y: artCenterY)
-                .allowsHitTesting(false)
-
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
