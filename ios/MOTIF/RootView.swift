@@ -29,31 +29,34 @@ struct RootView: View {
     @Namespace private var playerTransition
 
     var body: some View {
-        tabs
-            .tint(.primary)
-            .environmentObject(library)
-            .environmentObject(player)
-            .environmentObject(player.progress)
-            .overlay(alignment: .top) {
-                if !showNowPlaying {
-                    AirPodsConnectOverlay(monitor: routeMonitor)
-                }
-            }
-            .fullScreenCover(isPresented: $showNowPlaying) {
-                NowPlayingView(backdropImage: currentBackdrop)
-                    .environmentObject(library)
-                    .environmentObject(player)
-                    .environmentObject(player.progress)
-                    .overlay(alignment: .top) {
-                        AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
+        ZStack {
+            tabs
+                .tint(.primary)
+                .environmentObject(library)
+                .environmentObject(player)
+                .environmentObject(player.progress)
+                .overlay(alignment: .top) {
+                    if !showNowPlaying {
+                        AirPodsConnectOverlay(monitor: routeMonitor)
                     }
-                    .modifier(
-                        PlayerZoomDestination(
-                            sourceID: playerTransitionID,
-                            namespace: playerTransition
-                        )
-                    )
+                }
+
+            if showNowPlaying {
+                NowPlayingView(
+                    backdropImage: currentBackdrop,
+                    onClose: { showNowPlaying = false }
+                )
+                .environmentObject(library)
+                .environmentObject(player)
+                .environmentObject(player.progress)
+                .overlay(alignment: .top) {
+                    AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
+                }
+                .zIndex(1)
+                .transition(.move(edge: .bottom))
             }
+        }
+        .animation(.spring(response: 0.44, dampingFraction: 0.94), value: showNowPlaying)
             .onOpenURL { url in
                 guard url.scheme == "motif" else { return }
                 switch url.host {
@@ -222,10 +225,6 @@ struct RootView: View {
         }
     }
 
-    private var playerTransitionID: String {
-        "now-playing-\(selectedTab.rawValue)"
-    }
-
     private var forYouTab: some View {
         ForYouView(
             showNowPlaying: $showNowPlaying,
@@ -298,20 +297,6 @@ private struct MiniPlayerInset: ViewModifier {
                     .spring(response: 0.28, dampingFraction: 0.84),
                     value: currentID
                 )
-        }
-    }
-}
-
-private struct PlayerZoomDestination: ViewModifier {
-    let sourceID: String
-    let namespace: Namespace.ID
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.navigationTransition(.zoom(sourceID: sourceID, in: namespace))
-        } else {
-            content
         }
     }
 }

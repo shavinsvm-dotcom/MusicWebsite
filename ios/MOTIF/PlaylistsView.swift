@@ -101,6 +101,10 @@ enum SmartPlaylist: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+private struct PlaylistRoute: Hashable {
+    let id: UUID
+}
+
 struct PlaylistsView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
@@ -143,6 +147,12 @@ struct PlaylistsView: View {
             .scrollContentBackground(.hidden)
             .background(AppBackground())
             .navigationTitle("Playlists")
+            .navigationDestination(for: PlaylistRoute.self) { route in
+                PlaylistDetailView(
+                    playlistID: route.id,
+                    showNowPlaying: $showNowPlaying
+                )
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -163,12 +173,7 @@ struct PlaylistsView: View {
     private func playlistRow(_ playlist: Playlist) -> some View {
         let tracks = library.tracks(in: playlist)
 
-        NavigationLink {
-            PlaylistDetailView(
-                playlistID: playlist.id,
-                showNowPlaying: $showNowPlaying
-            )
-        } label: {
+        NavigationLink(value: PlaylistRoute(id: playlist.id)) {
             PlaylistRow(playlist: playlist, tracks: tracks)
         }
         .padding(.horizontal, 10)

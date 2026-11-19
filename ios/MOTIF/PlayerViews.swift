@@ -157,11 +157,11 @@ private struct MiniArtworkProgressRing: View {
 struct NowPlayingView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var library: LibraryStore
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(LivingArtworkSettings.enabledKey) private var livingArtworkEnabled = LivingArtworkSettings.defaultEnabled
 
     let backdropImage: UIImage?
+    let onClose: () -> Void
 
     @StateObject private var spatialAudio = SpatialAudioMonitor()
     @State private var playPulse = 0
@@ -171,6 +171,7 @@ struct NowPlayingView: View {
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
     @State private var livingArtworkActive = false
+    @State private var dragOffset: CGFloat = 0
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
@@ -198,6 +199,9 @@ struct NowPlayingView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .offset(y: dragOffset)
+        .simultaneousGesture(dismissGesture)
+        .onAppear { dragOffset = 0 }
         .task {
             // The artwork scene is already mounted and paused, so starting it
             // does not swap or fade a second full-screen layer mid-transition.
@@ -238,6 +242,37 @@ struct NowPlayingView: View {
             Button("OK") { library.errorMessage = nil }
         } message: {
             Text(library.errorMessage ?? "")
+        }
+    }
+
+    private var dismissGesture: some Gesture {
+        DragGesture(minimumDistance: 16)
+            .onChanged { value in
+                guard value.translation.height > 0,
+                      abs(value.translation.height) > abs(value.translation.width)
+                else { return }
+                dragOffset = value.translation.height
+            }
+            .onEnded { value in
+                let shouldClose = value.translation.height > 130
+                    || value.predictedEndTranslation.height > 280
+                if shouldClose {
+                    closePlayer()
+                } else {
+                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                        dragOffset = 0
+                    }
+                }
+            }
+    }
+
+    private func closePlayer() {
+        guard dragOffset < 1 else { return }
+        withAnimation(.easeOut(duration: 0.24)) {
+            dragOffset = UIScreen.main.bounds.height
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            onClose()
         }
     }
 
@@ -384,7 +419,7 @@ struct NowPlayingView: View {
         ZStack {
             HStack {
                 Button {
-                    dismiss()
+                    closePlayer()
                 } label: {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 17, weight: .semibold))
