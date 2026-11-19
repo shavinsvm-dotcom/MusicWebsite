@@ -302,18 +302,39 @@ struct NowPlayingView: View {
             let artCenterY = 56 + available / 2
 
             ZStack(alignment: .top) {
-                ArtworkView(
-                    url: track.artworkURL,
-                    seed: track.title + track.artist
-                )
-                .frame(width: artSide, height: artSide)
-                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 26, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.8)
+                ZStack {
+                    // Blurred continuation of the same cover, larger than the
+                    // sharp copy so the artwork appears to keep going.
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist
+                    )
+                    .frame(width: artSide * 1.32, height: artSide * 1.32)
+                    .blur(radius: 46)
+                    .opacity(0.72)
+
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist
+                    )
+                    .frame(width: artSide, height: artSide)
+                    .mask(
+                        RadialGradient(
+                            stops: [
+                                .init(color: .black, location: 0),
+                                .init(color: .black, location: 0.60),
+                                .init(color: .black.opacity(0.55), location: 0.76),
+                                .init(color: .clear, location: 0.92)
+                            ],
+                            center: .center,
+                            startRadius: artSide * 0.18,
+                            endRadius: artSide * 0.64
+                        )
+                    )
                 }
-                .shadow(color: .black.opacity(0.52), radius: 38, y: 22)
+                .frame(width: artSide * 1.38, height: artSide * 1.38)
                 .position(x: geometry.size.width / 2, y: artCenterY)
+                .allowsHitTesting(false)
 
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
@@ -365,7 +386,7 @@ struct NowPlayingView: View {
                     controls(track)
                         .padding(.horizontal, 22)
                         .padding(.top, 12)
-                        .padding(.bottom, 8)
+                        .padding(.bottom, -14)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
 
