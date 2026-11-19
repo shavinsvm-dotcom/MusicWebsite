@@ -9,6 +9,7 @@ struct MiniPlayer: View {
     let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
+    @State private var simplifySurface = false
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
@@ -16,6 +17,7 @@ struct MiniPlayer: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
+                        simplifySurface = true
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
@@ -108,7 +110,7 @@ struct MiniPlayer: View {
                 .padding(.trailing, 8)
                 .frame(height: 50)
             }
-            .playerGlass(Capsule())
+            .background(miniPlayerSurface)
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .padding(.horizontal, 20)
@@ -117,6 +119,36 @@ struct MiniPlayer: View {
                 .move(edge: .bottom)
                     .combined(with: .opacity)
             )
+            .onChange(of: showNowPlaying) { presented in
+                if presented {
+                    simplifySurface = true
+                } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            simplifySurface = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Live Liquid Glass is the expensive part of the zoom source. Swap to a
+    /// flat pill before the cover is presented and fade the glass back in only
+    /// after dismissal, while the mini player is unobscured again.
+    private var miniPlayerSurface: some View {
+        ZStack {
+            Color.clear
+                .playerGlass(Capsule())
+                .opacity(simplifySurface ? 0 : 1)
+
+            Capsule()
+                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
+                }
+                .opacity(simplifySurface ? 1 : 0)
         }
     }
 
@@ -272,6 +304,7 @@ struct NowPlayingView: View {
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .clipped()
+                .opacity(0.96)
 
                 LinearGradient(
                     stops: [
@@ -286,7 +319,6 @@ struct NowPlayingView: View {
                 )
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
-            .drawingGroup()
         }
         .ignoresSafeArea()
     }
