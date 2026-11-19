@@ -66,8 +66,8 @@ final class PlayerManager: ObservableObject {
         return "\(minutes) min"
     }
 
-    private let player = AVPlayer()
-    private let fadePlayer = AVPlayer()
+    private var player = AVPlayer()
+    private var fadePlayer = AVPlayer()
     private var currentIndex = 0
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
@@ -438,6 +438,10 @@ final class PlayerManager: ObservableObject {
     }
 
     private func installTimeObserver() {
+        if let timeObserver {
+            player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.25, preferredTimescale: 600),
             queue: .main
@@ -699,21 +703,13 @@ final class PlayerManager: ObservableObject {
         }
         let next = queue[nextIndex]
 
-        // Do not move the fade player's AVPlayerItem onto the main player.
-        // AVPlayerItem ownership is fragile while it is still attached to a
-        // playing player, and was the source of the crossfade crash. Give the
-        // main player a fresh item and seek it to the blended position instead.
+        // Keep the already-playing fade player as the new main player. Pausing
+        // it and copying the item to the old player was the source of the tiny
+        // silence between songs.
         let time = fadePlayer.currentTime()
         let resumeAt = time.isValid ? max(0, CMTimeGetSeconds(time)) : 0
-        fadePlayer.pause()
-        fadePlayer.replaceCurrentItem(with: nil)
-
-        player.pause()
-        let nextItem = makePlayerItem(for: next)
-        player.replaceCurrentItem(with: nextItem)
-        installEndObserver(for: nextItem)
-        observeItemStatus(nextItem)
-        player.volume = 1
+        fadePlayer.volume = 1
+        promoteFadePlayer()
 
         navigationHistory.append(currentIndex)
         currentIndex = nextIndex
@@ -728,14 +724,6 @@ final class PlayerManager: ObservableObject {
         automixNextIndex = nil
 
         try? AVAudioSession.sharedInstance().setActive(true)
-        if resumeAt > 0 {
-            player.seek(
-                to: CMTime(seconds: resumeAt, preferredTimescale: 600),
-                toleranceBefore: .zero,
-                toleranceAfter: .zero
-            )
-        }
-
         player.play()
         player.rate = 1
         onTrackStarted?(next)
@@ -813,16 +801,8 @@ final class PlayerManager: ObservableObject {
         let fallbackResume = plan.incomingStart + plan.duration * Double(plan.incomingRate)
         let resumeAt = time.isValid ? max(0, CMTimeGetSeconds(time)) : fallbackResume
 
-        fadePlayer.pause()
-        fadePlayer.replaceCurrentItem(with: nil)
-        player.pause()
-
-        let nextItem = makePlayerItem(for: next)
-        nextItem.audioTimePitchAlgorithm = .spectral
-        player.replaceCurrentItem(with: nextItem)
-        installEndObserver(for: nextItem)
-        observeItemStatus(nextItem)
-        player.volume = 1
+        fadePlayer.volume = 1
+        promoteFadePlayer()
 
         navigationHistory.append(currentIndex)
         currentIndex = plan.nextIndex
@@ -837,14 +817,6 @@ final class PlayerManager: ObservableObject {
         automixNextIndex = nil
 
         try? AVAudioSession.sharedInstance().setActive(true)
-        if resumeAt > 0 {
-            player.seek(
-                to: CMTime(seconds: resumeAt, preferredTimescale: 600),
-                toleranceBefore: .zero,
-                toleranceAfter: .zero
-            )
-        }
-
         player.play()
         player.rate = plan.incomingRate
         scheduleTempoRestore()
@@ -852,6 +824,28 @@ final class PlayerManager: ObservableObject {
         prepareAutomixAnalysis()
         prepareNextTrack()
         updateNowPlaying()
+    }
+
+    /// The fade player is already at the right position and playing, so make
+    /// it the main player instead of stopping and re-seeking a new item.
+    private func promoteFadePlayer() {
+        let oldPlayer = player
+        if let timeObserver {
+            oldPlayer.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
+        player = fadePlayer
+        fadePlayer = oldPlayer
+
+        oldPlayer.pause()
+        oldPlayer.replaceCurrentItem(with: nil)
+        oldPlayer.volume = 0
+
+        if let item = player.currentItem {
+            installEndObserver(for: item)
+            observeItemStatus(item)
+        }
+        installTimeObserver()
     }
 
     private func scheduleTempoRestore() {

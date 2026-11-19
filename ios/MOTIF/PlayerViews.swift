@@ -168,7 +168,6 @@ struct NowPlayingView: View {
     let backdropImage: UIImage?
     let onClose: () -> Void
 
-    @StateObject private var spatialAudio = SpatialAudioMonitor()
     @ObservedObject private var equalizer = Equalizer.shared
     @State private var playPulse = 0
     @State private var skipPulse = 0
@@ -323,11 +322,11 @@ struct NowPlayingView: View {
 
                     VStack(alignment: .leading, spacing: 5) {
                         Text(track.title)
-                            .font(.system(size: 44, weight: .heavy))
-                            .tracking(-1.8)
+                            .font(.system(size: 52, weight: .heavy))
+                            .tracking(-2.0)
                             .foregroundStyle(.white)
                             .lineLimit(2)
-                            .minimumScaleFactor(0.68)
+                            .minimumScaleFactor(0.62)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text(track.artist)
@@ -564,29 +563,10 @@ struct NowPlayingView: View {
                 }
             }
 
-            VStack(spacing: 1) {
-                Text("Now playing")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.72))
-
-                if player.automixEnabled {
-                    Text(player.automixBPM.map { "AUTOMIX · \($0) BPM" } ?? "AUTOMIX")
-                        .font(.system(size: 8, weight: .bold))
-                        .tracking(1.1)
-                        .foregroundStyle(.white.opacity(0.56))
-                }
-
-                if let badge = spatialAudio.badge {
-                    HStack(spacing: 4) {
-                        Image(systemName: "waveform")
-                        Text(badge)
-                    }
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.68))
-                    .transition(.opacity)
-                }
-            }
-            .accessibilityElement(children: .combine)
+            Text("Now playing")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.white.opacity(0.72))
+                .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, 24)
         .frame(height: 44)
@@ -853,7 +833,9 @@ private struct MiniPlayerTransitionSource: ViewModifier {
     @ViewBuilder
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
-            content.matchedTransitionSource(id: sourceID, in: namespace)
+            content.matchedTransitionSource(id: sourceID, in: namespace) { source in
+                source.clipShape(Capsule())
+            }
         } else {
             content
         }
