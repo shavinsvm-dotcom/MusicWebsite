@@ -36,6 +36,33 @@ struct AppBackground: View {
     }
 }
 
+/// Groups sibling Liquid Glass controls so they share one offscreen blur
+/// pass instead of each starting its own every frame. This matters most while
+/// a large cover is scaling and the whole surface is being recomposited.
+struct GlassGroup<Content: View>: View {
+    var spacing: CGFloat
+    private let content: () -> Content
+
+    init(spacing: CGFloat = 10, @ViewBuilder content: @escaping () -> Content) {
+        self.spacing = spacing
+        self.content = content
+    }
+
+    var body: some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            GlassEffectContainer(spacing: spacing) {
+                content()
+            }
+        } else {
+            content()
+        }
+        #else
+        content()
+        #endif
+    }
+}
+
 extension View {
     /// Uses Apple's Liquid Glass on iOS 26 and falls back to a thin system
     /// material on earlier versions. The only hand-built glass in MOTIF is

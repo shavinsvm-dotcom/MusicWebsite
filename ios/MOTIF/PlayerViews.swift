@@ -111,7 +111,7 @@ struct MiniPlayer: View {
             .nativeGlass(Capsule())
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
-            .padding(.horizontal, 12)
+            .padding(.horizontal, 20)
             .padding(.bottom, 8)
             .transition(
                 .move(edge: .bottom)
@@ -403,9 +403,10 @@ struct NowPlayingView: View {
 
     private func topBar(_ track: Track) -> some View {
         ZStack {
-            HStack {
-                Button {
-                    onClose()
+            GlassGroup(spacing: 10) {
+                HStack {
+                    Button {
+                        onClose()
                 } label: {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 17, weight: .semibold))
@@ -582,6 +583,7 @@ struct NowPlayingView: View {
                 .buttonStyle(MotifPressStyle(scale: 0.88))
                 .accessibilityLabel("More options")
                 }
+                }
             }
 
             VStack(spacing: 1) {
@@ -613,7 +615,8 @@ struct NowPlayingView: View {
     }
 
     private func controls(_ track: Track) -> some View {
-        HStack(spacing: 6) {
+        GlassGroup(spacing: 6) {
+            HStack(spacing: 6) {
             circularButton(
                 icon: library.isFavorite(track) ? "heart.fill" : "heart",
                 active: library.isFavorite(track)
@@ -683,6 +686,7 @@ struct NowPlayingView: View {
             }
             .buttonStyle(MotifPressStyle(scale: 0.82))
             .accessibilityLabel("Next")
+            }
         }
     }
 
