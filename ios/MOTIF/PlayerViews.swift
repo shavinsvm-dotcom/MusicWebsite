@@ -282,9 +282,11 @@ struct NowPlayingView: View {
 
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
+            // Slightly wider than the screen so the artwork never exposes a
+            // side seam; the extra edge is clipped by the display.
             let artSide = min(
-                geometry.size.width,
-                geometry.size.height * 0.52
+                geometry.size.width + 12,
+                geometry.size.height * 0.53
             )
 
             ZStack(alignment: .top) {
@@ -294,6 +296,31 @@ struct NowPlayingView: View {
                         seed: track.title + track.artist,
                         highResolution: true
                     )
+
+                    // Carry the blurred backdrop a little way over the sharp
+                    // artwork so the hand-off has no visible boundary.
+                    if let backdropImage {
+                        Image(uiImage: backdropImage)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: artSide, height: artSide)
+                            .mask(
+                                LinearGradient(
+                                    stops: [
+                                        .init(color: .black, location: 0),
+                                        .init(color: .black.opacity(0.72), location: 0.09),
+                                        .init(color: .clear, location: 0.27),
+                                        .init(color: .clear, location: 0.69),
+                                        .init(color: .black.opacity(0.72), location: 0.91),
+                                        .init(color: .black, location: 1)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .opacity(0.86)
+                            .allowsHitTesting(false)
+                    }
 
                     HeroEdgeBlurOverlay(url: track.artworkURL, intensity: 1)
                     LivingLightOverlay(url: track.artworkURL, intensity: 0.9)
@@ -309,9 +336,10 @@ struct NowPlayingView: View {
                     LinearGradient(
                         stops: [
                             .init(color: .clear, location: 0),
+                            .init(color: .black.opacity(0.55), location: 0.09),
                             .init(color: .black, location: 0.24),
-                            .init(color: .black, location: 0.58),
-                            .init(color: .black.opacity(0.24), location: 0.86),
+                            .init(color: .black, location: 0.62),
+                            .init(color: .black.opacity(0.40), location: 0.85),
                             .init(color: .clear, location: 1)
                         ],
                         startPoint: .top,

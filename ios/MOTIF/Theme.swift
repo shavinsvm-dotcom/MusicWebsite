@@ -97,9 +97,13 @@ extension View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             if interactive {
-                glassEffect(.regular.interactive(), in: shape)
+                glassEffect(.regular.tint(Color.white.opacity(0.10)).interactive(), in: shape)
+                    .overlay { playerGlassRim(shape) }
+                    .shadow(color: .black.opacity(0.24), radius: 7, y: 3)
             } else {
-                glassEffect(.regular, in: shape)
+                glassEffect(.regular.tint(Color.white.opacity(0.08)), in: shape)
+                    .overlay { playerGlassRim(shape) }
+                    .shadow(color: .black.opacity(0.22), radius: 6, y: 2)
             }
         } else {
             playerGlassFallback(shape)
@@ -110,14 +114,54 @@ extension View {
     }
 
     @ViewBuilder
+    private func playerGlassRim<S: Shape>(_ shape: S) -> some View {
+        shape.stroke(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.58),
+                    Color.white.opacity(0.08),
+                    Color.white.opacity(0.25)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            lineWidth: 0.85
+        )
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
     private func playerGlassFallback<S: Shape>(_ shape: S) -> some View {
         background {
-            shape
-                .fill(Color.white.opacity(0.09))
-                .overlay {
-                    shape.stroke(Color.white.opacity(0.14), lineWidth: 0.7)
-                }
+            ZStack {
+                shape.fill(.ultraThinMaterial)
+                shape.fill(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.20),
+                            Color.white.opacity(0.055),
+                            Color.white.opacity(0.11)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                shape.fill(
+                    RadialGradient(
+                        colors: [
+                            Color.white.opacity(0.24),
+                            Color.white.opacity(0.02),
+                            Color.clear
+                        ],
+                        center: .topLeading,
+                        startRadius: 0,
+                        endRadius: 38
+                    )
+                )
+                playerGlassRim(shape)
+            }
         }
+        .shadow(color: .black.opacity(0.24), radius: 7, y: 3)
     }
 }
 
