@@ -28,44 +28,54 @@ struct RootView: View {
     @State private var attemptedLyricsIDs: Set<UUID> = []
     @Namespace private var playerTransition
 
+    private static let playerOpenAnimation = Animation.spring(
+        response: 0.54,
+        dampingFraction: 0.88,
+        blendDuration: 0.12
+    )
+
     private var playerPresented: Binding<Bool> {
         Binding(
             get: { showNowPlaying },
-            set: { showNowPlaying = $0 }
+            set: { presented in
+                withAnimation(Self.playerOpenAnimation) {
+                    showNowPlaying = presented
+                }
+            }
         )
     }
 
     var body: some View {
-        PlayerHost(
-            isPresented: $showNowPlaying,
-            sourceID: playerTransitionID,
-            namespace: playerTransition
-        ) {
+        ZStack {
             tabs
-        } destination: {
-            playerCoverContent
-        }
-        .tint(.primary)
-        .environmentObject(library)
-        .environmentObject(player)
-        .environmentObject(player.progress)
-        .overlay(alignment: .top) {
-            if !showNowPlaying {
-                AirPodsConnectOverlay(monitor: routeMonitor)
+                .tint(.primary)
+                .environmentObject(library)
+                .environmentObject(player)
+                .environmentObject(player.progress)
+                .overlay(alignment: .top) {
+                    if !showNowPlaying {
+                        AirPodsConnectOverlay(monitor: routeMonitor)
+                    }
+                }
+                .allowsHitTesting(!showNowPlaying)
+
+            if showNowPlaying {
+                playerCoverContent
+                    .zIndex(20)
             }
         }
         .onOpenURL { url in
-                guard url.scheme == "motif" else { return }
-                switch url.host {
-                case "nowplaying":
-                    showNowPlaying = true
-                case "library":
-                    selectedTab = .library
-                default:
-                    break
-                }
+            guard url.scheme == "motif" else { return }
+            switch url.host {
+            case "nowplaying":
+                playerPresented.wrappedValue = true
+            case "library":
+                selectedTab = .library
+            default:
+                break
             }
-            .alert(
+        }
+        .alert(
                 "Playback stopped",
                 isPresented: Binding(
                     get: { player.playbackError != nil },
@@ -93,16 +103,6 @@ struct RootView: View {
                 }
                 await library.refreshLocalMetadata()
                 await library.refreshCloud()
-                updateScreenPalette()
-            }
-            .onChange(of: player.current?.id) { _ in
-                updateScreenPalette()
-            }
-            .onChange(of: selectedTab) { _ in
-                updateScreenPalette()
-            }
-            .onChange(of: library.tracks.map(\.artworkURL)) { _ in
-                updateScreenPalette()
             }
             .task(id: player.current?.id) {
                 guard let track = player.current else { return }
@@ -168,17 +168,6 @@ struct RootView: View {
         }
         guard track.duration.isFinite, track.duration >= 1 else { return nil }
         return track.duration
-    }
-
-    @MainActor
-    private func updateScreenPalette() {
-        var urls: [URL] = []
-        if let current = player.current?.artworkURL {
-            urls.append(current)
-        }
-        urls.append(contentsOf: player.upNextTracks.prefix(3).compactMap(\.artworkURL))
-        urls.append(contentsOf: library.tracks.prefix(6).compactMap(\.artworkURL))
-        ScreenPaletteStore.shared.update(urls)
     }
 
     private var currentBackdrop: UIImage? {
@@ -250,7 +239,9 @@ struct RootView: View {
     private var playerCoverContent: some View {
         NowPlayingView(
             backdropImage: currentBackdrop,
-            onClose: { showNowPlaying = false }
+            onClose: { playerPresented.wrappedValue = false },
+            transitionNamespace: playerTransition,
+            transitionSourceID: playerTransitionID
         )
         .environmentObject(library)
         .environmentObject(player)
@@ -311,50 +302,6 @@ struct RootView: View {
                 transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
                 transitionNamespace: playerTransition
             ))
-    }
-}
-
-/// Uses the system's zoom transition inside a real navigation push on iOS 18
-/// and later. Pushing (rather than presenting a cover) is what lets the pill
-/// itself expand into the player instead of sliding up as a modal.
-private struct PlayerHost<Content: View, Destination: View>: View {
-    @Binding var isPresented: Bool
-    let sourceID: String
-    let namespace: Namespace.ID
-    let content: () -> Content
-    let destination: () -> Destination
-
-    init(
-        isPresented: Binding<Bool>,
-        sourceID: String,
-        namespace: Namespace.ID,
-        @ViewBuilder content: @escaping () -> Content,
-        @ViewBuilder destination: @escaping () -> Destination
-    ) {
-        _isPresented = isPresented
-        self.sourceID = sourceID
-        self.namespace = namespace
-        self.content = content
-        self.destination = destination
-    }
-
-    var body: some View {
-        if #available(iOS 18.0, *) {
-            NavigationStack {
-                content()
-                    .toolbar(.hidden, for: .navigationBar)
-                    .navigationDestination(isPresented: $isPresented) {
-                        destination()
-                            .navigationTransition(.zoom(sourceID: sourceID, in: namespace))
-                            .navigationBarBackButtonHidden(true)
-                            .toolbar(.hidden, for: .navigationBar)
-                            .toolbar(.hidden, for: .tabBar)
-                    }
-            }
-        } else {
-            content()
-                .fullScreenCover(isPresented: $isPresented, content: destination)
-        }
     }
 }
 

@@ -4,22 +4,6 @@ import ImageIO
 import SwiftUI
 import UIKit
 
-@MainActor
-final class ScreenPaletteStore: ObservableObject {
-    static let shared = ScreenPaletteStore()
-
-    @Published private(set) var artworkURLs: [URL] = []
-
-    private init() {}
-
-    func update(_ urls: [URL]) {
-        var seen = Set<URL>()
-        let unique = urls.filter { seen.insert($0).inserted }
-        guard unique != artworkURLs else { return }
-        artworkURLs = unique
-    }
-}
-
 struct AppBackground: View {
     var body: some View {
         RefractionBackground()
@@ -28,31 +12,22 @@ struct AppBackground: View {
     }
 }
 
-/// A slow field of light bent through glass. Everything here is a gradient or
-/// a cached texture, so the background never pays for a live full-screen blur.
+/// A slow, soft color field. Large gradients only: no lines, no live blur,
+/// no per-frame texture work.
 private struct RefractionBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ObservedObject private var paletteStore = ScreenPaletteStore.shared
     @State private var drift = false
-    @State private var lineColors: [Color] = RefractionBackground.fallbackColors
 
     private var isDark: Bool { colorScheme == .dark }
-
-    private static let fallbackColors: [Color] = [
-        Color(red: 0.28, green: 0.76, blue: 1.0),
-        Color(red: 1.0, green: 0.62, blue: 0.34),
-        Color(red: 0.62, green: 0.46, blue: 1.0)
-    ]
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 base
-                lineField(in: geometry.size)
-                chromaticEdge
+                softColorField(in: geometry.size)
                 GrainOverlay()
-                    .opacity(isDark ? 0.045 : 0.025)
+                    .opacity(isDark ? 0.018 : 0.010)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
             .clipped()
@@ -60,26 +35,9 @@ private struct RefractionBackground: View {
         .ignoresSafeArea()
         .onAppear {
             guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 26).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 30).repeatForever(autoreverses: true)) {
                 drift = true
             }
-        }
-        .task(id: paletteStore.artworkURLs) {
-            await refreshPalette()
-        }
-    }
-
-    @MainActor
-    private func refreshPalette() async {
-        var colors: [Color] = []
-        for url in paletteStore.artworkURLs.prefix(5) {
-            let palette = await CoverLightPaletteCache.shared.prepare(for: url)
-            colors.append(palette.highlight)
-            colors.append(palette.fill)
-        }
-        guard !colors.isEmpty else { return }
-        withAnimation(.easeInOut(duration: 1.4)) {
-            lineColors = colors
         }
     }
 
@@ -105,92 +63,179 @@ private struct RefractionBackground: View {
         }
     }
 
-    private struct LineSpec {
-        let angle: Double
-        let y: Double
-        let thickness: Double
-        let opacity: Double
-        let xDrift: Double
-        let yDrift: Double
-        let angleDrift: Double
+    private var meshColors: [Color] {
+        if isDark {
+            return [
+                Color(red: 0.012, green: 0.014, blue: 0.022),
+                Color(red: 0.035, green: 0.160, blue: 0.200),
+                Color(red: 0.018, green: 0.030, blue: 0.055),
+                Color(red: 0.200, green: 0.040, blue: 0.150),
+                Color(red: 0.055, green: 0.090, blue: 0.210),
+                Color(red: 0.020, green: 0.120, blue: 0.150),
+                Color(red: 0.030, green: 0.025, blue: 0.045),
+                Color(red: 0.240, green: 0.150, blue: 0.340),
+                Color(red: 0.015, green: 0.018, blue: 0.030)
+            ]
+        }
+
+        return [
+            Color(red: 0.975, green: 0.970, blue: 0.958),
+            Color(red: 0.760, green: 0.860, blue: 0.900),
+            Color(red: 0.955, green: 0.950, blue: 0.970),
+            Color(red: 0.930, green: 0.820, blue: 0.845),
+            Color(red: 0.800, green: 0.820, blue: 0.910),
+            Color(red: 0.900, green: 0.930, blue: 0.940),
+            Color(red: 0.965, green: 0.960, blue: 0.950),
+            Color(red: 0.840, green: 0.790, blue: 0.900),
+            Color(red: 0.970, green: 0.965, blue: 0.958)
+        ]
     }
 
-    private static let lineSpecs: [LineSpec] = [
-        LineSpec(angle: -28, y: -0.24, thickness: 0.020, opacity: 0.24, xDrift: 0.05, yDrift: 0.025, angleDrift: 2.0),
-        LineSpec(angle: 18, y: 0.02, thickness: 0.010, opacity: 0.30, xDrift: -0.04, yDrift: 0.030, angleDrift: -2.5),
-        LineSpec(angle: -12, y: 0.26, thickness: 0.032, opacity: 0.18, xDrift: 0.06, yDrift: -0.020, angleDrift: 1.5),
-        LineSpec(angle: 34, y: 0.50, thickness: 0.013, opacity: 0.26, xDrift: -0.05, yDrift: 0.025, angleDrift: -2.0),
-        LineSpec(angle: -42, y: 0.72, thickness: 0.024, opacity: 0.20, xDrift: 0.03, yDrift: -0.025, angleDrift: 2.5),
-        LineSpec(angle: 8, y: -0.43, thickness: 0.009, opacity: 0.22, xDrift: -0.03, yDrift: 0.035, angleDrift: -1.0),
-        LineSpec(angle: 58, y: 0.14, thickness: 0.015, opacity: 0.17, xDrift: 0.04, yDrift: -0.030, angleDrift: 2.0),
-        LineSpec(angle: -65, y: 0.40, thickness: 0.008, opacity: 0.20, xDrift: -0.06, yDrift: 0.020, angleDrift: -2.0)
-    ]
-
-    private func lineField(in size: CGSize) -> some View {
+    @ViewBuilder
+    private func softColorField(in size: CGSize) -> some View {
         let width = max(size.width, 1)
         let height = max(size.height, 1)
-        let mode: BlendMode = isDark ? .screen : .multiply
-        let boost = isDark ? 1.0 : 0.52
-        let colors = lineColors.isEmpty ? Self.fallbackColors : lineColors
 
-        return ZStack {
-            ForEach(Array(Self.lineSpecs.enumerated()), id: \.offset) { index, spec in
-                let color = colors[index % colors.count]
-                let thickness = max(1, width * spec.thickness)
-                let alpha = spec.opacity * boost
-
-                ZStack {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                stops: [
-                                    .init(color: .clear, location: 0),
-                                    .init(color: color.opacity(alpha), location: 0.34),
-                                    .init(color: color.opacity(alpha), location: 0.66),
-                                    .init(color: .clear, location: 1)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    .clear,
-                                    .white.opacity(alpha * 0.55),
-                                    .clear
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                        )
-                        .frame(height: max(0.6, thickness * 0.22))
-                }
-                .frame(width: width * 1.9, height: thickness)
-                .rotationEffect(.degrees(spec.angle + (drift ? spec.angleDrift : -spec.angleDrift)))
-                .offset(
-                    x: width * (drift ? spec.xDrift : -spec.xDrift),
-                    y: height * (spec.y + (drift ? spec.yDrift : -spec.yDrift))
+        ZStack {
+            if #available(iOS 18.0, *) {
+                MeshGradient(
+                    width: 3,
+                    height: 3,
+                    points: [
+                        [0.00, 0.00], [0.55, 0.00], [1.00, 0.00],
+                        [0.00, 0.42], [0.50, 0.38], [1.00, 0.40],
+                        [0.00, 1.00], [0.45, 1.00], [1.00, 1.00]
+                    ],
+                    colors: meshColors
                 )
+                .scaleEffect(1.18)
+                .offset(
+                    x: width * (drift ? 0.025 : -0.025),
+                    y: height * (drift ? -0.018 : 0.018)
+                )
+            } else {
+                fallbackField(width: width, height: height)
             }
+
+            colorGlows(width: width, height: height)
         }
-        .compositingGroup()
-        .blendMode(mode)
+        .opacity(isDark ? 1 : 0.62)
     }
 
-    private var chromaticEdge: some View {
-        LinearGradient(
-            stops: [
-                .init(color: Color(red: 0.35, green: 0.80, blue: 1.0).opacity(isDark ? 0.07 : 0.04), location: 0),
-                .init(color: .clear, location: 0.16),
-                .init(color: .clear, location: 0.80),
-                .init(color: Color(red: 1.0, green: 0.62, blue: 0.34).opacity(isDark ? 0.06 : 0.035), location: 1)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+    private func fallbackField(width: CGFloat, height: CGFloat) -> some View {
+        ZStack {
+            LinearGradient(
+                colors: isDark
+                    ? [Color(red: 0.020, green: 0.025, blue: 0.050), Color(red: 0.080, green: 0.050, blue: 0.130)]
+                    : [Color(red: 0.950, green: 0.930, blue: 0.920), Color(red: 0.820, green: 0.840, blue: 0.920)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.05, green: 0.32, blue: 0.38).opacity(isDark ? 0.42 : 0.18),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: width * 0.62
+                    )
+                )
+                .frame(width: width * 1.35, height: height * 0.90)
+                .offset(x: width * 0.24, y: -height * 0.24)
+
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.48, green: 0.10, blue: 0.30).opacity(isDark ? 0.36 : 0.16),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: width * 0.64
+                    )
+                )
+                .frame(width: width * 1.35, height: height * 0.90)
+                .offset(x: -width * 0.22, y: height * 0.02)
+
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.36, green: 0.22, blue: 0.62).opacity(isDark ? 0.36 : 0.14),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: width * 0.56
+                    )
+                )
+                .frame(width: width * 1.25, height: height * 0.80)
+                .offset(x: width * 0.04, y: height * 0.26)
+        }
+        .blendMode(isDark ? .screen : .multiply)
+    }
+
+    private func colorGlows(width: CGFloat, height: CGFloat) -> some View {
+        ZStack {
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.16, green: 0.70, blue: 0.86).opacity(isDark ? 0.20 : 0.10),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: width * 0.58
+                    )
+                )
+                .frame(width: width * 1.20, height: height * 0.80)
+                .offset(
+                    x: width * (drift ? 0.26 : 0.22),
+                    y: -height * (drift ? 0.21 : 0.18)
+                )
+
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.86, green: 0.16, blue: 0.44).opacity(isDark ? 0.16 : 0.08),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: width * 0.60
+                    )
+                )
+                .frame(width: width * 1.25, height: height * 0.85)
+                .offset(
+                    x: -width * (drift ? 0.24 : 0.20),
+                    y: height * (drift ? 0.03 : 0.00)
+                )
+
+            Ellipse()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color(red: 0.48, green: 0.30, blue: 0.86).opacity(isDark ? 0.16 : 0.08),
+                            .clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: width * 0.54
+                    )
+                )
+                .frame(width: width * 1.18, height: height * 0.76)
+                .offset(
+                    x: width * (drift ? 0.03 : -0.03),
+                    y: height * (drift ? 0.24 : 0.20)
+                )
+        }
         .blendMode(isDark ? .screen : .multiply)
     }
 }
