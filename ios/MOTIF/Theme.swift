@@ -662,7 +662,7 @@ final class PlaybackBackdropCache {
 
     private let cache = NSCache<NSURL, UIImage>()
     private let context = CIContext(options: nil)
-    private let renderSize = CGSize(width: 180, height: 320)
+    private let renderSize = CGSize(width: 240, height: 240)
 
     private init() {
         cache.countLimit = 32

@@ -5,8 +5,11 @@ import UIKit
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
+    let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
+    @State private var simplifySurface = false
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
@@ -14,6 +17,7 @@ struct MiniPlayer: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
+                        simplifySurface = true
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
@@ -105,18 +109,44 @@ struct MiniPlayer: View {
             .background(miniPlayerSurface)
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
+            .modifier(
+                MiniPlayerTransitionSource(
+                    sourceID: transitionSourceID,
+                    namespace: transitionNamespace
+                )
+            )
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
             .transition(
                 .move(edge: .bottom)
                     .combined(with: .opacity)
             )
+            .onChange(of: showNowPlaying) { presented in
+                guard !presented else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        simplifySurface = false
+                    }
+                }
+            }
         }
     }
 
+    @ViewBuilder
     private var miniPlayerSurface: some View {
-        Color.clear
-            .playerGlass(Capsule())
+        if simplifySurface {
+            Capsule()
+                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
+                }
+                .transition(.opacity)
+        } else {
+            Color.clear
+                .playerGlass(Capsule())
+                .transition(.opacity)
+        }
     }
 
     private func tapFeedback() {
@@ -167,6 +197,7 @@ struct NowPlayingView: View {
     @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
+    @State private var effectsReady = false
     private static let controlHaptics = UIImpactFeedbackGenerator(style: .light)
 
     private var currentTrack: Track? {
@@ -195,6 +226,11 @@ struct NowPlayingView: View {
             }
         }
         .environment(\.colorScheme, .dark)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                effectsReady = true
+            }
+        }
         .sheet(isPresented: $showQueue) {
             UpNextView()
                 .environmentObject(player)
@@ -229,8 +265,9 @@ struct NowPlayingView: View {
             ZStack {
                 Color.black
 
-                // The pre-rendered backdrop is the same cover, already blurred
-                // off-main. It is what the masked artwork edges fade into.
+                // A square ambient bloom instead of stretching the cover
+                // across the whole screen. This keeps the composition from
+                // cropping awkwardly on tall displays.
                 Group {
                     if let backdropImage {
                         Image(uiImage: backdropImage)
@@ -242,15 +279,32 @@ struct NowPlayingView: View {
                         Image(uiImage: image)
                             .resizable()
                             .scaledToFill()
-                            .blur(radius: 55)
-                            .opacity(0.55)
+                            .blur(radius: 32)
                     } else {
                         Color.black
                     }
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .clipped()
-                .opacity(0.96)
+                .frame(
+                    width: geometry.size.width * 1.06,
+                    height: geometry.size.width * 1.06
+                )
+                .mask(
+                    RadialGradient(
+                        stops: [
+                            .init(color: .white, location: 0),
+                            .init(color: .white.opacity(0.72), location: 0.46),
+                            .init(color: .clear, location: 1)
+                        ],
+                        center: .center,
+                        startRadius: geometry.size.width * 0.06,
+                        endRadius: geometry.size.width * 0.66
+                    )
+                )
+                .opacity(0.52)
+                .position(
+                    x: geometry.size.width / 2,
+                    y: geometry.size.height * 0.38
+                )
 
                 LinearGradient(
                     stops: [
@@ -312,8 +366,10 @@ struct NowPlayingView: View {
                             .allowsHitTesting(false)
                     }
 
-                    HeroEdgeBlurOverlay(url: track.artworkURL, intensity: 1)
-                    LivingLightOverlay(url: track.artworkURL, intensity: 0.9)
+                    if effectsReady {
+                        HeroEdgeBlurOverlay(url: track.artworkURL, intensity: 1)
+                        LivingLightOverlay(url: track.artworkURL, intensity: 0.9)
+                    }
                 }
                 .compositingGroup()
                 .id(track.id)
@@ -851,6 +907,24 @@ private struct NowPlayingScrubber: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private struct MiniPlayerTransitionSource: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.matchedTransitionSource(id: sourceID, in: namespace) { source in
+                source.clipShape(
+                    RoundedRectangle(cornerRadius: 25, style: .continuous)
+                )
+            }
+        } else {
+            content
+        }
     }
 }
 

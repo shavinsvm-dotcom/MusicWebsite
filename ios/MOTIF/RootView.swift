@@ -26,6 +26,7 @@ struct RootView: View {
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .forYou
     @State private var attemptedLyricsIDs: Set<UUID> = []
+    @Namespace private var playerTransition
 
     private var playerPresented: Binding<Bool> {
         Binding(
@@ -47,6 +48,12 @@ struct RootView: View {
             }
             .fullScreenCover(isPresented: $showNowPlaying) {
                 playerCoverContent
+                    .modifier(
+                        PlayerZoomDestination(
+                            sourceID: playerTransitionID,
+                            namespace: playerTransition
+                        )
+                    )
             }
             .onOpenURL { url in
                 guard url.scheme == "motif" else { return }
@@ -216,6 +223,10 @@ struct RootView: View {
         }
     }
 
+    private var playerTransitionID: String {
+        "now-playing-\(selectedTab.rawValue)"
+    }
+
     private var playerCoverContent: some View {
         NowPlayingView(
             backdropImage: currentBackdrop,
@@ -236,7 +247,9 @@ struct RootView: View {
         )
         .modifier(MiniPlayerInset(
             showNowPlaying: playerPresented,
-            currentID: player.current?.id
+            currentID: player.current?.id,
+            transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)",
+            transitionNamespace: playerTransition
         ))
     }
 
@@ -244,7 +257,9 @@ struct RootView: View {
         HomeView(showNowPlaying: playerPresented)
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
-                currentID: player.current?.id
+                currentID: player.current?.id,
+                transitionSourceID: "now-playing-\(AppTab.home.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -252,7 +267,9 @@ struct RootView: View {
         LibraryView(showNowPlaying: playerPresented)
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
-                currentID: player.current?.id
+                currentID: player.current?.id,
+                transitionSourceID: "now-playing-\(AppTab.library.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -260,7 +277,9 @@ struct RootView: View {
         PlaylistsView(showNowPlaying: playerPresented)
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
-                currentID: player.current?.id
+                currentID: player.current?.id,
+                transitionSourceID: "now-playing-\(AppTab.playlists.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -268,18 +287,42 @@ struct RootView: View {
         SearchView(showNowPlaying: playerPresented)
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
-                currentID: player.current?.id
+                currentID: player.current?.id,
+                transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
+                transitionNamespace: playerTransition
             ))
+    }
+}
+
+private struct PlayerZoomDestination: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.navigationTransition(
+                .zoom(sourceID: sourceID, in: namespace)
+            )
+        } else {
+            content
+        }
     }
 }
 
 private struct MiniPlayerInset: ViewModifier {
     @Binding var showNowPlaying: Bool
     let currentID: UUID?
+    let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
 
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
-            MiniPlayer(showNowPlaying: $showNowPlaying)
+            MiniPlayer(
+                showNowPlaying: $showNowPlaying,
+                transitionSourceID: transitionSourceID,
+                transitionNamespace: transitionNamespace
+            )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(
                     .spring(response: 0.28, dampingFraction: 0.84),
