@@ -5,35 +5,216 @@ import SwiftUI
 import UIKit
 
 struct AppBackground: View {
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
-        plainBackground
+        RefractionBackground()
             .ignoresSafeArea()
             .allowsHitTesting(false)
     }
+}
 
-    private var plainBackground: some View {
+/// A slow field of light bent through glass. Everything here is a gradient or
+/// a cached texture, so the background never pays for a live full-screen blur.
+private struct RefractionBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var drift = false
+
+    private var isDark: Bool { colorScheme == .dark }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                base
+                caustics(in: geometry.size)
+                chromaticEdge
+                GrainOverlay()
+                    .opacity(isDark ? 0.045 : 0.025)
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+            .clipped()
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 26).repeatForever(autoreverses: true)) {
+                drift = true
+            }
+        }
+    }
+
+    private var base: some View {
         ZStack {
-            if colorScheme == .dark {
-                Color(red: 0.047, green: 0.047, blue: 0.055)
+            if isDark {
+                Color(red: 0.032, green: 0.035, blue: 0.047)
                 RadialGradient(
-                    colors: [Color.white.opacity(0.045), Color.clear],
+                    colors: [Color(red: 0.20, green: 0.31, blue: 0.42).opacity(0.10), .clear],
                     center: .top,
                     startRadius: 0,
-                    endRadius: 520
+                    endRadius: 560
                 )
             } else {
-                Color.white
+                Color(red: 0.974, green: 0.968, blue: 0.956)
                 RadialGradient(
-                    colors: [Color.black.opacity(0.028), Color.clear],
+                    colors: [Color(red: 0.62, green: 0.76, blue: 0.90).opacity(0.12), .clear],
                     center: .top,
                     startRadius: 0,
-                    endRadius: 520
+                    endRadius: 560
                 )
             }
         }
     }
+
+    private func caustics(in size: CGSize) -> some View {
+        let width = max(size.width, 1)
+        let height = max(size.height, 1)
+        let mode: BlendMode = isDark ? .screen : .multiply
+        let boost = isDark ? 1.0 : 0.52
+
+        return ZStack {
+            causticBlob(
+                color: Color(red: 0.28, green: 0.76, blue: 1.0),
+                opacity: 0.13 * boost
+            )
+            .frame(width: width * 0.74, height: width * 0.74)
+            .scaleEffect(x: 1.9, y: 0.62)
+            .rotationEffect(.degrees(-24))
+            .offset(
+                x: width * (drift ? 0.10 : -0.13),
+                y: -height * (drift ? 0.15 : 0.09)
+            )
+
+            causticBlob(
+                color: Color(red: 1.0, green: 0.62, blue: 0.34),
+                opacity: 0.105 * boost
+            )
+            .frame(width: width * 0.68, height: width * 0.68)
+            .scaleEffect(x: 2.1, y: 0.55)
+            .rotationEffect(.degrees(31))
+            .offset(
+                x: width * (drift ? -0.08 : 0.14),
+                y: height * (drift ? 0.21 : 0.29)
+            )
+
+            causticBlob(
+                color: Color(red: 0.62, green: 0.46, blue: 1.0),
+                opacity: 0.095 * boost
+            )
+            .frame(width: width * 0.62, height: width * 0.62)
+            .scaleEffect(x: 1.65, y: 0.70)
+            .rotationEffect(.degrees(-61))
+            .offset(
+                x: width * (drift ? 0.22 : -0.04),
+                y: height * (drift ? 0.50 : 0.42)
+            )
+
+            causticThread(
+                color: Color(red: 0.60, green: 0.90, blue: 1.0),
+                opacity: 0.10 * boost
+            )
+            .offset(
+                x: width * (drift ? -0.06 : 0.09),
+                y: -height * 0.06
+            )
+            .rotationEffect(.degrees(-19))
+
+            causticThread(
+                color: Color(red: 1.0, green: 0.76, blue: 0.52),
+                opacity: 0.075 * boost
+            )
+            .offset(
+                x: width * (drift ? 0.12 : -0.10),
+                y: height * 0.17
+            )
+            .rotationEffect(.degrees(14))
+        }
+        .compositingGroup()
+        .blendMode(mode)
+    }
+
+    private func causticBlob(color: Color, opacity: Double) -> some View {
+        Circle().fill(
+            RadialGradient(
+                stops: [
+                    .init(color: color.opacity(opacity), location: 0),
+                    .init(color: color.opacity(opacity * 0.34), location: 0.48),
+                    .init(color: .clear, location: 1)
+                ],
+                center: .center,
+                startRadius: 0,
+                endRadius: 100
+            )
+        )
+    }
+
+    private func causticThread(color: Color, opacity: Double) -> some View {
+        Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [.clear, color.opacity(opacity), .clear],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(width: 760, height: 1.4)
+            .blur(radius: 1.2)
+    }
+
+    private var chromaticEdge: some View {
+        LinearGradient(
+            stops: [
+                .init(color: Color(red: 0.35, green: 0.80, blue: 1.0).opacity(isDark ? 0.07 : 0.04), location: 0),
+                .init(color: .clear, location: 0.16),
+                .init(color: .clear, location: 0.80),
+                .init(color: Color(red: 1.0, green: 0.62, blue: 0.34).opacity(isDark ? 0.06 : 0.035), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .blendMode(isDark ? .screen : .multiply)
+    }
+}
+
+private struct GrainOverlay: View {
+    var body: some View {
+        Image(uiImage: Self.texture)
+            .resizable(resizingMode: .tile)
+            .ignoresSafeArea()
+            .blendMode(.overlay)
+    }
+
+    private static let texture: UIImage = {
+        let side = 96
+        var bytes = [UInt8](repeating: 0, count: side * side * 4)
+        var state: UInt64 = 0x9E3779B97F4A7C15
+
+        for index in 0..<(side * side) {
+            state = state &* 6364136223846793005 &+ 1442695040888963407
+            let value = UInt8(truncatingIfNeeded: state >> 33)
+            let offset = index * 4
+            bytes[offset] = value
+            bytes[offset + 1] = value
+            bytes[offset + 2] = value
+            bytes[offset + 3] = 255
+        }
+
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData),
+              let image = CGImage(
+                  width: side,
+                  height: side,
+                  bitsPerComponent: 8,
+                  bitsPerPixel: 32,
+                  bytesPerRow: side * 4,
+                  space: CGColorSpaceCreateDeviceRGB(),
+                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                  provider: provider,
+                  decode: nil,
+                  shouldInterpolate: false,
+                  intent: .defaultIntent
+              )
+        else { return UIImage() }
+
+        return UIImage(cgImage: image)
+    }()
 }
 
 /// Groups sibling Liquid Glass controls so they share one offscreen blur
@@ -504,6 +685,148 @@ final class ArtworkImageCache {
         }
 
         return UIImage(cgImage: cgImage)
+    }
+}
+
+/// Cached blurred artwork for the progressive frost behind hero copy.
+/// Rendering this per card would add a live blur to every scroll frame, so it
+/// is generated once per URL at low resolution and only masked at draw time.
+final class ArtworkBlurCache {
+    static let shared = ArtworkBlurCache()
+
+    private let cache = NSCache<NSURL, UIImage>()
+    private let lock = NSLock()
+    private var tasks: [NSURL: Task<UIImage?, Never>] = [:]
+    private static let ciContext = CIContext(options: nil)
+    private static let renderSide: CGFloat = 480
+
+    private init() {
+        cache.countLimit = 36
+        cache.totalCostLimit = 48 * 1024 * 1024
+    }
+
+    func image(for url: URL?) -> UIImage? {
+        guard let url else { return nil }
+        return cache.object(forKey: url as NSURL)
+    }
+
+    func prepare(for url: URL?) async -> UIImage? {
+        guard let url else { return nil }
+        if let cached = image(for: url) { return cached }
+
+        let key = url as NSURL
+        lock.lock()
+        if let existing = tasks[key] {
+            lock.unlock()
+            return await existing.value
+        }
+
+        let task = Task.detached(priority: .utility) { () -> UIImage? in
+            let source: UIImage?
+            if let cached = ArtworkImageCache.shared.image(for: url) {
+                source = cached
+            } else {
+                source = await ArtworkImageCache.shared.loadImage(for: url)
+            }
+            guard let source else { return nil }
+            return Self.render(source)
+        }
+        tasks[key] = task
+        lock.unlock()
+
+        let image = await task.value
+
+        lock.lock()
+        tasks[key] = nil
+        lock.unlock()
+
+        if let image {
+            let cost = Int(image.size.width * image.size.height * 4)
+            cache.setObject(image, forKey: key, cost: cost)
+        }
+        return image
+    }
+
+    private static func render(_ image: UIImage) -> UIImage? {
+        let side = renderSide
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(
+            size: CGSize(width: side, height: side),
+            format: format
+        )
+
+        let square = renderer.image { _ in
+            let factor = max(side / max(1, image.size.width), side / max(1, image.size.height))
+            let drawSize = CGSize(
+                width: image.size.width * factor,
+                height: image.size.height * factor
+            )
+            image.draw(in: CGRect(
+                x: (side - drawSize.width) / 2,
+                y: (side - drawSize.height) / 2,
+                width: drawSize.width,
+                height: drawSize.height
+            ))
+        }
+
+        guard let cgImage = square.cgImage else { return nil }
+        let input = CIImage(cgImage: cgImage)
+        let blurred = input
+            .clampedToExtent()
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 24])
+            .applyingFilter("CIColorControls", parameters: [
+                kCIInputSaturationKey: 1.12,
+                kCIInputBrightnessKey: -0.025,
+                kCIInputContrastKey: 1.03
+            ])
+            .cropped(to: input.extent)
+
+        guard let output = ciContext.createCGImage(blurred, from: input.extent) else {
+            return nil
+        }
+        return UIImage(cgImage: output)
+    }
+}
+
+/// Frosts the lower part of a hero card so type sits on blurred artwork rather
+/// than a flat black gradient. The blur itself is already cached.
+struct ProgressiveArtworkBlur: View {
+    let url: URL?
+    var strength: Double = 0.92
+
+    @State private var image: UIImage?
+
+    var body: some View {
+        GeometryReader { geometry in
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+                    .opacity(strength)
+                    .mask(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0),
+                                .init(color: .clear, location: 0.18),
+                                .init(color: .black.opacity(0.20), location: 0.36),
+                                .init(color: .black.opacity(0.82), location: 0.62),
+                                .init(color: .black, location: 0.82),
+                                .init(color: .black, location: 1)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+            }
+        }
+        .allowsHitTesting(false)
+        .task(id: url) {
+            image = await ArtworkBlurCache.shared.prepare(for: url)
+        }
     }
 }
 

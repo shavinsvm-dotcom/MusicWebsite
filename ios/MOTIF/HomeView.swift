@@ -83,6 +83,8 @@ struct HomeView: View {
                     .frame(height: 238)
                     .frame(maxWidth: .infinity)
 
+                ProgressiveArtworkBlur(url: track.artworkURL)
+
                 LinearGradient(
                     colors: [.clear, .black.opacity(0.72)],
                     startPoint: .center,

@@ -63,6 +63,8 @@ struct ForYouView: View {
                 }
                 .frame(height: 244)
 
+                ProgressiveArtworkBlur(url: data.mixTracks.first?.artworkURL, strength: 0.88)
+
                 LinearGradient(
                     colors: [.clear, .black.opacity(0.20), .black.opacity(0.86)],
                     startPoint: .top,

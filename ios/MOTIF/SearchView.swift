@@ -237,12 +237,14 @@ struct SearchView: View {
                             .foregroundStyle(scope == option ? Color(uiColor: .systemBackground) : .secondary)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 7)
-                            .background(
-                                scope == option
-                                    ? Color.primary
-                                    : Color.primary.opacity(0.06),
-                                in: Capsule()
-                            )
+                            .background {
+                                if scope == option {
+                                    Capsule().fill(Color.primary)
+                                } else {
+                                    Capsule().fill(.ultraThinMaterial)
+                                    Capsule().strokeBorder(Color.white.opacity(0.11), lineWidth: 0.6)
+                                }
+                            }
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.94))
                 }
