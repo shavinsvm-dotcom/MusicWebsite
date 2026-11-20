@@ -59,7 +59,7 @@ struct MiniPlayer: View {
                                 .motifBounce(tick: skipPulse)
                                 .contentShape(Circle())
                         }
-                        .buttonStyle(MotifPressStyle(scale: 0.8))
+                        .buttonStyle(PlayerControlPressStyle(scale: 0.85))
                         .playerGlass(Circle())
                         .accessibilityLabel("Previous")
 
@@ -77,7 +77,7 @@ struct MiniPlayer: View {
                                 .motifReplace()
                                 .motifBounce(tick: playPulse)
                         }
-                        .buttonStyle(MotifPressStyle(scale: 0.8))
+                        .buttonStyle(PlayerControlPressStyle(scale: 0.85))
                         .playerGlass(Circle())
                         .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
@@ -94,7 +94,7 @@ struct MiniPlayer: View {
                                 .motifBounce(tick: skipPulse)
                                 .contentShape(Circle())
                         }
-                        .buttonStyle(MotifPressStyle(scale: 0.8))
+                        .buttonStyle(PlayerControlPressStyle(scale: 0.85))
                         .playerGlass(Circle())
                         .accessibilityLabel("Next")
                         }
@@ -432,7 +432,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .playerGlass(Circle())
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.88))
+                .buttonStyle(PlayerControlPressStyle(scale: 0.9))
                 .accessibilityLabel("Close player")
 
                 Spacer()
@@ -453,7 +453,7 @@ struct NowPlayingView: View {
                             .motifBounce(player.automixEnabled)
                             .playerGlass(Circle())
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.86))
+                    .buttonStyle(PlayerControlPressStyle(scale: 0.88))
                     .accessibilityLabel(player.automixEnabled ? "Turn Automix off" : "Turn Automix on")
 
                     Button {
@@ -468,7 +468,7 @@ struct NowPlayingView: View {
                             .frame(width: 36, height: 36)
                             .playerGlass(Circle())
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.86))
+                    .buttonStyle(PlayerControlPressStyle(scale: 0.88))
                     .accessibilityLabel("Equalizer")
 
                     Menu {
@@ -595,7 +595,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .playerGlass(Circle())
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.88))
+                .buttonStyle(PlayerControlPressStyle(scale: 0.9))
                 .accessibilityLabel("More options")
                 }
                 }
@@ -650,7 +650,7 @@ struct NowPlayingView: View {
                     .motifBounce(tick: skipPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(MotifPressStyle(scale: 0.82))
+            .buttonStyle(PlayerControlPressStyle(scale: 0.85))
             .accessibilityLabel("Previous")
 
             Button {
@@ -668,7 +668,7 @@ struct NowPlayingView: View {
                     .motifBounce(tick: playPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(MotifPressStyle(scale: 0.9))
+            .buttonStyle(PlayerControlPressStyle(scale: 0.92))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
@@ -685,7 +685,7 @@ struct NowPlayingView: View {
                     .motifBounce(tick: skipPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(MotifPressStyle(scale: 0.82))
+            .buttonStyle(PlayerControlPressStyle(scale: 0.85))
             .accessibilityLabel("Next")
             }
         }
@@ -705,7 +705,7 @@ struct NowPlayingView: View {
                 .motifBounce(active)
                 .playerGlass(Circle())
         }
-        .buttonStyle(MotifPressStyle(scale: 0.88))
+        .buttonStyle(PlayerControlPressStyle(scale: 0.9))
     }
 
     private var repeatButton: some View {
@@ -731,7 +731,7 @@ struct NowPlayingView: View {
             .frame(width: 42, height: 42)
             .playerGlass(Circle())
         }
-        .buttonStyle(MotifPressStyle(scale: 0.88))
+        .buttonStyle(PlayerControlPressStyle(scale: 0.9))
         .accessibilityLabel("Repeat")
         .accessibilityValue(repeatLabel)
     }

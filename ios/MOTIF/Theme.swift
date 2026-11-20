@@ -97,13 +97,9 @@ extension View {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             if interactive {
-                glassEffect(.regular.tint(Color.white.opacity(0.10)).interactive(), in: shape)
-                    .overlay { playerGlassRim(shape) }
-                    .shadow(color: .black.opacity(0.24), radius: 7, y: 3)
+                glassEffect(.regular.interactive(), in: shape)
             } else {
-                glassEffect(.regular.tint(Color.white.opacity(0.08)), in: shape)
-                    .overlay { playerGlassRim(shape) }
-                    .shadow(color: .black.opacity(0.22), radius: 6, y: 2)
+                glassEffect(.regular, in: shape)
             }
         } else {
             playerGlassFallback(shape)
@@ -114,54 +110,14 @@ extension View {
     }
 
     @ViewBuilder
-    private func playerGlassRim<S: Shape>(_ shape: S) -> some View {
-        shape.stroke(
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.58),
-                    Color.white.opacity(0.08),
-                    Color.white.opacity(0.25)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            lineWidth: 0.85
-        )
-        .allowsHitTesting(false)
-    }
-
-    @ViewBuilder
     private func playerGlassFallback<S: Shape>(_ shape: S) -> some View {
         background {
-            ZStack {
-                shape.fill(.ultraThinMaterial)
-                shape.fill(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.20),
-                            Color.white.opacity(0.055),
-                            Color.white.opacity(0.11)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                shape.fill(
-                    RadialGradient(
-                        colors: [
-                            Color.white.opacity(0.24),
-                            Color.white.opacity(0.02),
-                            Color.clear
-                        ],
-                        center: .topLeading,
-                        startRadius: 0,
-                        endRadius: 38
-                    )
-                )
-                playerGlassRim(shape)
-            }
+            shape
+                .fill(Color.white.opacity(0.09))
+                .overlay {
+                    shape.stroke(Color.white.opacity(0.14), lineWidth: 0.7)
+                }
         }
-        .shadow(color: .black.opacity(0.24), radius: 7, y: 3)
     }
 }
 
@@ -220,15 +176,42 @@ struct MotifPressStyle: ButtonStyle {
     var scale: CGFloat = 0.94
     var opacity: Double = 0.86
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
+        let spring: Animation = configuration.isPressed
+            ? .spring(response: 0.14, dampingFraction: 0.86)
+            : .spring(response: 0.36, dampingFraction: 0.56)
+
+        return configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
             .brightness(configuration.isPressed ? -0.035 : 0)
             .opacity(configuration.isPressed ? opacity : 1)
-            .animation(
-                .spring(response: 0.24, dampingFraction: 0.56),
-                value: configuration.isPressed
+            .animation(reduceMotion ? nil : spring, value: configuration.isPressed)
+    }
+}
+
+/// Slightly deeper press treatment for the player's glass controls: the
+/// shadow collapses as the button is pushed in, then springs back out.
+struct PlayerControlPressStyle: ButtonStyle {
+    var scale: CGFloat = 0.9
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        let spring: Animation = configuration.isPressed
+            ? .spring(response: 0.13, dampingFraction: 0.84)
+            : .spring(response: 0.34, dampingFraction: 0.55)
+
+        return configuration.label
+            .scaleEffect(configuration.isPressed ? scale : 1)
+            .brightness(configuration.isPressed ? -0.045 : 0)
+            .shadow(
+                color: .black.opacity(configuration.isPressed ? 0.10 : 0.22),
+                radius: configuration.isPressed ? 2 : 7,
+                y: configuration.isPressed ? 1 : 3
             )
+            .animation(reduceMotion ? nil : spring, value: configuration.isPressed)
     }
 }
 

@@ -30,6 +30,7 @@ final class MotionLightController {
     private let lock = NSLock()
 
     private var smoothed = MotionLightSample()
+    private var velocity = MotionLightSample()
     private var activeOverlays = 0
 
     private init() {}
@@ -56,11 +57,39 @@ final class MotionLightController {
             let rawX = Self.clamp(-data.gravity.x / 0.55)
             let rawY = Self.clamp(data.gravity.z / 0.55)
             let rawRoll = Self.clamp(data.attitude.roll / 1.1)
+            let dt = min(0.05, self.motion.deviceMotionUpdateInterval)
 
             self.lock.lock()
-            self.smoothed.x += (rawX - self.smoothed.x) * 0.14
-            self.smoothed.y += (rawY - self.smoothed.y) * 0.14
-            self.smoothed.roll += (rawRoll - self.smoothed.roll) * 0.10
+            let x = Self.spring(
+                value: self.smoothed.x,
+                velocity: self.velocity.x,
+                target: rawX,
+                stiffness: 82,
+                damping: 17,
+                dt: dt
+            )
+            let y = Self.spring(
+                value: self.smoothed.y,
+                velocity: self.velocity.y,
+                target: rawY,
+                stiffness: 82,
+                damping: 17,
+                dt: dt
+            )
+            let roll = Self.spring(
+                value: self.smoothed.roll,
+                velocity: self.velocity.roll,
+                target: rawRoll,
+                stiffness: 54,
+                damping: 12,
+                dt: dt
+            )
+            self.smoothed.x = min(1.08, max(-1.08, x.value))
+            self.velocity.x = x.velocity
+            self.smoothed.y = min(1.08, max(-1.08, y.value))
+            self.velocity.y = y.velocity
+            self.smoothed.roll = min(1.08, max(-1.08, roll.value))
+            self.velocity.roll = roll.velocity
             self.lock.unlock()
         }
     }
@@ -76,6 +105,7 @@ final class MotionLightController {
 
         lock.lock()
         smoothed = .level
+        velocity = .level
         lock.unlock()
     }
 
@@ -84,6 +114,19 @@ final class MotionLightController {
         let value = smoothed
         lock.unlock()
         return value
+    }
+
+    private static func spring(
+        value: Double,
+        velocity: Double,
+        target: Double,
+        stiffness: Double,
+        damping: Double,
+        dt: Double
+    ) -> (value: Double, velocity: Double) {
+        let acceleration = (target - value) * stiffness - velocity * damping
+        let nextVelocity = velocity + acceleration * dt
+        return (value + nextVelocity * dt, nextVelocity)
     }
 
     private static func clamp(_ value: Double) -> Double {
@@ -255,6 +298,7 @@ struct LivingLightOverlay: View {
         let lightX = size.width * (0.5 - sample.x * 0.24 + driftX)
         let lightY = size.height * (0.41 + sample.y * 0.20 + driftY)
         let key = CGPoint(x: lightX, y: lightY)
+        let breathe = 1 + sin(time * 0.34) * 0.025
 
         context.blendMode = .screen
 
@@ -270,7 +314,7 @@ struct LivingLightOverlay: View {
                 ]),
                 center: key,
                 startRadius: 0,
-                endRadius: diagonal * 0.64
+                endRadius: diagonal * 0.64 * breathe
             )
         )
 
@@ -286,6 +330,26 @@ struct LivingLightOverlay: View {
                 center: key,
                 startRadius: 0,
                 endRadius: diagonal * 0.25
+            )
+        )
+
+        // A small secondary flare trails the key light, giving the sheen a
+        // little more depth as the phone moves.
+        let flare = CGPoint(
+            x: key.x + cos(sample.roll * 1.5 + time * 0.11) * size.width * 0.11,
+            y: key.y - size.height * 0.055
+        )
+        context.fill(
+            Path(CGRect(origin: .zero, size: size)),
+            with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: .white.opacity(0.075 * intensity), location: 0),
+                    .init(color: palette.highlight.opacity(0.025 * intensity), location: 0.38),
+                    .init(color: .clear, location: 1)
+                ]),
+                center: flare,
+                startRadius: 0,
+                endRadius: diagonal * 0.17
             )
         )
 
