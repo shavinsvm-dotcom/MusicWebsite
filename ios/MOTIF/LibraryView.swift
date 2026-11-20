@@ -480,26 +480,30 @@ struct LibraryView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(alignment: .top, spacing: 14) {
-                        ForEach(library.playlists) { playlist in
-                            NavigationLink {
-                                PlaylistDetailView(
-                                    playlistID: playlist.id,
-                                    showNowPlaying: $showNowPlaying
-                                )
-                            } label: {
-                                PlaylistTile(
-                                    playlist: playlist,
-                                    tracks: library.tracks(in: playlist)
-                                )
-                                .frame(width: 146)
-                            }
-                            .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 12),
+                        GridItem(.flexible(), spacing: 12)
+                    ],
+                    alignment: .leading,
+                    spacing: 18
+                ) {
+                    ForEach(library.playlists) { playlist in
+                        NavigationLink {
+                            PlaylistDetailView(
+                                playlistID: playlist.id,
+                                showNowPlaying: $showNowPlaying
+                            )
+                        } label: {
+                            PlaylistTile(
+                                playlist: playlist,
+                                tracks: library.tracks(in: playlist)
+                            )
                         }
+                        .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
                     }
-                    .padding(.horizontal, 2)
                 }
+                .padding(.horizontal, 2)
             }
         }
     }

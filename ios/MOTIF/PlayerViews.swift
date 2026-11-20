@@ -5,11 +5,9 @@ import UIKit
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
-    let transitionSourceID: String
-    let transitionNamespace: Namespace.ID
+    let onFrameChange: (CGRect) -> Void
     @State private var playPulse = 0
     @State private var skipPulse = 0
-    @State private var simplifySurface = false
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
@@ -17,7 +15,6 @@ struct MiniPlayer: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
-                        simplifySurface = true
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
@@ -106,14 +103,27 @@ struct MiniPlayer: View {
                 .padding(.trailing, 8)
                 .frame(height: 50)
             }
-            .background(miniPlayerSurface)
+            .background(
+                Color.clear
+                    .playerGlass(Capsule())
+            )
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
-            .modifier(
-                MiniPlayerTransitionSource(
-                    sourceID: transitionSourceID,
-                    namespace: transitionNamespace
-                )
+            .background(
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear {
+                            let frame = proxy.frame(in: .global)
+                            DispatchQueue.main.async {
+                                onFrameChange(frame)
+                            }
+                        }
+                        .onChange(of: proxy.frame(in: .global)) { frame in
+                            DispatchQueue.main.async {
+                                onFrameChange(frame)
+                            }
+                        }
+                }
             )
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
@@ -121,31 +131,6 @@ struct MiniPlayer: View {
                 .move(edge: .bottom)
                     .combined(with: .opacity)
             )
-            .onChange(of: showNowPlaying) { presented in
-                guard !presented else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        simplifySurface = false
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var miniPlayerSurface: some View {
-        if simplifySurface {
-            Capsule()
-                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
-                .overlay {
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
-                }
-                .transition(.opacity)
-        } else {
-            Color.clear
-                .playerGlass(Capsule())
-                .transition(.opacity)
         }
     }
 
@@ -198,6 +183,10 @@ struct NowPlayingView: View {
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
     @State private var effectsReady = false
+    @State private var gradient = PlayerGradient.fallback
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 54
+    @ScaledMetric(relativeTo: .body) private var artistSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 12
     private static let controlHaptics = UIImpactFeedbackGenerator(style: .light)
 
     private var currentTrack: Track? {
@@ -230,6 +219,9 @@ struct NowPlayingView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
                 effectsReady = true
             }
+        }
+        .task(id: currentTrack?.artworkURL) {
+            await loadGradient()
         }
         .sheet(isPresented: $showQueue) {
             UpNextView()
@@ -265,32 +257,9 @@ struct NowPlayingView: View {
             ZStack {
                 Color.black
 
-                // A square ambient bloom instead of stretching the cover
-                // across the whole screen. This keeps the composition from
-                // cropping awkwardly on tall displays.
-                Group {
-                    if let backdropImage {
-                        Image(uiImage: backdropImage)
-                            .resizable()
-                            .scaledToFill()
-                    } else if let image = track.artworkURL.flatMap({
-                        ArtworkImageCache.shared.image(for: $0)
-                    }) {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
-                            .blur(radius: 32)
-                    } else {
-                        Color.black
-                    }
-                }
-                .frame(
-                    width: geometry.size.width * 1.08,
-                    height: geometry.size.height * 1.08
-                )
-                .clipped()
-                .saturation(1.12)
-                .opacity(0.86)
+                gradientLayer
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
 
                 LinearGradient(
                     stops: [
@@ -308,6 +277,55 @@ struct NowPlayingView: View {
             .clipped()
         }
         .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var gradientLayer: some View {
+        if #available(iOS 18.0, *) {
+            MeshGradient(
+                width: 3,
+                height: 3,
+                points: [
+                    [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
+                    [0.0, 0.5], [0.5, 0.5], [1.0, 0.5],
+                    [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
+                ],
+                colors: gradient.colors
+            )
+        } else {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        gradient.colors[0],
+                        gradient.colors[4],
+                        gradient.colors[8]
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                RadialGradient(
+                    colors: [
+                        gradient.colors[4].opacity(0.55),
+                        .clear
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 420
+                )
+            }
+        }
+    }
+
+    private func loadGradient() async {
+        guard let url = currentTrack?.artworkURL else {
+            gradient = .fallback
+            return
+        }
+
+        let next = await PlaybackBackdropCache.shared.prepareGradient(for: url)
+        guard !Task.isCancelled, currentTrack?.artworkURL == url else { return }
+        gradient = next
     }
 
     private func content(_ track: Track) -> some View {
@@ -389,31 +407,47 @@ struct NowPlayingView: View {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
-                    VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 5) {
                         Text(track.title)
-                            .font(.system(size: 44, weight: .bold))
-                            .tracking(-1.2)
+                            .font(
+                                .system(
+                                    size: min(titleSize, 62),
+                                    weight: .black
+                                )
+                            )
+                            .tracking(-1.4)
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
-                            .minimumScaleFactor(0.68)
+                            .minimumScaleFactor(0.58)
+                            .allowsTightening(true)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text(track.artist)
-                            .font(.system(size: 17, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.62))
+                            .font(
+                                .system(
+                                    size: min(artistSize, 18),
+                                    weight: .medium
+                                )
+                            )
+                            .foregroundStyle(.white.opacity(0.60))
                             .lineLimit(1)
                             .truncationMode(.tail)
 
-                        HStack(spacing: 8) {
+                        HStack(spacing: 7) {
                             Image(systemName: "opticaldisc")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 11, weight: .medium))
                             Text(metadataText(track))
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.50))
+                        .font(
+                            .system(
+                                size: min(metaSize, 14),
+                                weight: .medium
+                            )
+                        )
+                        .foregroundStyle(.white.opacity(0.48))
                         .padding(.top, 1)
 
                         Menu {
@@ -423,9 +457,9 @@ struct NowPlayingView: View {
                                 track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
                                 systemImage: "quote.bubble"
                             )
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.68))
-                            .padding(.top, 3)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.66))
+                            .padding(.top, 2)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.94))
                     }
@@ -636,8 +670,10 @@ struct NowPlayingView: View {
             }
 
             Text("Now playing")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white.opacity(0.72))
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(0.8)
+                .textCase(.uppercase)
+                .foregroundStyle(.white.opacity(0.66))
                 .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, 24)
@@ -860,8 +896,8 @@ private struct NowPlayingScrubber: View {
                 Spacer()
                 Text(timeText(max(duration - sliderValue, 0)))
             }
-            .font(.system(size: 11, weight: .medium, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.56))
+            .font(.system(size: 10, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.52))
             .padding(.horizontal, 2)
         }
         .onAppear {
@@ -895,24 +931,6 @@ private struct NowPlayingScrubber: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
-private struct MiniPlayerTransitionSource: ViewModifier {
-    let sourceID: String
-    let namespace: Namespace.ID
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.matchedTransitionSource(id: sourceID, in: namespace) { source in
-                source.clipShape(
-                    RoundedRectangle(cornerRadius: 25, style: .continuous)
-                )
-            }
-        } else {
-            content
-        }
     }
 }
 

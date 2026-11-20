@@ -655,17 +655,118 @@ struct ProgressiveArtworkBlur: View {
     }
 }
 
+struct PlayerGradient {
+    let colors: [Color]
+
+    static let fallback = PlayerGradient(colors: [
+        Color(red: 0.035, green: 0.038, blue: 0.052),
+        Color(red: 0.070, green: 0.075, blue: 0.095),
+        Color(red: 0.025, green: 0.027, blue: 0.038),
+        Color(red: 0.060, green: 0.055, blue: 0.080),
+        Color(red: 0.095, green: 0.090, blue: 0.120),
+        Color(red: 0.040, green: 0.040, blue: 0.060),
+        Color(red: 0.022, green: 0.024, blue: 0.034),
+        Color(red: 0.055, green: 0.050, blue: 0.072),
+        Color(red: 0.020, green: 0.022, blue: 0.032)
+    ])
+}
+
+private final class PlayerGradientBox {
+    let gradient: PlayerGradient
+
+    init(_ gradient: PlayerGradient) {
+        self.gradient = gradient
+    }
+}
+
 /// Pre-blurs the player backdrop once, so opening the player never pays for
 /// a full-screen live blur while the zoom transition is running.
 final class PlaybackBackdropCache {
     static let shared = PlaybackBackdropCache()
 
     private let cache = NSCache<NSURL, UIImage>()
+    private let gradientCache = NSCache<NSURL, PlayerGradientBox>()
     private let context = CIContext(options: nil)
-    private let renderSize = CGSize(width: 240, height: 420)
+    private let renderSize = CGSize(width: 180, height: 320)
 
     private init() {
         cache.countLimit = 32
+        gradientCache.countLimit = 48
+    }
+
+    func gradient(for url: URL) -> PlayerGradient? {
+        gradientCache.object(forKey: url as NSURL)?.gradient
+    }
+
+    /// A 3×3 colour sample of the cover. The player uses this as a mesh
+    /// gradient, so the background never stretches or crops the artwork.
+    func prepareGradient(for url: URL) async -> PlayerGradient {
+        if let cached = gradient(for: url) { return cached }
+
+        let artwork: UIImage?
+        if let cachedArtwork = ArtworkImageCache.shared.image(for: url) {
+            artwork = cachedArtwork
+        } else if url.isFileURL {
+            artwork = UIImage(contentsOfFile: url.path)
+        } else {
+            guard let (data, _) = try? await URLSession.shared.data(from: url) else {
+                return .fallback
+            }
+            artwork = UIImage(data: data)
+        }
+
+        guard let artwork else { return .fallback }
+        ArtworkImageCache.shared.store(artwork, for: url)
+
+        let sampled = await Task.detached(priority: .utility) {
+            Self.makeGradient(from: artwork)
+        }.value
+        gradientCache.setObject(PlayerGradientBox(sampled), forKey: url as NSURL)
+        return sampled
+    }
+
+    private static func makeGradient(from image: UIImage) -> PlayerGradient {
+        guard let cgImage = image.cgImage else { return .fallback }
+
+        let side = 3
+        guard let context = CGContext(
+            data: nil,
+            width: side,
+            height: side,
+            bitsPerComponent: 8,
+            bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return .fallback }
+
+        context.interpolationQuality = .medium
+        context.translateBy(x: 0, y: CGFloat(side))
+        context.scaleBy(x: 1, y: -1)
+        context.draw(
+            cgImage,
+            in: CGRect(x: 0, y: 0, width: side, height: side)
+        )
+
+        guard let data = context.data else { return .fallback }
+        let buffer = data.bindMemory(to: UInt8.self, capacity: side * side * 4)
+        var colors: [Color] = []
+        colors.reserveCapacity(side * side)
+
+        for row in 0..<side {
+            let sourceRow = side - 1 - row
+            for column in 0..<side {
+                let offset = (sourceRow * side + column) * 4
+                colors.append(
+                    Color(
+                        red: Double(buffer[offset]) / 255,
+                        green: Double(buffer[offset + 1]) / 255,
+                        blue: Double(buffer[offset + 2]) / 255
+                    )
+                )
+            }
+        }
+
+        return PlayerGradient(colors: colors)
     }
 
     func image(for url: URL) -> UIImage? {
@@ -736,7 +837,7 @@ final class PlaybackBackdropCache {
         let input = CIImage(cgImage: cgImage)
         let blurred = input
             .clampedToExtent()
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 30])
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 18])
             .applyingFilter("CIColorControls", parameters: [
                 kCIInputSaturationKey: 1.38,
                 kCIInputBrightnessKey: -0.055,

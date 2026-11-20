@@ -126,7 +126,7 @@ struct PlaylistsView: View {
                         .listRowBackground(Color.clear)
                 }
 
-                Section("Your Playlists") {
+                Section {
                     if library.playlists.isEmpty {
                         emptyState
                             .padding(.horizontal, 18)
@@ -140,6 +140,14 @@ struct PlaylistsView: View {
                             .listRowSeparator(.hidden)
                     } else {
                         playlistPanel
+                    }
+                } header: {
+                    HStack {
+                        Text("Your Playlists")
+                        Spacer()
+                        Text("\(library.playlists.count)")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -299,9 +307,16 @@ private struct SmartPlaylistShelfItem: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             Text(smart.title)
-                .font(.caption.weight(.medium))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.primary)
                 .lineLimit(2)
+                .truncationMode(.tail)
+                .frame(width: 104, alignment: .leading)
+
+            Text(tracks.count == 1 ? "1 song" : "\(tracks.count) songs")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
                 .frame(width: 104, alignment: .leading)
         }
         .frame(width: 104, alignment: .leading)
@@ -337,14 +352,19 @@ private struct PlaylistRow: View {
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
 
                 Text(metadata)
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 8)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.tertiary)
         }
         .padding(.vertical, 3)
     }
@@ -442,14 +462,18 @@ struct PlaylistTile: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             Text(playlist.name)
-                .font(.subheadline.weight(.medium))
-                .lineLimit(1)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(tracks.count == 1 ? "1 song" : "\(tracks.count) songs")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
