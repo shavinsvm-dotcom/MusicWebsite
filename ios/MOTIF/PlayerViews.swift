@@ -260,6 +260,7 @@ struct NowPlayingView: View {
                 gradientLayer
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
+                    .overlay(Color.black.opacity(0.18).allowsHitTesting(false))
 
                 LinearGradient(
                     stops: [

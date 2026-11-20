@@ -42,6 +42,7 @@ struct RootView: View {
         ZStack {
             tabs
                 .tint(.primary)
+                .allowsHitTesting(!showNowPlaying)
 
             if showNowPlaying {
                 playerOverlay
