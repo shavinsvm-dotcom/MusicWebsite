@@ -291,14 +291,19 @@ struct NowPlayingView: View {
                 ZStack {
                     ArtworkView(
                         url: track.artworkURL,
-                        seed: track.title + track.artist
+                        seed: track.title + track.artist,
+                        highResolution: true
                     )
 
-                    LivingLightOverlay(url: track.artworkURL, intensity: 0.92)
+                    HeroEdgeBlurOverlay(url: track.artworkURL, intensity: 1)
+                    LivingLightOverlay(url: track.artworkURL, intensity: 0.9)
                 }
                 .compositingGroup()
                 .id(track.id)
-                .transition(.opacity.combined(with: .scale(scale: 0.94)))
+                .transition(.asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 1.035)),
+                    removal: .opacity
+                ))
                 .frame(width: artSide, height: artSide)
                 .mask(
                     LinearGradient(

@@ -1,3 +1,4 @@
+import CoreImage
 import CoreMotion
 import SwiftUI
 import UIKit
@@ -93,8 +94,8 @@ struct CoverLightPalette {
     let fill: Color
 
     static let neutral = CoverLightPalette(
-        highlight: Color(red: 1.0, green: 0.94, blue: 0.84),
-        fill: Color(red: 0.56, green: 0.76, blue: 1.0)
+        highlight: Color(red: 1.0, green: 0.95, blue: 0.86),
+        fill: Color(red: 0.54, green: 0.74, blue: 1.0)
     )
 }
 
@@ -126,39 +127,42 @@ final class CoverLightPaletteCache {
     }
 
     private static func makePalette(from image: UIImage) -> CoverLightPalette {
+        guard let cgImage = image.cgImage else { return .neutral }
+
         let side = 16
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        format.opaque = true
-        let renderer = UIGraphicsImageRenderer(
-            size: CGSize(width: side, height: side),
-            format: format
-        )
-        let sample = renderer.image { _ in
-            image.draw(in: CGRect(x: 0, y: 0, width: side, height: side))
-        }
+        let bytesPerRow = side * 4
+        let data = UnsafeMutablePointer<UInt8>.allocate(capacity: side * bytesPerRow)
+        defer { data.deallocate() }
 
-        guard let cgImage = sample.cgImage,
-              let data = cgImage.dataProvider?.data,
-              let bytes = CFDataGetBytePtr(data)
-        else { return .neutral }
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+            | CGBitmapInfo.byteOrder32Big.rawValue
+        guard let context = CGContext(
+            data: data,
+            width: side,
+            height: side,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo
+        ) else { return .neutral }
 
-        let bytesPerPixel = max(1, cgImage.bitsPerPixel / 8)
-        let bytesPerRow = cgImage.bytesPerRow
+        context.setFillColor(UIColor.black.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: side, height: side))
+        context.interpolationQuality = .low
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
+
         var red = 0.0
         var green = 0.0
         var blue = 0.0
         var count = 0.0
 
-        for y in 0..<side {
-            for x in 0..<side {
-                let offset = y * bytesPerRow + x * bytesPerPixel
-                guard offset + 2 < CFDataGetLength(data) else { continue }
-                red += Double(bytes[offset]) / 255
-                green += Double(bytes[offset + 1]) / 255
-                blue += Double(bytes[offset + 2]) / 255
-                count += 1
-            }
+        for offset in stride(from: 0, to: side * bytesPerRow, by: 4) {
+            // Explicit RGBA byte order: R, G, B, A.
+            red += Double(data[offset]) / 255
+            green += Double(data[offset + 1]) / 255
+            blue += Double(data[offset + 2]) / 255
+            count += 1
         }
 
         guard count > 0 else { return .neutral }
@@ -166,18 +170,18 @@ final class CoverLightPaletteCache {
         green /= count
         blue /= count
 
-        // Lift the sampled colour toward white for the key light and push the
-        // fill slightly cool. Very dark covers still get a visible sheen.
+        // The key is a film-light white tinted by the cover. The fill is a
+        // restrained cool bounce so the sheen stays clean instead of muddy.
         let key = UIColor(
-            red: min(1, 0.52 + red * 0.48),
-            green: min(1, 0.50 + green * 0.46),
-            blue: min(1, 0.44 + blue * 0.42),
+            red: min(1, 0.72 + red * 0.28),
+            green: min(1, 0.70 + green * 0.28),
+            blue: min(1, 0.64 + blue * 0.26),
             alpha: 1
         )
         let fill = UIColor(
-            red: min(1, red * 0.55 + 0.06),
-            green: min(1, green * 0.68 + 0.14),
-            blue: min(1, blue * 0.82 + 0.28),
+            red: min(1, 0.12 + red * 0.38),
+            green: min(1, 0.22 + green * 0.42),
+            blue: min(1, 0.40 + blue * 0.44),
             alpha: 1
         )
 
@@ -243,55 +247,70 @@ struct LivingLightOverlay: View {
         guard size.width > 1, size.height > 1 else { return }
 
         let diagonal = hypot(size.width, size.height)
-        let driftX = sin(time * 0.21) * 0.012 + sin(time * 0.07) * 0.008
-        let driftY = cos(time * 0.17) * 0.010
-        let lightX = size.width * (0.5 - sample.x * 0.27 + driftX)
-        let lightY = size.height * (0.40 + sample.y * 0.22 + driftY)
+        let driftX = sin(time * 0.21) * 0.010 + sin(time * 0.07) * 0.007
+        let driftY = cos(time * 0.17) * 0.008
+        let lightX = size.width * (0.5 - sample.x * 0.24 + driftX)
+        let lightY = size.height * (0.41 + sample.y * 0.20 + driftY)
         let key = CGPoint(x: lightX, y: lightY)
 
         context.blendMode = .screen
 
-        // Key light.
+        // Broad key wash.
         context.fill(
             Path(CGRect(origin: .zero, size: size)),
             with: .radialGradient(
                 Gradient(stops: [
-                    .init(color: palette.highlight.opacity(0.62 * intensity), location: 0),
-                    .init(color: palette.highlight.opacity(0.24 * intensity), location: 0.28),
-                    .init(color: palette.highlight.opacity(0.06 * intensity), location: 0.58),
-                    .init(color: .clear, location: 0.82)
+                    .init(color: palette.highlight.opacity(0.38 * intensity), location: 0),
+                    .init(color: palette.highlight.opacity(0.13 * intensity), location: 0.34),
+                    .init(color: palette.highlight.opacity(0.025 * intensity), location: 0.66),
+                    .init(color: .clear, location: 0.88)
                 ]),
                 center: key,
                 startRadius: 0,
-                endRadius: diagonal * 0.62
+                endRadius: diagonal * 0.64
             )
         )
 
-        // Cooler fill from the opposite side keeps the cover from looking flat.
+        // Tight highlight for the surface glint.
         context.fill(
             Path(CGRect(origin: .zero, size: size)),
             with: .radialGradient(
                 Gradient(stops: [
-                    .init(color: palette.fill.opacity(0.26 * intensity), location: 0),
-                    .init(color: palette.fill.opacity(0.09 * intensity), location: 0.42),
-                    .init(color: .clear, location: 0.80)
+                    .init(color: .white.opacity(0.11 * intensity), location: 0),
+                    .init(color: palette.highlight.opacity(0.045 * intensity), location: 0.45),
+                    .init(color: .clear, location: 1)
+                ]),
+                center: key,
+                startRadius: 0,
+                endRadius: diagonal * 0.25
+            )
+        )
+
+        // Restrained cool bounce from the opposite side.
+        context.fill(
+            Path(CGRect(origin: .zero, size: size)),
+            with: .radialGradient(
+                Gradient(stops: [
+                    .init(color: palette.fill.opacity(0.12 * intensity), location: 0),
+                    .init(color: palette.fill.opacity(0.035 * intensity), location: 0.50),
+                    .init(color: .clear, location: 0.84)
                 ]),
                 center: CGPoint(
                     x: size.width - lightX,
                     y: size.height - lightY
                 ),
                 startRadius: 0,
-                endRadius: diagonal * 0.52
+                endRadius: diagonal * 0.48
             )
         )
 
-        // Specular sweep across the print.
-        let angle = -0.62 + sample.roll * 0.34 + sample.x * 0.12
-        let bandLength = diagonal * 1.55
-        let bandHeight = diagonal * 0.12
+        // Narrow specular sweep across the print.
+        let angle = -0.62 + sample.roll * 0.32 + sample.x * 0.10
+        let bandLength = diagonal * 1.45
+        let bandHeight = diagonal * 0.075
         let bandCenter = CGPoint(
-            x: size.width * (0.5 - sample.x * 0.34),
-            y: size.height * (0.40 + sample.y * 0.26)
+            x: size.width * (0.5 - sample.x * 0.30),
+            y: size.height * (0.41 + sample.y * 0.23)
         )
         context.drawLayer { layer in
             layer.translateBy(x: bandCenter.x, y: bandCenter.y)
@@ -308,9 +327,9 @@ struct LivingLightOverlay: View {
                 with: .linearGradient(
                     Gradient(stops: [
                         .init(color: .clear, location: 0),
-                        .init(color: palette.highlight.opacity(0.02 * intensity), location: 0.28),
-                        .init(color: .white.opacity(0.19 * intensity), location: 0.50),
-                        .init(color: palette.highlight.opacity(0.03 * intensity), location: 0.72),
+                        .init(color: palette.highlight.opacity(0.015 * intensity), location: 0.30),
+                        .init(color: .white.opacity(0.135 * intensity), location: 0.50),
+                        .init(color: palette.highlight.opacity(0.02 * intensity), location: 0.70),
                         .init(color: .clear, location: 1)
                     ]),
                     startPoint: CGPoint(x: 0, y: -bandHeight / 2),
@@ -326,16 +345,234 @@ struct LivingLightOverlay: View {
             with: .linearGradient(
                 Gradient(stops: [
                     .init(color: .clear, location: 0),
-                    .init(color: .white.opacity(0.42 * intensity), location: 0.43),
-                    .init(color: .white.opacity(0.16 * intensity), location: 0.6),
+                    .init(color: .white.opacity(0.26 * intensity), location: 0.43),
+                    .init(color: .white.opacity(0.10 * intensity), location: 0.62),
                     .init(color: .clear, location: 1)
                 ]),
                 startPoint: CGPoint(x: 0, y: 0),
                 endPoint: CGPoint(x: size.width, y: size.height)
             ),
-            lineWidth: 1.1
+            lineWidth: 1
         )
 
         context.blendMode = .normal
+    }
+}
+
+struct HeroEdgeBlur {
+    let left: UIImage
+    let right: UIImage
+}
+
+/// Renders the blurred side edges once per artwork, so the live layer only has
+/// to draw two cached textures. This is what gives the cover the soft,
+/// fold-like side blur when the phone is tilted left or right.
+final class HeroEdgeBlurCache {
+    static let shared = HeroEdgeBlurCache()
+
+    private final class Box {
+        let edges: HeroEdgeBlur
+        init(_ edges: HeroEdgeBlur) { self.edges = edges }
+    }
+
+    private let cache = NSCache<NSURL, Box>()
+    private let lock = NSLock()
+    private var tasks: [NSURL: Task<HeroEdgeBlur?, Never>] = [:]
+    private static let ciContext = CIContext(options: nil)
+    private static let renderSide: CGFloat = 720
+
+    private init() {
+        cache.countLimit = 16
+        cache.totalCostLimit = 72 * 1024 * 1024
+    }
+
+    func cached(for url: URL?) -> HeroEdgeBlur? {
+        guard let url else { return nil }
+        return cache.object(forKey: url as NSURL)?.edges
+    }
+
+    func prepare(for url: URL?) async -> HeroEdgeBlur? {
+        guard let url else { return nil }
+        if let cached = cached(for: url) { return cached }
+
+        let key = url as NSURL
+        lock.lock()
+        if let existing = tasks[key] {
+            lock.unlock()
+            return await existing.value
+        }
+
+        let task = Task.detached(priority: .utility) { () -> HeroEdgeBlur? in
+            let source = ArtworkImageCache.shared.image(for: url)
+                ?? await ArtworkImageCache.shared.loadImage(for: url)
+            guard let source else { return nil }
+            return Self.render(source)
+        }
+        tasks[key] = task
+        lock.unlock()
+
+        let edges = await task.value
+
+        lock.lock()
+        tasks[key] = nil
+        lock.unlock()
+
+        if let edges {
+            let cost = Int(edges.left.size.width * edges.left.size.height * 4) * 2
+            cache.setObject(Box(edges), forKey: key, cost: cost)
+        }
+        return edges
+    }
+
+    private static func render(_ image: UIImage) -> HeroEdgeBlur? {
+        let side = renderSide
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(
+            size: CGSize(width: side, height: side),
+            format: format
+        )
+
+        let square = renderer.image { _ in
+            let factor = max(side / max(1, image.size.width), side / max(1, image.size.height))
+            let drawSize = CGSize(
+                width: image.size.width * factor,
+                height: image.size.height * factor
+            )
+            image.draw(in: CGRect(
+                x: (side - drawSize.width) / 2,
+                y: (side - drawSize.height) / 2,
+                width: drawSize.width,
+                height: drawSize.height
+            ))
+        }
+
+        guard let cgImage = square.cgImage else { return nil }
+        let input = CIImage(cgImage: cgImage)
+        let blurred = input
+            .clampedToExtent()
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 26])
+            .cropped(to: input.extent)
+
+        guard let output = Self.ciContext.createCGImage(blurred, from: input.extent) else {
+            return nil
+        }
+        let blurredImage = UIImage(cgImage: output)
+
+        guard let left = edgeMasked(blurredImage, leading: true),
+              let right = edgeMasked(blurredImage, leading: false)
+        else { return nil }
+        return HeroEdgeBlur(left: left, right: right)
+    }
+
+    private static func edgeMasked(_ image: UIImage, leading: Bool) -> UIImage? {
+        let size = image.size
+        guard size.width > 1, size.height > 1 else { return nil }
+
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+
+        return renderer.image { rendererContext in
+            image.draw(in: CGRect(origin: .zero, size: size))
+            let context = rendererContext.cgContext
+            context.setBlendMode(.destinationIn)
+
+            let colors = [
+                UIColor.white.withAlphaComponent(1).cgColor,
+                UIColor.white.withAlphaComponent(0.58).cgColor,
+                UIColor.white.withAlphaComponent(0).cgColor,
+                UIColor.white.withAlphaComponent(0).cgColor
+            ] as CFArray
+            guard let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: colors,
+                locations: [0, 0.20, 0.52, 1]
+            ) else { return }
+
+            if leading {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: 0, y: 0),
+                    end: CGPoint(x: size.width, y: 0),
+                    options: []
+                )
+            } else {
+                context.drawLinearGradient(
+                    gradient,
+                    start: CGPoint(x: size.width, y: 0),
+                    end: CGPoint(x: 0, y: 0),
+                    options: []
+                )
+            }
+        }
+    }
+
+}
+
+struct HeroEdgeBlurOverlay: View {
+    let url: URL?
+    var intensity: Double = 1
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var edges: HeroEdgeBlur?
+    @State private var isVisible = false
+
+    private let controller = MotionLightController.shared
+
+    var body: some View {
+        Group {
+            if reduceMotion {
+                canvas(sample: .level)
+            } else {
+                TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isVisible)) { _ in
+                    canvas(sample: controller.sample)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .task(id: url) {
+            edges = await HeroEdgeBlurCache.shared.prepare(for: url)
+        }
+        .onAppear {
+            isVisible = true
+            if !reduceMotion {
+                controller.begin()
+            }
+        }
+        .onDisappear {
+            isVisible = false
+            if !reduceMotion {
+                controller.end()
+            }
+        }
+    }
+
+    private func canvas(sample: MotionLightSample) -> some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            guard let edges, size.width > 1, size.height > 1 else { return }
+
+            let strength = smoothstep(0.04, 0.62, abs(sample.x)) * 0.62 * intensity
+            guard strength > 0.01 else { return }
+
+            let rect = CGRect(origin: .zero, size: size)
+            context.drawLayer { layer in
+                layer.clip(to: Path(rect))
+                if sample.x > 0 {
+                    layer.opacity = strength
+                    layer.draw(Image(uiImage: edges.right), in: rect)
+                } else {
+                    layer.opacity = strength
+                    layer.draw(Image(uiImage: edges.left), in: rect)
+                }
+            }
+        }
+    }
+
+    private func smoothstep(_ edge0: Double, _ edge1: Double, _ value: Double) -> Double {
+        let t = min(1, max(0, (value - edge0) / (edge1 - edge0)))
+        return t * t * (3 - 2 * t)
     }
 }

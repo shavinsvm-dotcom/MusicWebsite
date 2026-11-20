@@ -208,6 +208,7 @@ struct ArtworkView: View {
     let url: URL?
     let seed: String
     let onImageLoaded: ((UIImage) -> Void)?
+    let highResolution: Bool
 
     @State private var image: UIImage?
     @State private var failed = false
@@ -215,17 +216,31 @@ struct ArtworkView: View {
     init(
         url: URL?,
         seed: String,
-        onImageLoaded: ((UIImage) -> Void)? = nil
+        onImageLoaded: ((UIImage) -> Void)? = nil,
+        highResolution: Bool = false
     ) {
         self.url = url
         self.seed = seed
         self.onImageLoaded = onImageLoaded
-        _image = State(initialValue: url.flatMap { ArtworkImageCache.shared.image(for: $0) })
+        self.highResolution = highResolution
+
+        let cached: UIImage?
+        if highResolution, let url {
+            cached = ArtworkImageCache.shared.heroImage(for: url)
+                ?? ArtworkImageCache.shared.image(for: url)
+        } else {
+            cached = url.flatMap { ArtworkImageCache.shared.image(for: $0) }
+        }
+        _image = State(initialValue: cached)
     }
 
     private var resolvedImage: UIImage? {
         if let image { return image }
         guard let url else { return nil }
+        if highResolution {
+            return ArtworkImageCache.shared.heroImage(for: url)
+                ?? ArtworkImageCache.shared.image(for: url)
+        }
         return ArtworkImageCache.shared.image(for: url)
     }
 
@@ -252,13 +267,25 @@ struct ArtworkView: View {
         }
         .clipped()
         .task(id: url) {
-            if let url, let cached = ArtworkImageCache.shared.image(for: url) {
-                if image !== cached {
-                    image = cached
+            if let url {
+                let cached = highResolution
+                    ? ArtworkImageCache.shared.heroImage(for: url)
+                        ?? ArtworkImageCache.shared.image(for: url)
+                    : ArtworkImageCache.shared.image(for: url)
+
+                if let cached {
+                    if image !== cached {
+                        image = cached
+                    }
+                    failed = false
+                    onImageLoaded?(cached)
+
+                    // A cached thumbnail can paint immediately, but the player
+                    // still upgrades itself to the 1200 px hero decode.
+                    if !highResolution || ArtworkImageCache.shared.heroImage(for: url) != nil {
+                        return
+                    }
                 }
-                failed = false
-                onImageLoaded?(cached)
-                return
             }
             await loadImage()
         }
@@ -272,17 +299,33 @@ struct ArtworkView: View {
             return
         }
 
-        if let cached = ArtworkImageCache.shared.image(for: url) {
+        if highResolution {
+            if let cached = ArtworkImageCache.shared.heroImage(for: url) {
+                image = cached
+                failed = false
+                onImageLoaded?(cached)
+                return
+            }
+        } else if let cached = ArtworkImageCache.shared.image(for: url) {
             image = cached
             failed = false
             onImageLoaded?(cached)
             return
         }
 
-        image = nil
+        if !highResolution || image == nil {
+            image = nil
+        }
         failed = false
 
-        guard let loaded = await ArtworkImageCache.shared.loadImage(for: url),
+        let loaded: UIImage?
+        if highResolution {
+            loaded = await ArtworkImageCache.shared.loadHeroImage(for: url)
+        } else {
+            loaded = await ArtworkImageCache.shared.loadImage(for: url)
+        }
+
+        guard let loaded,
               !Task.isCancelled
         else {
             if !Task.isCancelled { failed = true }
@@ -320,12 +363,16 @@ final class ArtworkImageCache {
     static let shared = ArtworkImageCache()
 
     private let cache = NSCache<NSURL, UIImage>()
+    private let heroCache = NSCache<NSURL, UIImage>()
     private let taskLock = NSLock()
     private var loadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
+    private var heroLoadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
 
     private init() {
         cache.countLimit = 160
         cache.totalCostLimit = 96 * 1024 * 1024
+        heroCache.countLimit = 20
+        heroCache.totalCostLimit = 72 * 1024 * 1024
     }
 
     func image(for url: URL) -> UIImage? {
@@ -337,10 +384,43 @@ final class ArtworkImageCache {
         cache.setObject(image, forKey: url as NSURL, cost: cost)
     }
 
+    func heroImage(for url: URL) -> UIImage? {
+        heroCache.object(forKey: url as NSURL)
+    }
+
+    func loadHeroImage(for url: URL, maxPixelSize: Int = 1200) async -> UIImage? {
+        if let cached = heroImage(for: url) { return cached }
+
+        let key = url as NSURL
+        taskLock.lock()
+        if let existing = heroLoadingTasks[key] {
+            taskLock.unlock()
+            return await existing.value
+        }
+
+        let task = Task.detached(priority: .userInitiated) {
+            await Self.downsample(url: url, maxPixelSize: maxPixelSize)
+        }
+        heroLoadingTasks[key] = task
+        taskLock.unlock()
+
+        let image = await task.value
+
+        taskLock.lock()
+        heroLoadingTasks[key] = nil
+        taskLock.unlock()
+
+        if let image {
+            let cost = Int(image.size.width * image.size.height * 4)
+            heroCache.setObject(image, forKey: key, cost: cost)
+        }
+        return image
+    }
+
     /// Loads and downsamples artwork once per URL. Playlist mosaics often ask
     /// for the same covers several times in one frame; sharing the task keeps
     /// those cells from starting duplicate network and decode work.
-    func loadImage(for url: URL, maxPixelSize: Int = 1200) async -> UIImage? {
+    func loadImage(for url: URL, maxPixelSize: Int = 900) async -> UIImage? {
         if let cached = image(for: url) { return cached }
 
         let key = url as NSURL
