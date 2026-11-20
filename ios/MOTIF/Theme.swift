@@ -576,7 +576,6 @@ final class ArtworkBlurCache {
         let side = renderSide
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
-        format.opaque = true
         let renderer = UIGraphicsImageRenderer(
             size: CGSize(width: side, height: side),
             format: format
@@ -687,7 +686,7 @@ final class PlaybackBackdropCache {
     private let cache = NSCache<NSURL, UIImage>()
     private let gradientCache = NSCache<NSURL, PlayerGradientBox>()
     private let context = CIContext(options: nil)
-    private let renderSize = CGSize(width: 180, height: 320)
+    private let renderSize = CGSize(width: 160, height: 280)
 
     private init() {
         cache.countLimit = 32
@@ -818,6 +817,7 @@ final class PlaybackBackdropCache {
 
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
+        format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
         let scaled = renderer.image { _ in
             let factor = max(size.width / image.size.width, size.height / image.size.height)
@@ -837,7 +837,7 @@ final class PlaybackBackdropCache {
         let input = CIImage(cgImage: cgImage)
         let blurred = input
             .clampedToExtent()
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 18])
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 12])
             .applyingFilter("CIColorControls", parameters: [
                 kCIInputSaturationKey: 1.38,
                 kCIInputBrightnessKey: -0.055,

@@ -5,9 +5,11 @@ import UIKit
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
-    let onFrameChange: (CGRect) -> Void
+    let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
+    @State private var simplifySurface = false
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
@@ -15,6 +17,7 @@ struct MiniPlayer: View {
             VStack(spacing: 0) {
                 HStack(spacing: 8) {
                     Button {
+                        simplifySurface = true
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
@@ -103,27 +106,14 @@ struct MiniPlayer: View {
                 .padding(.trailing, 8)
                 .frame(height: 50)
             }
-            .background(
-                Color.clear
-                    .playerGlass(Capsule())
-            )
+            .background(miniPlayerSurface)
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
-            .background(
-                GeometryReader { proxy in
-                    Color.clear
-                        .onAppear {
-                            let frame = proxy.frame(in: .global)
-                            DispatchQueue.main.async {
-                                onFrameChange(frame)
-                            }
-                        }
-                        .onChange(of: proxy.frame(in: .global)) { frame in
-                            DispatchQueue.main.async {
-                                onFrameChange(frame)
-                            }
-                        }
-                }
+            .modifier(
+                MiniPlayerTransitionSource(
+                    sourceID: transitionSourceID,
+                    namespace: transitionNamespace
+                )
             )
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
@@ -131,6 +121,31 @@ struct MiniPlayer: View {
                 .move(edge: .bottom)
                     .combined(with: .opacity)
             )
+            .onChange(of: showNowPlaying) { presented in
+                guard !presented else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        simplifySurface = false
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var miniPlayerSurface: some View {
+        if simplifySurface {
+            Capsule()
+                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
+                .overlay {
+                    Capsule()
+                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
+                }
+                .transition(.opacity)
+        } else {
+            Color.clear
+                .playerGlass(Capsule())
+                .transition(.opacity)
         }
     }
 
@@ -184,9 +199,9 @@ struct NowPlayingView: View {
     @State private var lyricsFinderTrack: Track?
     @State private var effectsReady = false
     @State private var gradient = PlayerGradient.fallback
-    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 54
-    @ScaledMetric(relativeTo: .body) private var artistSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 12
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 58
+    @ScaledMetric(relativeTo: .body) private var artistSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11
     private static let controlHaptics = UIImpactFeedbackGenerator(style: .light)
 
     private var currentTrack: Track? {
@@ -412,22 +427,22 @@ struct NowPlayingView: View {
                         Text(track.title)
                             .font(
                                 .system(
-                                    size: min(titleSize, 62),
+                                    size: min(titleSize, 68),
                                     weight: .black
                                 )
                             )
-                            .tracking(-1.4)
+                            .tracking(-1.6)
                             .foregroundStyle(.white)
                             .multilineTextAlignment(.leading)
                             .lineLimit(2)
-                            .minimumScaleFactor(0.58)
+                            .minimumScaleFactor(0.55)
                             .allowsTightening(true)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text(track.artist)
                             .font(
                                 .system(
-                                    size: min(artistSize, 18),
+                                    size: min(artistSize, 17),
                                     weight: .medium
                                 )
                             )
@@ -437,14 +452,14 @@ struct NowPlayingView: View {
 
                         HStack(spacing: 7) {
                             Image(systemName: "opticaldisc")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 10, weight: .medium))
                             Text(metadataText(track))
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                         }
                         .font(
                             .system(
-                                size: min(metaSize, 14),
+                                size: min(metaSize, 13),
                                 weight: .medium
                             )
                         )
@@ -458,8 +473,8 @@ struct NowPlayingView: View {
                                 track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
                                 systemImage: "quote.bubble"
                             )
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.66))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.64))
                             .padding(.top, 2)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.94))
@@ -671,7 +686,7 @@ struct NowPlayingView: View {
             }
 
             Text("Now playing")
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 11, weight: .semibold))
                 .tracking(0.8)
                 .textCase(.uppercase)
                 .foregroundStyle(.white.opacity(0.66))
@@ -897,8 +912,8 @@ private struct NowPlayingScrubber: View {
                 Spacer()
                 Text(timeText(max(duration - sliderValue, 0)))
             }
-            .font(.system(size: 10, weight: .medium, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.52))
+            .font(.system(size: 9, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.50))
             .padding(.horizontal, 2)
         }
         .onAppear {
@@ -932,6 +947,24 @@ private struct NowPlayingScrubber: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private struct MiniPlayerTransitionSource: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.matchedTransitionSource(id: sourceID, in: namespace) { source in
+                source.clipShape(
+                    RoundedRectangle(cornerRadius: 25, style: .continuous)
+                )
+            }
+        } else {
+            content
+        }
     }
 }
 
