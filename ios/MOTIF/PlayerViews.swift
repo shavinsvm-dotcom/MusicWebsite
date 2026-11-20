@@ -522,39 +522,6 @@ struct NowPlayingView: View {
                 Spacer()
 
                 HStack(spacing: 6) {
-                    Button {
-                        haptic()
-                        withAnimation(.spring(response: 0.26, dampingFraction: 0.72)) {
-                            player.setAutomix(!player.automixEnabled)
-                        }
-                    } label: {
-                        Image(systemName: "waveform.path.ecg")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(
-                                player.automixEnabled ? Color.white : Color.white.opacity(0.64)
-                            )
-                            .frame(width: 36, height: 36)
-                            .motifBounce(player.automixEnabled)
-                            .playerGlass(Circle())
-                    }
-                    .buttonStyle(PlayerControlPressStyle(scale: 0.88))
-                    .accessibilityLabel(player.automixEnabled ? "Turn Automix off" : "Turn Automix on")
-
-                    Button {
-                        haptic()
-                        showEqualizer = true
-                    } label: {
-                        Image(systemName: "slider.vertical.3")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(
-                                equalizer.isEnabled ? Color.white : Color.white.opacity(0.64)
-                            )
-                            .frame(width: 36, height: 36)
-                            .playerGlass(Circle())
-                    }
-                    .buttonStyle(PlayerControlPressStyle(scale: 0.88))
-                    .accessibilityLabel("Equalizer")
-
                     Menu {
                     if !library.playlists.isEmpty {
                         Section("Add to playlist") {
@@ -627,6 +594,28 @@ struct NowPlayingView: View {
                     }
 
                     Section("Playback") {
+                        Button {
+                            haptic()
+                            withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
+                                player.setAutomix(!player.automixEnabled)
+                            }
+                        } label: {
+                            Label(
+                                player.automixEnabled ? "Automix · On" : "Automix",
+                                systemImage: "waveform.path.ecg"
+                            )
+                        }
+
+                        Button {
+                            haptic()
+                            showEqualizer = true
+                        } label: {
+                            Label(
+                                equalizer.isEnabled ? "Equalizer · On" : "Equalizer",
+                                systemImage: "slider.vertical.3"
+                            )
+                        }
+
                         Menu {
                             if player.isSleepTimerActive {
                                 Button {
@@ -690,6 +679,8 @@ struct NowPlayingView: View {
                 .tracking(0.8)
                 .textCase(.uppercase)
                 .foregroundStyle(.white.opacity(0.66))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .accessibilityElement(children: .combine)
         }
         .padding(.horizontal, 24)
@@ -812,8 +803,10 @@ struct NowPlayingView: View {
                         .fill(Color.white)
                         .frame(width: 3.5, height: 3.5)
                         .offset(y: 2)
+                        .transition(.scale.combined(with: .opacity))
                 }
             }
+            .animation(.spring(response: 0.30, dampingFraction: 0.68), value: player.repeatMode)
             .frame(width: 42, height: 42)
             .playerGlass(Circle())
         }

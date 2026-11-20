@@ -186,11 +186,12 @@ struct MotifPressStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let spring: Animation = configuration.isPressed
-            ? .spring(response: 0.14, dampingFraction: 0.86)
-            : .spring(response: 0.36, dampingFraction: 0.56)
+            ? .spring(response: 0.16, dampingFraction: 0.82)
+            : .spring(response: 0.40, dampingFraction: 0.62)
 
         return configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
+            .offset(y: configuration.isPressed ? 1 : 0)
             .brightness(configuration.isPressed ? -0.035 : 0)
             .opacity(configuration.isPressed ? opacity : 1)
             .animation(reduceMotion ? nil : spring, value: configuration.isPressed)
@@ -206,14 +207,15 @@ struct PlayerControlPressStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let spring: Animation = configuration.isPressed
-            ? .spring(response: 0.13, dampingFraction: 0.84)
-            : .spring(response: 0.34, dampingFraction: 0.55)
+            ? .spring(response: 0.15, dampingFraction: 0.76)
+            : .spring(response: 0.44, dampingFraction: 0.60)
 
         return configuration.label
             .scaleEffect(configuration.isPressed ? scale : 1)
+            .offset(y: configuration.isPressed ? 1.5 : 0)
             .brightness(configuration.isPressed ? -0.045 : 0)
             .shadow(
-                color: .black.opacity(configuration.isPressed ? 0.10 : 0.22),
+                color: .black.opacity(configuration.isPressed ? 0.08 : 0.22),
                 radius: configuration.isPressed ? 2 : 7,
                 y: configuration.isPressed ? 1 : 3
             )
