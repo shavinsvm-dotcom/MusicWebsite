@@ -183,6 +183,83 @@ private struct MiniArtworkProgressRing: View {
     }
 }
 
+private struct PlayerBackdrop: View {
+    let artworkURL: URL?
+    let cachedImage: UIImage?
+
+    @State private var image: UIImage?
+    @State private var gradient = PlayerGradient.fallback
+
+    var body: some View {
+        let screen = UIScreen.main.bounds.size
+        let canvas = CGSize(width: screen.width * 1.42, height: screen.height * 1.42)
+        let displayImage = image ?? cachedImage
+
+        ZStack {
+            Color.black
+
+            PlayerGradientView(gradient: gradient)
+                .frame(width: canvas.width, height: canvas.height)
+                .clipped()
+
+            if let displayImage {
+                imageLayer(displayImage, canvas: canvas)
+            } else if let artworkURL {
+                AsyncImage(url: artworkURL) { phase in
+                    if let image = phase.image {
+                        imageLayer(image, canvas: canvas)
+                    }
+                }
+            }
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.58), location: 0),
+                    .init(color: .black.opacity(0.16), location: 0.28),
+                    .init(color: .black.opacity(0.26), location: 0.60),
+                    .init(color: .black.opacity(0.72), location: 0.88),
+                    .init(color: .black, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .frame(width: screen.width, height: screen.height)
+        .clipped()
+        .ignoresSafeArea()
+        .task(id: artworkURL) {
+            await load()
+        }
+    }
+
+    private func imageLayer(_ image: UIImage, canvas: CGSize) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(width: canvas.width, height: canvas.height)
+            .clipped()
+            .blur(radius: 10)
+            .saturation(1.18)
+            .opacity(0.94)
+    }
+
+    private func load() async {
+        guard let artworkURL else { return }
+
+        if let cached = PlaybackBackdropCache.shared.image(for: artworkURL) {
+            image = cached
+        }
+
+        async let gradientTask = PlaybackBackdropCache.shared.prepareGradient(for: artworkURL)
+        async let imageTask = PlaybackBackdropCache.shared.prepare(for: artworkURL)
+
+        gradient = await gradientTask
+        if let prepared = await imageTask {
+            image = prepared
+        }
+    }
+}
+
 struct NowPlayingView: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var library: LibraryStore
@@ -198,7 +275,6 @@ struct NowPlayingView: View {
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
     @State private var effectsReady = false
-    @State private var gradient = PlayerGradient.fallback
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 58
     @ScaledMetric(relativeTo: .body) private var artistSize: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11
@@ -235,9 +311,6 @@ struct NowPlayingView: View {
                 effectsReady = true
             }
         }
-        .task(id: currentTrack?.artworkURL) {
-            await loadGradient()
-        }
         .sheet(isPresented: $showQueue) {
             UpNextView()
                 .environmentObject(player)
@@ -268,42 +341,10 @@ struct NowPlayingView: View {
     }
 
     private func backdrop(_ track: Track) -> some View {
-        GeometryReader { geometry in
-            ZStack {
-                Color.black
-
-                PlayerGradientView(gradient: gradient)
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .clipped()
-                    .overlay(Color.black.opacity(0.18).allowsHitTesting(false))
-
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.66), location: 0),
-                        .init(color: .black.opacity(0.22), location: 0.30),
-                        .init(color: .black.opacity(0.34), location: 0.62),
-                        .init(color: .black.opacity(0.82), location: 0.90),
-                        .init(color: .black, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .clipped()
-        }
-        .ignoresSafeArea()
-    }
-
-    private func loadGradient() async {
-        guard let url = currentTrack?.artworkURL else {
-            gradient = .fallback
-            return
-        }
-
-        let next = await PlaybackBackdropCache.shared.prepareGradient(for: url)
-        guard !Task.isCancelled, currentTrack?.artworkURL == url else { return }
-        gradient = next
+        PlayerBackdrop(
+            artworkURL: track.artworkURL,
+            cachedImage: backdropImage
+        )
     }
 
     private func content(_ track: Track) -> some View {

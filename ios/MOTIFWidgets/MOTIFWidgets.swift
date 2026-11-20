@@ -45,7 +45,14 @@ struct MOTIFNowPlayingWidget: Widget {
         }
         .configurationDisplayName("Now Playing")
         .description("Your current Lilt track and playback progress.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([
+            .systemSmall,
+            .systemMedium,
+            .systemLarge,
+            .accessoryCircular,
+            .accessoryRectangular,
+            .accessoryInline
+        ])
     }
 }
 
@@ -53,7 +60,21 @@ private struct MOTIFNowPlayingWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: NowPlayingEntry
 
+    @ViewBuilder
     var body: some View {
+        switch family {
+        case .accessoryCircular:
+            accessoryCircular
+        case .accessoryRectangular:
+            accessoryRectangular
+        case .accessoryInline:
+            accessoryInline
+        default:
+            fullWidget
+        }
+    }
+
+    private var fullWidget: some View {
         ZStack {
             LinearGradient(
                 colors: [Color(red: 0.10, green: 0.10, blue: 0.12), Color(red: 0.04, green: 0.04, blue: 0.05)],
@@ -74,12 +95,16 @@ private struct MOTIFNowPlayingWidgetView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipped()
                 .blur(radius: 28)
-                .opacity(0.62)
-                .overlay(Color.black.opacity(0.28))
+                .opacity(0.66)
+                .overlay(Color.black.opacity(0.30))
             }
 
             if let snapshot = entry.snapshot {
-                content(snapshot)
+                if family == .systemLarge {
+                    largeContent(snapshot)
+                } else {
+                    content(snapshot)
+                }
             } else {
                 emptyState
             }
@@ -91,7 +116,7 @@ private struct MOTIFNowPlayingWidgetView: View {
     private func content(_ snapshot: SharedNowPlaying) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                artwork(snapshot)
+                artwork(snapshot, size: 44)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(snapshot.title)
@@ -108,20 +133,55 @@ private struct MOTIFNowPlayingWidgetView: View {
 
             Spacer(minLength: 0)
 
-            VStack(spacing: 5) {
-                ProgressView(value: progress(snapshot))
-                    .tint(.primary)
-
-                HStack {
-                    Text(snapshot.isPlaying ? "Playing" : "Paused")
-                    Spacer()
-                    Text(timeText(snapshot.elapsed))
-                }
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.secondary)
-            }
+            progressBlock(snapshot)
         }
         .padding(14)
+    }
+
+    private func largeContent(_ snapshot: SharedNowPlaying) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                artwork(snapshot, size: 82)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(snapshot.title)
+                        .font(.system(size: 19, weight: .bold))
+                        .lineLimit(2)
+                    Text(snapshot.artist)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if !snapshot.album.isEmpty {
+                        Text(snapshot.album)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            Spacer(minLength: 0)
+
+            progressBlock(snapshot)
+        }
+        .padding(18)
+    }
+
+    private func progressBlock(_ snapshot: SharedNowPlaying) -> some View {
+        VStack(spacing: 6) {
+            ProgressView(value: progress(snapshot))
+                .tint(.primary)
+
+            HStack {
+                Text(snapshot.isPlaying ? "Playing" : "Paused")
+                Spacer()
+                Text("\(timeText(snapshot.elapsed)) / \(timeText(snapshot.duration))")
+            }
+            .font(.system(size: 10, weight: .medium).monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
     }
 
     private var emptyState: some View {
@@ -141,31 +201,66 @@ private struct MOTIFNowPlayingWidgetView: View {
     }
 
     @ViewBuilder
-    private func artwork(_ snapshot: SharedNowPlaying) -> some View {
+    private func artwork(_ snapshot: SharedNowPlaying, size: CGFloat) -> some View {
         if let value = snapshot.artworkURL, let url = URL(string: value) {
             AsyncImage(url: url) { phase in
                 if let image = phase.image {
                     image.resizable().scaledToFill()
                 } else {
-                    artworkFallback
+                    artworkFallback(size: size)
                 }
             }
-            .frame(width: 44, height: 44)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.18, style: .continuous))
         } else {
-            artworkFallback
-                .frame(width: 44, height: 44)
+            artworkFallback(size: size)
         }
     }
 
-    private var artworkFallback: some View {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+    private func artworkFallback(size: CGFloat) -> some View {
+        RoundedRectangle(cornerRadius: size * 0.18, style: .continuous)
             .fill(Color.secondary.opacity(0.16))
+            .frame(width: size, height: size)
             .overlay {
                 Image(systemName: "music.note")
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: max(10, size * 0.3), weight: .semibold))
                     .foregroundStyle(.secondary)
             }
+    }
+
+    private var accessoryCircular: some View {
+        ZStack {
+            AccessoryWidgetBackground()
+            Image(systemName: entry.snapshot?.isPlaying == true ? "waveform" : "pause.fill")
+                .font(.system(size: 18, weight: .semibold))
+        }
+        .widgetURL(URL(string: "motif://nowplaying"))
+    }
+
+    private var accessoryRectangular: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(entry.snapshot?.title ?? "Lilt")
+                .font(.headline)
+                .lineLimit(1)
+            Text(entry.snapshot?.artist ?? "Nothing playing")
+                .font(.caption2)
+                .lineLimit(1)
+            if let snapshot = entry.snapshot {
+                ProgressView(value: progress(snapshot))
+                    .tint(.primary)
+            }
+        }
+        .widgetURL(URL(string: "motif://nowplaying"))
+    }
+
+    private var accessoryInline: some View {
+        Text(inlineText)
+            .widgetURL(URL(string: "motif://nowplaying"))
+    }
+
+    private var inlineText: String {
+        guard let snapshot = entry.snapshot else { return "Lilt · Nothing playing" }
+        return "\(snapshot.title) · \(snapshot.artist)"
     }
 
     private func progress(_ snapshot: SharedNowPlaying) -> Double {
@@ -209,7 +304,7 @@ struct MOTIFLibraryWidget: Widget {
         }
         .configurationDisplayName("Your Library")
         .description("A quick look at your Lilt library and recent songs.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
@@ -244,9 +339,9 @@ private struct MOTIFLibraryWidgetView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
 
-                    if family == .systemMedium, !snapshot.recent.isEmpty {
+                    if family == .systemMedium || family == .systemLarge, !snapshot.recent.isEmpty {
                         Divider().opacity(0.4)
-                        ForEach(snapshot.recent.prefix(3)) { item in
+                        ForEach(snapshot.recent.prefix(family == .systemLarge ? 6 : 3)) { item in
                             HStack(spacing: 7) {
                                 miniArtwork(item)
                                 VStack(alignment: .leading, spacing: 1) {
@@ -338,8 +433,8 @@ struct MOTIFLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.leading) {
                     LiveActivityArtwork(
                         urlString: context.state.artworkURL,
-                        size: 28,
-                        cornerRadius: 7
+                        size: 32,
+                        cornerRadius: 8
                     )
                     .padding(.leading, 4)
                 }
@@ -353,30 +448,54 @@ struct MOTIFLiveActivity: Widget {
                             .font(.system(size: 11))
                             .foregroundStyle(.white.opacity(0.6))
                             .lineLimit(1)
+                        if !context.state.album.isEmpty {
+                            Text(context.state.album)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.white.opacity(0.42))
+                                .lineLimit(1)
+                        }
                     }
                 }
 
                 DynamicIslandExpandedRegion(.bottom) {
-                    if context.state.isPlaying {
-                        ProgressView(
-                            timerInterval: timerRange(context.state),
-                            countsDown: false
-                        )
-                        .tint(.white)
-                        .padding(.horizontal, 4)
-                    } else {
-                        ProgressView(value: progress(context.state))
+                    VStack(spacing: 3) {
+                        if context.state.isPlaying {
+                            ProgressView(
+                                timerInterval: timerRange(context.state),
+                                countsDown: false
+                            )
                             .tint(.white)
-                            .padding(.horizontal, 4)
+                        } else {
+                            ProgressView(value: progress(context.state))
+                                .tint(.white)
+                        }
+
+                        HStack {
+                            Text(timeText(context.state.elapsed))
+                            Spacer()
+                            Text(timeText(max(context.state.duration - context.state.elapsed, 0)))
+                        }
+                        .font(.system(size: 9, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.5))
                     }
+                    .padding(.horizontal, 4)
                 }
             } compactLeading: {
-                Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
-                    .foregroundStyle(.white)
+                LiveActivityArtwork(
+                    urlString: context.state.artworkURL,
+                    size: 22,
+                    cornerRadius: 6
+                )
             } compactTrailing: {
-                Text(timeText(context.state.elapsed))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.8))
+                Group {
+                    if context.state.isPlaying {
+                        Text(timerInterval: timerRange(context.state), countsDown: false)
+                    } else {
+                        Text(timeText(context.state.elapsed))
+                    }
+                }
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(.white.opacity(0.8))
             } minimal: {
                 Image(systemName: context.state.isPlaying ? "waveform" : "pause.fill")
                     .foregroundStyle(.white)
@@ -443,43 +562,76 @@ private struct LiveActivityLockScreenView: View {
     let state: MusicActivityAttributes.ContentState
 
     var body: some View {
-        HStack(spacing: 12) {
-            LiveActivityArtwork(
-                urlString: state.artworkURL,
-                size: 46,
-                cornerRadius: 10
+        ZStack {
+            background
+
+            LinearGradient(
+                colors: [.black.opacity(0.18), .black.opacity(0.52)],
+                startPoint: .top,
+                endPoint: .bottom
             )
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(state.title)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                Text(state.artist)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(1)
-                if state.isPlaying {
-                    ProgressView(
-                        timerInterval: timerRange,
-                        countsDown: false
-                    )
-                    .tint(.white)
-                    .padding(.top, 2)
-                } else {
-                    ProgressView(value: progress)
+            HStack(spacing: 12) {
+                LiveActivityArtwork(
+                    urlString: state.artworkURL,
+                    size: 46,
+                    cornerRadius: 10
+                )
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(state.title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(state.artist)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .lineLimit(1)
+                    if state.isPlaying {
+                        ProgressView(
+                            timerInterval: timerRange,
+                            countsDown: false
+                        )
                         .tint(.white)
                         .padding(.top, 2)
+                    } else {
+                        ProgressView(value: progress)
+                            .tint(.white)
+                            .padding(.top, 2)
+                    }
                 }
-            }
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            Text(timeText)
+                Group {
+                    if state.isPlaying {
+                        Text(timerInterval: timerRange, countsDown: false)
+                    } else {
+                        Text(timeText)
+                    }
+                }
                 .font(.system(size: 10, weight: .medium).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.6))
+            }
+            .padding(14)
         }
-        .padding(14)
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        if let value = state.artworkURL, let url = URL(string: value) {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image {
+                    image.resizable().scaledToFill()
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            .blur(radius: 32)
+            .opacity(0.58)
+        }
     }
 
     private var progress: Double {
