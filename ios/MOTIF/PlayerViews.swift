@@ -5,7 +5,6 @@ import UIKit
 struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
-    let transitionSourceID: String
     @State private var playPulse = 0
     @State private var skipPulse = 0
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
@@ -104,14 +103,6 @@ struct MiniPlayer: View {
                 .frame(height: 50)
             }
             .background(miniPlayerSurface)
-            .background {
-                GeometryReader { geometry in
-                    Color.clear.preference(
-                        key: MiniPlayerFramePreferenceKey.self,
-                        value: [transitionSourceID: geometry.frame(in: .global)]
-                    )
-                }
-            }
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .padding(.horizontal, 20)
@@ -860,17 +851,6 @@ private struct NowPlayingScrubber: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
-
-struct MiniPlayerFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [String: CGRect] = [:]
-
-    static func reduce(
-        value: inout [String: CGRect],
-        nextValue: () -> [String: CGRect]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
 
