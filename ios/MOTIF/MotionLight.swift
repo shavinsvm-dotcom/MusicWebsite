@@ -172,6 +172,25 @@ final class CoverLightPaletteCache {
         return palette
     }
 
+    func prepare(for url: URL?) async -> CoverLightPalette {
+        guard let url else { return .neutral }
+        if let cached = cache.object(forKey: url as NSURL) {
+            return cached.palette
+        }
+
+        let source: UIImage?
+        if let cached = ArtworkImageCache.shared.image(for: url) {
+            source = cached
+        } else {
+            source = await ArtworkImageCache.shared.loadImage(for: url)
+        }
+
+        guard let source else { return .neutral }
+        let palette = Self.makePalette(from: source)
+        cache.setObject(Box(palette), forKey: url as NSURL)
+        return palette
+    }
+
     private static func makePalette(from image: UIImage) -> CoverLightPalette {
         guard let cgImage = image.cgImage else { return .neutral }
 

@@ -4,6 +4,22 @@ import ImageIO
 import SwiftUI
 import UIKit
 
+@MainActor
+final class ScreenPaletteStore: ObservableObject {
+    static let shared = ScreenPaletteStore()
+
+    @Published private(set) var artworkURLs: [URL] = []
+
+    private init() {}
+
+    func update(_ urls: [URL]) {
+        var seen = Set<URL>()
+        let unique = urls.filter { seen.insert($0).inserted }
+        guard unique != artworkURLs else { return }
+        artworkURLs = unique
+    }
+}
+
 struct AppBackground: View {
     var body: some View {
         RefractionBackground()
@@ -17,15 +33,23 @@ struct AppBackground: View {
 private struct RefractionBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var paletteStore = ScreenPaletteStore.shared
     @State private var drift = false
+    @State private var lineColors: [Color] = RefractionBackground.fallbackColors
 
     private var isDark: Bool { colorScheme == .dark }
+
+    private static let fallbackColors: [Color] = [
+        Color(red: 0.28, green: 0.76, blue: 1.0),
+        Color(red: 1.0, green: 0.62, blue: 0.34),
+        Color(red: 0.62, green: 0.46, blue: 1.0)
+    ]
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 base
-                caustics(in: geometry.size)
+                lineField(in: geometry.size)
                 chromaticEdge
                 GrainOverlay()
                     .opacity(isDark ? 0.045 : 0.025)
@@ -39,6 +63,23 @@ private struct RefractionBackground: View {
             withAnimation(.easeInOut(duration: 26).repeatForever(autoreverses: true)) {
                 drift = true
             }
+        }
+        .task(id: paletteStore.artworkURLs) {
+            await refreshPalette()
+        }
+    }
+
+    @MainActor
+    private func refreshPalette() async {
+        var colors: [Color] = []
+        for url in paletteStore.artworkURLs.prefix(5) {
+            let palette = await CoverLightPaletteCache.shared.prepare(for: url)
+            colors.append(palette.highlight)
+            colors.append(palette.fill)
+        }
+        guard !colors.isEmpty else { return }
+        withAnimation(.easeInOut(duration: 1.4)) {
+            lineColors = colors
         }
     }
 
@@ -64,99 +105,79 @@ private struct RefractionBackground: View {
         }
     }
 
-    private func caustics(in size: CGSize) -> some View {
+    private struct LineSpec {
+        let angle: Double
+        let y: Double
+        let thickness: Double
+        let opacity: Double
+        let xDrift: Double
+        let yDrift: Double
+        let angleDrift: Double
+    }
+
+    private static let lineSpecs: [LineSpec] = [
+        LineSpec(angle: -28, y: -0.24, thickness: 0.020, opacity: 0.24, xDrift: 0.05, yDrift: 0.025, angleDrift: 2.0),
+        LineSpec(angle: 18, y: 0.02, thickness: 0.010, opacity: 0.30, xDrift: -0.04, yDrift: 0.030, angleDrift: -2.5),
+        LineSpec(angle: -12, y: 0.26, thickness: 0.032, opacity: 0.18, xDrift: 0.06, yDrift: -0.020, angleDrift: 1.5),
+        LineSpec(angle: 34, y: 0.50, thickness: 0.013, opacity: 0.26, xDrift: -0.05, yDrift: 0.025, angleDrift: -2.0),
+        LineSpec(angle: -42, y: 0.72, thickness: 0.024, opacity: 0.20, xDrift: 0.03, yDrift: -0.025, angleDrift: 2.5),
+        LineSpec(angle: 8, y: -0.43, thickness: 0.009, opacity: 0.22, xDrift: -0.03, yDrift: 0.035, angleDrift: -1.0),
+        LineSpec(angle: 58, y: 0.14, thickness: 0.015, opacity: 0.17, xDrift: 0.04, yDrift: -0.030, angleDrift: 2.0),
+        LineSpec(angle: -65, y: 0.40, thickness: 0.008, opacity: 0.20, xDrift: -0.06, yDrift: 0.020, angleDrift: -2.0)
+    ]
+
+    private func lineField(in size: CGSize) -> some View {
         let width = max(size.width, 1)
         let height = max(size.height, 1)
         let mode: BlendMode = isDark ? .screen : .multiply
         let boost = isDark ? 1.0 : 0.52
+        let colors = lineColors.isEmpty ? Self.fallbackColors : lineColors
 
         return ZStack {
-            causticBlob(
-                color: Color(red: 0.28, green: 0.76, blue: 1.0),
-                opacity: 0.13 * boost
-            )
-            .frame(width: width * 0.74, height: width * 0.74)
-            .scaleEffect(x: 1.9, y: 0.62)
-            .rotationEffect(.degrees(-24))
-            .offset(
-                x: width * (drift ? 0.10 : -0.13),
-                y: -height * (drift ? 0.15 : 0.09)
-            )
+            ForEach(Array(Self.lineSpecs.enumerated()), id: \.offset) { index, spec in
+                let color = colors[index % colors.count]
+                let thickness = max(1, width * spec.thickness)
+                let alpha = spec.opacity * boost
 
-            causticBlob(
-                color: Color(red: 1.0, green: 0.62, blue: 0.34),
-                opacity: 0.105 * boost
-            )
-            .frame(width: width * 0.68, height: width * 0.68)
-            .scaleEffect(x: 2.1, y: 0.55)
-            .rotationEffect(.degrees(31))
-            .offset(
-                x: width * (drift ? -0.08 : 0.14),
-                y: height * (drift ? 0.21 : 0.29)
-            )
+                ZStack {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                stops: [
+                                    .init(color: .clear, location: 0),
+                                    .init(color: color.opacity(alpha), location: 0.34),
+                                    .init(color: color.opacity(alpha), location: 0.66),
+                                    .init(color: .clear, location: 1)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
 
-            causticBlob(
-                color: Color(red: 0.62, green: 0.46, blue: 1.0),
-                opacity: 0.095 * boost
-            )
-            .frame(width: width * 0.62, height: width * 0.62)
-            .scaleEffect(x: 1.65, y: 0.70)
-            .rotationEffect(.degrees(-61))
-            .offset(
-                x: width * (drift ? 0.22 : -0.04),
-                y: height * (drift ? 0.50 : 0.42)
-            )
-
-            causticThread(
-                color: Color(red: 0.60, green: 0.90, blue: 1.0),
-                opacity: 0.10 * boost
-            )
-            .offset(
-                x: width * (drift ? -0.06 : 0.09),
-                y: -height * 0.06
-            )
-            .rotationEffect(.degrees(-19))
-
-            causticThread(
-                color: Color(red: 1.0, green: 0.76, blue: 0.52),
-                opacity: 0.075 * boost
-            )
-            .offset(
-                x: width * (drift ? 0.12 : -0.10),
-                y: height * 0.17
-            )
-            .rotationEffect(.degrees(14))
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    .clear,
+                                    .white.opacity(alpha * 0.55),
+                                    .clear
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(height: max(0.6, thickness * 0.22))
+                }
+                .frame(width: width * 1.9, height: thickness)
+                .rotationEffect(.degrees(spec.angle + (drift ? spec.angleDrift : -spec.angleDrift)))
+                .offset(
+                    x: width * (drift ? spec.xDrift : -spec.xDrift),
+                    y: height * (spec.y + (drift ? spec.yDrift : -spec.yDrift))
+                )
+            }
         }
         .compositingGroup()
         .blendMode(mode)
-    }
-
-    private func causticBlob(color: Color, opacity: Double) -> some View {
-        Circle().fill(
-            RadialGradient(
-                stops: [
-                    .init(color: color.opacity(opacity), location: 0),
-                    .init(color: color.opacity(opacity * 0.34), location: 0.48),
-                    .init(color: .clear, location: 1)
-                ],
-                center: .center,
-                startRadius: 0,
-                endRadius: 100
-            )
-        )
-    }
-
-    private func causticThread(color: Color, opacity: Double) -> some View {
-        Capsule()
-            .fill(
-                LinearGradient(
-                    colors: [.clear, color.opacity(opacity), .clear],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .frame(width: 760, height: 1.4)
-            .blur(radius: 1.2)
     }
 
     private var chromaticEdge: some View {
