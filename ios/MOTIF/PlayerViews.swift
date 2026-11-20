@@ -243,6 +243,17 @@ private struct PlayerBackdrop: View {
             .opacity(0.94)
     }
 
+    private func imageLayer(_ image: Image, canvas: CGSize) -> some View {
+        image
+            .resizable()
+            .scaledToFill()
+            .frame(width: canvas.width, height: canvas.height)
+            .clipped()
+            .blur(radius: 10)
+            .saturation(1.18)
+            .opacity(0.94)
+    }
+
     private func load() async {
         guard let artworkURL else { return }
 
