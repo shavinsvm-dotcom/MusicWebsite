@@ -114,47 +114,20 @@ struct PlaylistsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section("Smart Playlists") {
-                    SmartPlaylistShelf(showNowPlaying: $showNowPlaying)
-                        .padding(.vertical, 10)
-                        .nativeGlass(
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        )
-                        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 14, trailing: 20))
-                        .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    smartPlaylistsSection
+                    yourPlaylistsSection
                 }
-
-                Section {
-                    if library.playlists.isEmpty {
-                        emptyState
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 6)
-                            .frame(maxWidth: .infinity)
-                            .nativeGlass(
-                                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            )
-                            .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 18, trailing: 20))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                    } else {
-                        playlistPanel
-                    }
-                } header: {
-                    HStack {
-                        Text("Your Playlists")
-                        Spacer()
-                        Text("\(library.playlists.count)")
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                .screenEntrance()
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 120)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
+            .scrollIndicators(.hidden)
             .background(AppBackground())
             .navigationTitle("Playlists")
+            .navigationBarTitleDisplayMode(.large)
             .navigationDestination(for: PlaylistRoute.self) { route in
                 PlaylistDetailView(
                     playlistID: route.id,
@@ -173,6 +146,50 @@ struct PlaylistsView: View {
             }
             .sheet(isPresented: $showCreatePlaylist) {
                 PlaylistEditorView()
+            }
+        }
+    }
+
+    private var smartPlaylistsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Smart Playlists")
+                Spacer()
+                Text("\(SmartPlaylist.allCases.count)")
+                    .font(.caption.weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+
+            SmartPlaylistShelf(showNowPlaying: $showNowPlaying)
+                .padding(.vertical, 10)
+                .nativeGlass(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                )
+        }
+    }
+
+    private var yourPlaylistsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Your Playlists")
+                Spacer()
+                Text("\(library.playlists.count)")
+                    .font(.caption.weight(.medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.tertiary)
+            }
+
+            if library.playlists.isEmpty {
+                emptyState
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity)
+                    .nativeGlass(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    )
+            } else {
+                playlistPanel
             }
         }
     }
@@ -231,9 +248,6 @@ struct PlaylistsView: View {
         .nativeGlass(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
         )
-        .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 18, trailing: 20))
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
     }
 
     private var emptyState: some View {
@@ -273,7 +287,7 @@ private struct SmartPlaylistShelf: View {
     @Binding var showNowPlaying: Bool
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        CarouselScroll {
             LazyHStack(alignment: .top, spacing: 14) {
                 ForEach(SmartPlaylist.allCases) { smart in
                     NavigationLink {
@@ -1293,7 +1307,7 @@ struct SmartPlaylistDetailView: View {
             } else {
                 Section {
                     ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks)
+                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
                             .listRowBackground(Color.clear)
                     }
                 } header: {

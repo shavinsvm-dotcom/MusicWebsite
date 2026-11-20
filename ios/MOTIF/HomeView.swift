@@ -158,7 +158,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: "Recently added")
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            CarouselScroll {
                 LazyHStack(spacing: 14) {
                     ForEach(library.tracks.prefix(10)) { track in
                         Button {
@@ -199,7 +199,7 @@ struct HomeView: View {
 
             LazyVStack(spacing: 0) {
                 ForEach(library.favorites) { track in
-                    TrackRow(track: track, queue: library.favorites)
+                    TrackRow(track: track, queue: library.favorites, showNowPlaying: $showNowPlaying)
                     if track.id != library.favorites.last?.id {
                         Divider().opacity(0.4)
                     }

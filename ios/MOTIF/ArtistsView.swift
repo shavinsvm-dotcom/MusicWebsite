@@ -20,7 +20,7 @@ struct LibraryArtistsSection: View {
                         .foregroundStyle(.secondary)
                 }
 
-                ScrollView(.horizontal, showsIndicators: false) {
+                CarouselScroll {
                     LazyHStack(alignment: .top, spacing: 17) {
                         ForEach(artists) { artist in
                             NavigationLink {
@@ -126,7 +126,7 @@ struct LibraryArtistDetailView: View {
 
                     LazyVStack(spacing: 0) {
                         ForEach(tracks) { track in
-                            TrackRow(track: track, queue: tracks)
+                            TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
 
                             if track.id != tracks.last?.id {
                                 Divider().opacity(0.35)
@@ -228,7 +228,7 @@ struct LibraryArtistDetailView: View {
         VStack(alignment: .leading, spacing: 12) {
             SectionTitle(title: "Albums")
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            CarouselScroll {
                 LazyHStack(alignment: .top, spacing: 16) {
                     ForEach(albums) { album in
                         NavigationLink {
@@ -431,7 +431,7 @@ struct LibraryAlbumDetailView: View {
 
                 LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks)
+                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
 
                         if track.id != tracks.last?.id {
                             Divider().opacity(0.35)

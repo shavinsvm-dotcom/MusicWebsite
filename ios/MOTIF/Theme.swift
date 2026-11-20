@@ -636,7 +636,8 @@ struct ProgressiveArtworkBlur: View {
                     .mask(
                         LinearGradient(
                             stops: [
-                                .init(color: .clear, location: 0),
+                                .init(color: .black.opacity(0.42), location: 0),
+                                .init(color: .clear, location: 0.15),
                                 .init(color: .clear, location: 0.18),
                                 .init(color: .black.opacity(0.20), location: 0.36),
                                 .init(color: .black.opacity(0.82), location: 0.62),
@@ -951,6 +952,7 @@ struct SectionTitle: View {
 struct TrackRow: View {
     let track: Track
     var queue: [Track]? = nil
+    @Binding var showNowPlaying: Bool
 
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
@@ -968,50 +970,74 @@ struct TrackRow: View {
             Button {
                 player.play(track, queue: queue ?? [track])
             } label: {
-                HStack(spacing: 12) {
-                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                        .frame(width: 52, height: 52)
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.9))
+            .accessibilityLabel("Play \(track.title)")
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(track.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+            VStack(alignment: .leading, spacing: 3) {
+                Button {
+                    player.play(track, queue: queue ?? [track])
+                } label: {
+                    Text(track.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.99, opacity: 0.9))
+                .accessibilityLabel("Play \(track.title)")
+
+                if track.artist.isEmpty {
+                    Text("Unknown artist")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    NavigationLink {
+                        LibraryArtistDetailView(
+                            artistName: track.artist,
+                            showNowPlaying: $showNowPlaying
+                        )
+                    } label: {
                         Text(track.artist)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Spacer(minLength: 8)
-
-                    if isFavorite {
-                        Image(systemName: "heart.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    if isUploading || isEnriching {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.secondary)
-                    } else if isUploaded {
-                        Image(systemName: "cloud.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text(track.durationText)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(track.artist), artist")
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(MotifPressStyle(scale: 0.99, opacity: 0.9))
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if isFavorite {
+                Image(systemName: "heart.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if isUploading || isEnriching {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.secondary)
+            } else if isUploaded {
+                Image(systemName: "cloud.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(track.durationText)
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.tertiary)
 
             if track.isCloud {
                 Button {

@@ -372,8 +372,9 @@ struct NowPlayingView: View {
                                 LinearGradient(
                                     stops: [
                                         .init(color: .black, location: 0),
-                                        .init(color: .black.opacity(0.72), location: 0.09),
-                                        .init(color: .clear, location: 0.27),
+                                        .init(color: .black.opacity(0.84), location: 0.09),
+                                        .init(color: .black.opacity(0.36), location: 0.18),
+                                        .init(color: .clear, location: 0.30),
                                         .init(color: .clear, location: 0.69),
                                         .init(color: .black.opacity(0.72), location: 0.91),
                                         .init(color: .black, location: 1)

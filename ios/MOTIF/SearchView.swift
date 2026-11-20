@@ -265,7 +265,7 @@ struct SearchView: View {
             if matchingArtists.isEmpty {
                 emptyScope("No artists match this search.")
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
+                CarouselScroll {
                     LazyHStack(alignment: .top, spacing: 16) {
                         ForEach(matchingArtists) { artist in
                             NavigationLink {
@@ -298,7 +298,7 @@ struct SearchView: View {
             if matchingAlbums.isEmpty {
                 emptyScope("No albums match this search.")
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
+                CarouselScroll {
                     LazyHStack(alignment: .top, spacing: 16) {
                         ForEach(matchingAlbums) { album in
                             NavigationLink {
@@ -331,7 +331,7 @@ struct SearchView: View {
             if matchingPlaylists.isEmpty {
                 emptyScope("No playlists match this search.")
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
+                CarouselScroll {
                     LazyHStack(alignment: .top, spacing: 14) {
                         ForEach(matchingPlaylists) { playlist in
                             NavigationLink {
@@ -377,7 +377,7 @@ struct SearchView: View {
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks)
+                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
                         if track.id != tracks.last?.id {
                             Divider().opacity(0.35)
                         }

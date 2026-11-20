@@ -120,7 +120,7 @@ struct ForYouView: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: "Because you like \(artist.name)")
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            CarouselScroll {
                 LazyHStack(spacing: 14) {
                     ForEach(tracks) { track in
                         Button {
@@ -170,7 +170,7 @@ struct ForYouView: View {
 
             LazyVStack(spacing: 0) {
                 ForEach(data.repeatTracks) { track in
-                    TrackRow(track: track, queue: data.repeatTracks)
+                    TrackRow(track: track, queue: data.repeatTracks, showNowPlaying: $showNowPlaying)
                     if track.id != data.repeatTracks.last?.id {
                         Divider().opacity(0.35)
                     }
@@ -183,11 +183,11 @@ struct ForYouView: View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: "Your artists")
 
-            ScrollView(.horizontal, showsIndicators: false) {
+            CarouselScroll {
                 LazyHStack(spacing: 20) {
                     ForEach(artists.prefix(8)) { artist in
                         NavigationLink {
-                            ArtistTracksView(
+                            LibraryArtistDetailView(
                                 artistName: artist.name,
                                 showNowPlaying: $showNowPlaying
                             )
@@ -354,7 +354,7 @@ struct ArtistTracksView: View {
 
                 LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks)
+                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
                         if track.id != tracks.last?.id {
                             Divider().opacity(0.35)
                         }

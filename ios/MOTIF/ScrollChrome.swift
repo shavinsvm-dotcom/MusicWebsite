@@ -1,5 +1,50 @@
 import SwiftUI
 
+/// A horizontal shelf with soft, blurred-looking edges. The mask is cheap and
+/// keeps the first and last card from looking sliced off at the screen edge.
+extension View {
+    func carouselEdgeBlur(_ width: CGFloat = 18) -> some View {
+        mask {
+            GeometryReader { proxy in
+                let fade = min(width, proxy.size.width / 2)
+
+                HStack(spacing: 0) {
+                    LinearGradient(
+                        colors: [.clear, .black],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: fade)
+
+                    Rectangle().fill(.black)
+
+                    LinearGradient(
+                        colors: [.black, .clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: fade)
+                }
+            }
+        }
+    }
+}
+
+struct CarouselScroll<Content: View>: View {
+    private let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            content
+        }
+        .carouselEdgeBlur()
+    }
+}
+
 /// A compact four-bar indicator for the row that is currently playing.
 struct PlayingWaveform: View {
     var color: Color = .primary

@@ -267,7 +267,7 @@ struct LibraryView: View {
 
             LazyVStack(spacing: 0) {
                 ForEach(library.tracks) { track in
-                    TrackRow(track: track, queue: library.tracks)
+                    TrackRow(track: track, queue: library.tracks, showNowPlaying: $showNowPlaying)
                     if track.id != library.tracks.last?.id {
                         Divider().opacity(0.35)
                     }
@@ -331,7 +331,7 @@ struct LibraryView: View {
 
                 LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks)
+                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
                         if track.id != tracks.last?.id {
                             Divider().opacity(0.35)
                         }
@@ -346,7 +346,7 @@ struct LibraryView: View {
             SectionTitle(title: "Favorites")
             LazyVStack(spacing: 0) {
                 ForEach(library.favorites) { track in
-                    TrackRow(track: track, queue: library.favorites)
+                    TrackRow(track: track, queue: library.favorites, showNowPlaying: $showNowPlaying)
                     if track.id != library.favorites.last?.id {
                         Divider().opacity(0.35)
                     }
@@ -448,7 +448,7 @@ struct LibraryView: View {
 
                 LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks)
+                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
                         if track.id != tracks.last?.id {
                             Divider().opacity(0.35)
                         }
