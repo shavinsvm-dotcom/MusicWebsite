@@ -43,6 +43,12 @@ struct MiniPlayer: View {
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.98, opacity: 0.9))
                     .layoutPriority(1)
+                    .modifier(
+                        MiniPlayerTransitionSource(
+                            sourceID: transitionSourceID,
+                            namespace: transitionNamespace
+                        )
+                    )
 
                     GlassGroup(spacing: 8) {
                         HStack(spacing: 8) {
@@ -107,12 +113,6 @@ struct MiniPlayer: View {
             .background(miniPlayerSurface)
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
-            .modifier(
-                MiniPlayerTransitionSource(
-                    sourceID: transitionSourceID,
-                    namespace: transitionNamespace
-                )
-            )
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
             .transition(
