@@ -6,7 +6,6 @@ struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
     let transitionSourceID: String
-    let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
@@ -43,12 +42,6 @@ struct MiniPlayer: View {
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.98, opacity: 0.9))
                     .layoutPriority(1)
-                    .modifier(
-                        MiniPlayerTransitionSource(
-                            sourceID: transitionSourceID,
-                            namespace: transitionNamespace
-                        )
-                    )
 
                     GlassGroup(spacing: 8) {
                         HStack(spacing: 8) {
@@ -111,6 +104,14 @@ struct MiniPlayer: View {
                 .frame(height: 50)
             }
             .background(miniPlayerSurface)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: MiniPlayerFramePreferenceKey.self,
+                        value: [transitionSourceID: geometry.frame(in: .global)]
+                    )
+                }
+            }
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .padding(.horizontal, 20)
@@ -257,8 +258,6 @@ struct NowPlayingView: View {
                     }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
-                .scaleEffect(1.2)
-                .blur(radius: 38)
                 .clipped()
                 .opacity(0.96)
 
@@ -864,21 +863,14 @@ private struct NowPlayingScrubber: View {
     }
 }
 
-private struct MiniPlayerTransitionSource: ViewModifier {
-    let sourceID: String
-    let namespace: Namespace.ID
+struct MiniPlayerFramePreferenceKey: PreferenceKey {
+    static var defaultValue: [String: CGRect] = [:]
 
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) {
-            content.matchedTransitionSource(id: sourceID, in: namespace) { source in
-                source.clipShape(
-                    RoundedRectangle(cornerRadius: 25, style: .continuous)
-                )
-            }
-        } else {
-            content
-        }
+    static func reduce(
+        value: inout [String: CGRect],
+        nextValue: () -> [String: CGRect]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
 
