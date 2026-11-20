@@ -50,8 +50,11 @@ final class MotionLightController {
         motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { [weak self] data, _ in
             guard let self, let data else { return }
 
+            // Horizontal tilt is gravity.x; forward/back tilt is gravity.z.
+            // Using gravity.y would treat a normally held portrait phone as
+            // permanently tilted because gravity points down the screen.
             let rawX = Self.clamp(-data.gravity.x / 0.55)
-            let rawY = Self.clamp(data.gravity.y / 0.55)
+            let rawY = Self.clamp(data.gravity.z / 0.55)
             let rawRoll = Self.clamp(data.attitude.roll / 1.1)
 
             self.lock.lock()
