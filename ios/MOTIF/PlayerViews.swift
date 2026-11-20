@@ -6,6 +6,7 @@ struct MiniPlayer: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
     let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
     @State private var playPulse = 0
     @State private var skipPulse = 0
     private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
@@ -104,16 +105,14 @@ struct MiniPlayer: View {
                 .frame(height: 50)
             }
             .background(miniPlayerSurface)
-            .background {
-                GeometryReader { geometry in
-                    Color.clear.preference(
-                        key: MiniPlayerFramePreferenceKey.self,
-                        value: [transitionSourceID: geometry.frame(in: .global)]
-                    )
-                }
-            }
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
+            .modifier(
+                MiniPlayerTransitionSource(
+                    sourceID: transitionSourceID,
+                    namespace: transitionNamespace
+                )
+            )
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
             .transition(
@@ -130,17 +129,6 @@ struct MiniPlayer: View {
 
     private func tapFeedback() {
         Self.tapGenerator.impactOccurred(intensity: 0.7)
-    }
-}
-
-struct MiniPlayerFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [String: CGRect] = [:]
-
-    static func reduce(
-        value: inout [String: CGRect],
-        nextValue: () -> [String: CGRect]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { $1 })
     }
 }
 
@@ -179,7 +167,6 @@ struct NowPlayingView: View {
 
     let backdropImage: UIImage?
     let onClose: () -> Void
-    let sourceFrame: CGRect
 
     @ObservedObject private var equalizer = Equalizer.shared
     @State private var playPulse = 0
@@ -188,9 +175,6 @@ struct NowPlayingView: View {
     @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
-    @State private var shellExpanded = false
-    @State private var contentVisible = false
-    @State private var isClosing = false
     private static let controlHaptics = UIImpactFeedbackGenerator(style: .light)
 
     private var currentTrack: Track? {
@@ -203,13 +187,11 @@ struct NowPlayingView: View {
 
     var body: some View {
         ZStack {
-            playerMorphShell
+            Color.black.ignoresSafeArea()
 
             if let track = currentTrack {
                 backdrop(track)
-                    .opacity(contentVisible ? 1 : 0)
                 content(track)
-                    .opacity(contentVisible ? 1 : 0)
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "music.note")
@@ -218,11 +200,9 @@ struct NowPlayingView: View {
                         .font(.headline)
                 }
                 .foregroundStyle(.white.opacity(0.8))
-                .opacity(contentVisible ? 1 : 0)
             }
         }
         .environment(\.colorScheme, .dark)
-        .onAppear(perform: beginMorph)
         .sheet(isPresented: $showQueue) {
             UpNextView()
                 .environmentObject(player)
@@ -249,63 +229,6 @@ struct NowPlayingView: View {
             Button("OK") { library.errorMessage = nil }
         } message: {
             Text(library.errorMessage ?? "")
-        }
-    }
-
-    /// This is the pill itself becoming the player: a single glass shape
-    /// matched to the mini-player capsule, grown to the full display, then
-    /// covered by the player's own backdrop once it has arrived.
-    private var playerMorphShell: some View {
-        GeometryReader { geometry in
-            let screen = CGRect(origin: .zero, size: geometry.size)
-            let start = sourceFrame.isEmpty
-                ? CGRect(
-                    x: (screen.width - 360) / 2,
-                    y: screen.height - 104,
-                    width: 360,
-                    height: 50
-                )
-                : sourceFrame
-            let frame = shellExpanded ? screen : start
-            let shape = RoundedRectangle(
-                cornerRadius: shellExpanded ? 0 : 25,
-                style: .continuous
-            )
-
-            shape
-                .fill(Color.white.opacity(0.001))
-                .playerGlass(shape, interactive: false)
-                .frame(width: frame.width, height: frame.height)
-                .position(x: frame.midX, y: frame.midY)
-        }
-        .ignoresSafeArea()
-        .opacity(contentVisible ? 0 : 1)
-    }
-
-    @MainActor
-    private func beginMorph() {
-        shellExpanded = false
-        contentVisible = false
-        withAnimation(.spring(response: 0.58, dampingFraction: 0.86, blendDuration: 0.10)) {
-            shellExpanded = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
-            withAnimation(.easeOut(duration: 0.26)) {
-                contentVisible = true
-            }
-        }
-    }
-
-    @MainActor
-    private func dismissPlayer() {
-        guard !isClosing else { return }
-        isClosing = true
-        withAnimation(.easeInOut(duration: 0.20)) {
-            contentVisible = false
-            shellExpanded = false
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.44) {
-            onClose()
         }
     }
 
@@ -501,7 +424,7 @@ struct NowPlayingView: View {
                 HStack {
                     Button {
                         haptic()
-                        dismissPlayer()
+                        onClose()
                 } label: {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 17, weight: .semibold))
@@ -938,6 +861,24 @@ private struct NowPlayingScrubber: View {
         guard seconds.isFinite, seconds > 0 else { return "0:00" }
         let total = Int(seconds.rounded())
         return String(format: "%d:%02d", total / 60, total % 60)
+    }
+}
+
+private struct MiniPlayerTransitionSource: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.matchedTransitionSource(id: sourceID, in: namespace) { source in
+                source.clipShape(
+                    RoundedRectangle(cornerRadius: 25, style: .continuous)
+                )
+            }
+        } else {
+            content
+        }
     }
 }
 

@@ -26,59 +26,49 @@ struct RootView: View {
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .forYou
     @State private var attemptedLyricsIDs: Set<UUID> = []
-    @State private var miniPlayerFrames: [String: CGRect] = [:]
-
-    private static let playerOpenAnimation = Animation.spring(
-        response: 0.54,
-        dampingFraction: 0.88,
-        blendDuration: 0.12
-    )
+    @Namespace private var playerTransition
 
     private var playerPresented: Binding<Bool> {
         Binding(
             get: { showNowPlaying },
-            set: { presented in
-                withAnimation(Self.playerOpenAnimation) {
-                    showNowPlaying = presented
-                }
-            }
+            set: { showNowPlaying = $0 }
         )
     }
 
     var body: some View {
-        ZStack {
-            tabs
-                .tint(.primary)
-                .environmentObject(library)
-                .environmentObject(player)
-                .environmentObject(player.progress)
-                .overlay(alignment: .top) {
-                    if !showNowPlaying {
-                        AirPodsConnectOverlay(monitor: routeMonitor)
-                    }
+        tabs
+            .tint(.primary)
+            .environmentObject(library)
+            .environmentObject(player)
+            .environmentObject(player.progress)
+            .overlay(alignment: .top) {
+                if !showNowPlaying {
+                    AirPodsConnectOverlay(monitor: routeMonitor)
                 }
-                .allowsHitTesting(!showNowPlaying)
-
-            if showNowPlaying {
+            }
+            .sheet(isPresented: $showNowPlaying) {
                 playerCoverContent
-                    .zIndex(20)
+                    .modifier(
+                        PlayerSheetZoom(
+                            sourceID: playerTransitionID,
+                            namespace: playerTransition
+                        )
+                    )
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
             }
-        }
-        .onOpenURL { url in
-            guard url.scheme == "motif" else { return }
-            switch url.host {
-            case "nowplaying":
-                playerPresented.wrappedValue = true
-            case "library":
-                selectedTab = .library
-            default:
-                break
+            .onOpenURL { url in
+                guard url.scheme == "motif" else { return }
+                switch url.host {
+                case "nowplaying":
+                    playerPresented.wrappedValue = true
+                case "library":
+                    selectedTab = .library
+                default:
+                    break
+                }
             }
-        }
-        .onPreferenceChange(MiniPlayerFramePreferenceKey.self) { frames in
-            miniPlayerFrames = frames
-        }
-        .alert(
+            .alert(
                 "Playback stopped",
                 isPresented: Binding(
                     get: { player.playbackError != nil },
@@ -242,8 +232,7 @@ struct RootView: View {
     private var playerCoverContent: some View {
         NowPlayingView(
             backdropImage: currentBackdrop,
-            onClose: { playerPresented.wrappedValue = false },
-            sourceFrame: miniPlayerFrames[playerTransitionID] ?? .zero
+            onClose: { playerPresented.wrappedValue = false }
         )
         .environmentObject(library)
         .environmentObject(player)
@@ -261,7 +250,8 @@ struct RootView: View {
         .modifier(MiniPlayerInset(
             showNowPlaying: playerPresented,
             currentID: player.current?.id,
-            transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)"
+            transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)",
+            transitionNamespace: playerTransition
         ))
     }
 
@@ -270,7 +260,8 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
                 currentID: player.current?.id,
-                transitionSourceID: "now-playing-\(AppTab.home.rawValue)"
+                transitionSourceID: "now-playing-\(AppTab.home.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -279,7 +270,8 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
                 currentID: player.current?.id,
-                transitionSourceID: "now-playing-\(AppTab.library.rawValue)"
+                transitionSourceID: "now-playing-\(AppTab.library.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -288,7 +280,8 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
                 currentID: player.current?.id,
-                transitionSourceID: "now-playing-\(AppTab.playlists.rawValue)"
+                transitionSourceID: "now-playing-\(AppTab.playlists.rawValue)",
+                transitionNamespace: playerTransition
             ))
     }
 
@@ -297,8 +290,25 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
                 currentID: player.current?.id,
-                transitionSourceID: "now-playing-\(AppTab.search.rawValue)"
+                transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
+                transitionNamespace: playerTransition
             ))
+    }
+}
+
+private struct PlayerSheetZoom: ViewModifier {
+    let sourceID: String
+    let namespace: Namespace.ID
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content.navigationTransition(
+                .zoom(sourceID: sourceID, in: namespace)
+            )
+        } else {
+            content
+        }
     }
 }
 
@@ -306,12 +316,14 @@ private struct MiniPlayerInset: ViewModifier {
     @Binding var showNowPlaying: Bool
     let currentID: UUID?
     let transitionSourceID: String
+    let transitionNamespace: Namespace.ID
 
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
             MiniPlayer(
                 showNowPlaying: $showNowPlaying,
-                transitionSourceID: transitionSourceID
+                transitionSourceID: transitionSourceID,
+                transitionNamespace: transitionNamespace
             )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(
