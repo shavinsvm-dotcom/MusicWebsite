@@ -26,7 +26,7 @@ struct RootView: View {
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .forYou
     @State private var attemptedLyricsIDs: Set<UUID> = []
-    @Namespace private var playerTransition
+    @State private var miniPlayerFrames: [String: CGRect] = [:]
 
     private static let playerOpenAnimation = Animation.spring(
         response: 0.54,
@@ -74,6 +74,9 @@ struct RootView: View {
             default:
                 break
             }
+        }
+        .onPreferenceChange(MiniPlayerFramePreferenceKey.self) { frames in
+            miniPlayerFrames = frames
         }
         .alert(
                 "Playback stopped",
@@ -240,8 +243,7 @@ struct RootView: View {
         NowPlayingView(
             backdropImage: currentBackdrop,
             onClose: { playerPresented.wrappedValue = false },
-            transitionNamespace: playerTransition,
-            transitionSourceID: playerTransitionID
+            sourceFrame: miniPlayerFrames[playerTransitionID] ?? .zero
         )
         .environmentObject(library)
         .environmentObject(player)
@@ -259,8 +261,7 @@ struct RootView: View {
         .modifier(MiniPlayerInset(
             showNowPlaying: playerPresented,
             currentID: player.current?.id,
-            transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)",
-            transitionNamespace: playerTransition
+            transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)"
         ))
     }
 
@@ -269,8 +270,7 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
                 currentID: player.current?.id,
-                transitionSourceID: "now-playing-\(AppTab.home.rawValue)",
-                transitionNamespace: playerTransition
+                transitionSourceID: "now-playing-\(AppTab.home.rawValue)"
             ))
     }
 
@@ -279,8 +279,7 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
                 currentID: player.current?.id,
-                transitionSourceID: "now-playing-\(AppTab.library.rawValue)",
-                transitionNamespace: playerTransition
+                transitionSourceID: "now-playing-\(AppTab.library.rawValue)"
             ))
     }
 
@@ -289,8 +288,7 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
                 currentID: player.current?.id,
-                transitionSourceID: "now-playing-\(AppTab.playlists.rawValue)",
-                transitionNamespace: playerTransition
+                transitionSourceID: "now-playing-\(AppTab.playlists.rawValue)"
             ))
     }
 
@@ -299,8 +297,7 @@ struct RootView: View {
             .modifier(MiniPlayerInset(
                 showNowPlaying: playerPresented,
                 currentID: player.current?.id,
-                transitionSourceID: "now-playing-\(AppTab.search.rawValue)",
-                transitionNamespace: playerTransition
+                transitionSourceID: "now-playing-\(AppTab.search.rawValue)"
             ))
     }
 }
@@ -309,14 +306,12 @@ private struct MiniPlayerInset: ViewModifier {
     @Binding var showNowPlaying: Bool
     let currentID: UUID?
     let transitionSourceID: String
-    let transitionNamespace: Namespace.ID
 
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
             MiniPlayer(
                 showNowPlaying: $showNowPlaying,
-                transitionSourceID: transitionSourceID,
-                transitionNamespace: transitionNamespace
+                transitionSourceID: transitionSourceID
             )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(

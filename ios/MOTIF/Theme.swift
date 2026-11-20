@@ -12,275 +12,34 @@ struct AppBackground: View {
     }
 }
 
-/// A slow, soft color field. Large gradients only: no lines, no live blur,
-/// no per-frame texture work.
+/// Flat black or white, with only a barely-there neutral bloom. No cover
+/// tint, no color wash, no lines.
 private struct RefractionBackground: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var drift = false
-
-    private var isDark: Bool { colorScheme == .dark }
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                base
-                softColorField(in: geometry.size)
-                GrainOverlay()
-                    .opacity(isDark ? 0.018 : 0.010)
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .clipped()
-        }
-        .ignoresSafeArea()
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 30).repeatForever(autoreverses: true)) {
-                drift = true
-            }
-        }
-    }
-
-    private var base: some View {
         ZStack {
-            if isDark {
-                Color(red: 0.032, green: 0.035, blue: 0.047)
+            if colorScheme == .dark {
+                Color.black
+
                 RadialGradient(
-                    colors: [Color(red: 0.20, green: 0.31, blue: 0.42).opacity(0.10), .clear],
+                    colors: [Color.white.opacity(0.060), .clear],
                     center: .top,
                     startRadius: 0,
-                    endRadius: 560
+                    endRadius: 540
                 )
             } else {
-                Color(red: 0.974, green: 0.968, blue: 0.956)
+                Color.white
+
                 RadialGradient(
-                    colors: [Color(red: 0.62, green: 0.76, blue: 0.90).opacity(0.12), .clear],
-                    center: .top,
+                    colors: [Color.black.opacity(0.040), .clear],
+                    center: .bottom,
                     startRadius: 0,
-                    endRadius: 560
+                    endRadius: 520
                 )
             }
         }
     }
-
-    private var meshColors: [Color] {
-        if isDark {
-            return [
-                Color(red: 0.012, green: 0.014, blue: 0.022),
-                Color(red: 0.035, green: 0.160, blue: 0.200),
-                Color(red: 0.018, green: 0.030, blue: 0.055),
-                Color(red: 0.200, green: 0.040, blue: 0.150),
-                Color(red: 0.055, green: 0.090, blue: 0.210),
-                Color(red: 0.020, green: 0.120, blue: 0.150),
-                Color(red: 0.030, green: 0.025, blue: 0.045),
-                Color(red: 0.240, green: 0.150, blue: 0.340),
-                Color(red: 0.015, green: 0.018, blue: 0.030)
-            ]
-        }
-
-        return [
-            Color(red: 0.975, green: 0.970, blue: 0.958),
-            Color(red: 0.760, green: 0.860, blue: 0.900),
-            Color(red: 0.955, green: 0.950, blue: 0.970),
-            Color(red: 0.930, green: 0.820, blue: 0.845),
-            Color(red: 0.800, green: 0.820, blue: 0.910),
-            Color(red: 0.900, green: 0.930, blue: 0.940),
-            Color(red: 0.965, green: 0.960, blue: 0.950),
-            Color(red: 0.840, green: 0.790, blue: 0.900),
-            Color(red: 0.970, green: 0.965, blue: 0.958)
-        ]
-    }
-
-    @ViewBuilder
-    private func softColorField(in size: CGSize) -> some View {
-        let width = max(size.width, 1)
-        let height = max(size.height, 1)
-
-        ZStack {
-            if #available(iOS 18.0, *) {
-                MeshGradient(
-                    width: 3,
-                    height: 3,
-                    points: [
-                        [0.00, 0.00], [0.55, 0.00], [1.00, 0.00],
-                        [0.00, 0.42], [0.50, 0.38], [1.00, 0.40],
-                        [0.00, 1.00], [0.45, 1.00], [1.00, 1.00]
-                    ],
-                    colors: meshColors
-                )
-                .scaleEffect(1.18)
-                .offset(
-                    x: width * (drift ? 0.025 : -0.025),
-                    y: height * (drift ? -0.018 : 0.018)
-                )
-            } else {
-                fallbackField(width: width, height: height)
-            }
-
-            colorGlows(width: width, height: height)
-        }
-        .opacity(isDark ? 1 : 0.62)
-    }
-
-    private func fallbackField(width: CGFloat, height: CGFloat) -> some View {
-        ZStack {
-            LinearGradient(
-                colors: isDark
-                    ? [Color(red: 0.020, green: 0.025, blue: 0.050), Color(red: 0.080, green: 0.050, blue: 0.130)]
-                    : [Color(red: 0.950, green: 0.930, blue: 0.920), Color(red: 0.820, green: 0.840, blue: 0.920)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.05, green: 0.32, blue: 0.38).opacity(isDark ? 0.42 : 0.18),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: width * 0.62
-                    )
-                )
-                .frame(width: width * 1.35, height: height * 0.90)
-                .offset(x: width * 0.24, y: -height * 0.24)
-
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.48, green: 0.10, blue: 0.30).opacity(isDark ? 0.36 : 0.16),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: width * 0.64
-                    )
-                )
-                .frame(width: width * 1.35, height: height * 0.90)
-                .offset(x: -width * 0.22, y: height * 0.02)
-
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.36, green: 0.22, blue: 0.62).opacity(isDark ? 0.36 : 0.14),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: width * 0.56
-                    )
-                )
-                .frame(width: width * 1.25, height: height * 0.80)
-                .offset(x: width * 0.04, y: height * 0.26)
-        }
-        .blendMode(isDark ? .screen : .multiply)
-    }
-
-    private func colorGlows(width: CGFloat, height: CGFloat) -> some View {
-        ZStack {
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.16, green: 0.70, blue: 0.86).opacity(isDark ? 0.20 : 0.10),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: width * 0.58
-                    )
-                )
-                .frame(width: width * 1.20, height: height * 0.80)
-                .offset(
-                    x: width * (drift ? 0.26 : 0.22),
-                    y: -height * (drift ? 0.21 : 0.18)
-                )
-
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.86, green: 0.16, blue: 0.44).opacity(isDark ? 0.16 : 0.08),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: width * 0.60
-                    )
-                )
-                .frame(width: width * 1.25, height: height * 0.85)
-                .offset(
-                    x: -width * (drift ? 0.24 : 0.20),
-                    y: height * (drift ? 0.03 : 0.00)
-                )
-
-            Ellipse()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            Color(red: 0.48, green: 0.30, blue: 0.86).opacity(isDark ? 0.16 : 0.08),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: width * 0.54
-                    )
-                )
-                .frame(width: width * 1.18, height: height * 0.76)
-                .offset(
-                    x: width * (drift ? 0.03 : -0.03),
-                    y: height * (drift ? 0.24 : 0.20)
-                )
-        }
-        .blendMode(isDark ? .screen : .multiply)
-    }
-}
-
-private struct GrainOverlay: View {
-    var body: some View {
-        Image(uiImage: Self.texture)
-            .resizable(resizingMode: .tile)
-            .ignoresSafeArea()
-            .blendMode(.overlay)
-    }
-
-    private static let texture: UIImage = {
-        let side = 96
-        var bytes = [UInt8](repeating: 0, count: side * side * 4)
-        var state: UInt64 = 0x9E3779B97F4A7C15
-
-        for index in 0..<(side * side) {
-            state = state &* 6364136223846793005 &+ 1442695040888963407
-            let value = UInt8(truncatingIfNeeded: state >> 33)
-            let offset = index * 4
-            bytes[offset] = value
-            bytes[offset + 1] = value
-            bytes[offset + 2] = value
-            bytes[offset + 3] = 255
-        }
-
-        guard let provider = CGDataProvider(data: Data(bytes) as CFData),
-              let image = CGImage(
-                  width: side,
-                  height: side,
-                  bitsPerComponent: 8,
-                  bitsPerPixel: 32,
-                  bytesPerRow: side * 4,
-                  space: CGColorSpaceCreateDeviceRGB(),
-                  bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                  provider: provider,
-                  decode: nil,
-                  shouldInterpolate: false,
-                  intent: .defaultIntent
-              )
-        else { return UIImage() }
-
-        return UIImage(cgImage: image)
-    }()
 }
 
 /// Groups sibling Liquid Glass controls so they share one offscreen blur
@@ -1081,6 +840,8 @@ struct SectionTitle: View {
         Text(title)
             .font(.system(size: 19, weight: .semibold))
             .tracking(-0.3)
+            .lineLimit(1)
+            .truncationMode(.tail)
     }
 }
 
@@ -1114,11 +875,14 @@ struct TrackRow: View {
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
+                            .truncationMode(.tail)
                         Text(track.artist)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                            .truncationMode(.tail)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     Spacer(minLength: 8)
 

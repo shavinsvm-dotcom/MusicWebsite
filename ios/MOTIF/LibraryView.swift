@@ -401,46 +401,49 @@ struct LibraryView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .glassSurface(radius: 26)
             } else {
-                HStack(spacing: 14) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Stream from your Tigris library, or download songs for offline listening.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                        .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Spacer(minLength: 8)
+                    HStack(spacing: 16) {
+                        Spacer(minLength: 0)
 
-                    Button {
-                        showDownloads = true
-                    } label: {
-                        Image(systemName: "list.bullet")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(MotifPressStyle(scale: 0.9))
-                    .accessibilityLabel("Open download manager")
-
-                    if !pendingDownloads.isEmpty {
                         Button {
-                            Task { await library.downloadAll(pendingDownloads) }
+                            showDownloads = true
                         } label: {
-                            Image(systemName: "arrow.down.circle")
+                            Image(systemName: "list.bullet")
                                 .font(.body.weight(.semibold))
                                 .foregroundStyle(.secondary)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.9))
-                        .accessibilityLabel("Download all cloud tracks")
-                    }
+                        .accessibilityLabel("Open download manager")
 
-                    Button {
-                        guard let first = tracks.first else { return }
-                        player.play(first, queue: tracks)
-                        showNowPlaying = true
-                    } label: {
-                        Label("Play", systemImage: "play.fill")
-                            .font(.caption.weight(.semibold))
+                        if !pendingDownloads.isEmpty {
+                            Button {
+                                Task { await library.downloadAll(pendingDownloads) }
+                            } label: {
+                                Image(systemName: "arrow.down.circle")
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(MotifPressStyle(scale: 0.9))
+                            .accessibilityLabel("Download all cloud tracks")
+                        }
+
+                        Button {
+                            guard let first = tracks.first else { return }
+                            player.play(first, queue: tracks)
+                            showNowPlaying = true
+                        } label: {
+                            Label("Play", systemImage: "play.fill")
+                                .font(.caption.weight(.semibold))
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.92))
+                        .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.92))
-                    .foregroundStyle(.secondary)
                 }
 
                 LazyVStack(spacing: 0) {

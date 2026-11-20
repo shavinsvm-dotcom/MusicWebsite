@@ -82,6 +82,7 @@ struct ForYouView: View {
                         .font(.system(size: 28, weight: .bold))
                         .tracking(-0.8)
                         .foregroundStyle(.white)
+                        .lineLimit(1)
 
                     Text(data.mixSubtitle)
                         .font(.subheadline)
