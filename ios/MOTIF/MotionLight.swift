@@ -365,8 +365,10 @@ struct HeroEdgeBlur {
 }
 
 /// Renders the blurred side edges once per artwork, so the live layer only has
-/// to draw two cached textures. This is what gives the cover the soft,
-/// fold-like side blur when the phone is tilted left or right.
+/// to draw two cached textures. The blur is sharp at the hinge and increases
+/// cubically toward the moving edge, the same trick Apple uses in the iPhone
+/// Duo unfold: content stays readable near the crease and the outer panel
+/// frosts over as it swings away.
 final class HeroEdgeBlurCache {
     static let shared = HeroEdgeBlurCache()
 
@@ -454,20 +456,55 @@ final class HeroEdgeBlurCache {
 
         guard let cgImage = square.cgImage else { return nil }
         let input = CIImage(cgImage: cgImage)
-        let blurred = input
-            .clampedToExtent()
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 26])
-            .cropped(to: input.extent)
 
-        guard let output = Self.ciContext.createCGImage(blurred, from: input.extent) else {
-            return nil
-        }
-        let blurredImage = UIImage(cgImage: output)
-
-        guard let left = edgeMasked(blurredImage, leading: true),
-              let right = edgeMasked(blurredImage, leading: false)
+        guard let left = progressiveEdge(input, leading: true),
+              let right = progressiveEdge(input, leading: false)
         else { return nil }
         return HeroEdgeBlur(left: left, right: right)
+    }
+
+    /// One half of the cover behaves like a frosted panel on a hinge: no blur
+    /// at the centre, then a steep cubic ramp toward the free edge.
+    private static func progressiveEdge(_ input: CIImage, leading: Bool) -> UIImage? {
+        let extent = input.extent
+        let center = CGPoint(x: extent.midX, y: extent.midY)
+        let edge = CGPoint(
+            x: leading ? extent.minX : extent.maxX,
+            y: extent.midY
+        )
+
+        guard let gradient = CIFilter(name: "CILinearGradient", parameters: [
+            "inputPoint0": CIVector(x: center.x, y: center.y),
+            "inputPoint1": CIVector(x: edge.x, y: edge.y),
+            "inputColor0": CIColor.black,
+            "inputColor1": CIColor.white
+        ])?.outputImage?.cropped(to: extent) else { return nil }
+
+        // Gamma darkens the middle of the mask, keeping the hinge-side detail
+        // crisp while the outermost slice takes the full blur.
+        let mask = gradient.applyingFilter("CIGammaAdjust", parameters: [
+            "inputPower": 2.35
+        ])
+
+        let blurred: CIImage
+        if let filter = CIFilter(name: "CIMaskedVariableBlur", parameters: [
+            "inputImage": input.clampedToExtent(),
+            "inputMask": mask,
+            kCIInputRadiusKey: 44
+        ]), let output = filter.outputImage {
+            blurred = output.cropped(to: extent)
+        } else {
+            // Fallback for platforms where the variable-blur filter is absent.
+            blurred = input
+                .clampedToExtent()
+                .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 26])
+                .cropped(to: extent)
+        }
+
+        guard let output = Self.ciContext.createCGImage(blurred, from: extent) else {
+            return nil
+        }
+        return edgeMasked(UIImage(cgImage: output), leading: leading)
     }
 
     private static func edgeMasked(_ image: UIImage, leading: Bool) -> UIImage? {
@@ -482,30 +519,63 @@ final class HeroEdgeBlurCache {
         return renderer.image { rendererContext in
             image.draw(in: CGRect(origin: .zero, size: size))
             let context = rendererContext.cgContext
-            context.setBlendMode(.destinationIn)
+            let white = UIColor.white
 
-            let colors = [
-                UIColor.white.withAlphaComponent(1).cgColor,
-                UIColor.white.withAlphaComponent(0.58).cgColor,
-                UIColor.white.withAlphaComponent(0).cgColor,
-                UIColor.white.withAlphaComponent(0).cgColor
+            // Keep the blur at the free edge only; the sharp half underneath
+            // remains visible through the transparent centre.
+            context.setBlendMode(.destinationIn)
+            let alphaColors = [
+                white.withAlphaComponent(1).cgColor,
+                white.withAlphaComponent(0.72).cgColor,
+                white.withAlphaComponent(0).cgColor,
+                white.withAlphaComponent(0).cgColor
             ] as CFArray
-            guard let gradient = CGGradient(
+            guard let alphaGradient = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                colors: colors,
-                locations: [0, 0.20, 0.52, 1]
+                colors: alphaColors,
+                locations: [0, 0.26, 0.58, 1]
             ) else { return }
 
             if leading {
                 context.drawLinearGradient(
-                    gradient,
+                    alphaGradient,
                     start: CGPoint(x: 0, y: 0),
                     end: CGPoint(x: size.width, y: 0),
                     options: []
                 )
             } else {
                 context.drawLinearGradient(
-                    gradient,
+                    alphaGradient,
+                    start: CGPoint(x: size.width, y: 0),
+                    end: CGPoint(x: 0, y: 0),
+                    options: []
+                )
+            }
+
+            // The panel also falls into shadow as it turns away, which is what
+            // sells the fold more than blur alone.
+            context.setBlendMode(.sourceAtop)
+            let shadeColors = [
+                UIColor.black.withAlphaComponent(0.20).cgColor,
+                UIColor.black.withAlphaComponent(0.08).cgColor,
+                UIColor.black.withAlphaComponent(0).cgColor
+            ] as CFArray
+            guard let shade = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: shadeColors,
+                locations: [0, 0.30, 0.62]
+            ) else { return }
+
+            if leading {
+                context.drawLinearGradient(
+                    shade,
+                    start: CGPoint(x: 0, y: 0),
+                    end: CGPoint(x: size.width, y: 0),
+                    options: []
+                )
+            } else {
+                context.drawLinearGradient(
+                    shade,
                     start: CGPoint(x: size.width, y: 0),
                     end: CGPoint(x: 0, y: 0),
                     options: []
@@ -562,14 +632,20 @@ struct HeroEdgeBlurOverlay: View {
             guard strength > 0.01 else { return }
 
             let rect = CGRect(origin: .zero, size: size)
+            let normalized = min(1, abs(sample.x))
+            let stretch = 1 + CGFloat(0.018 * normalized)
+            let inset = size.width * (stretch - 1) / 2
+            let shifted = rect
+                .insetBy(dx: -inset, dy: 0)
+                .offsetBy(dx: sample.x > 0 ? inset : -inset, dy: 0)
+
             context.drawLayer { layer in
                 layer.clip(to: Path(rect))
+                layer.opacity = strength
                 if sample.x > 0 {
-                    layer.opacity = strength
-                    layer.draw(Image(uiImage: edges.right), in: rect)
+                    layer.draw(Image(uiImage: edges.right), in: shifted)
                 } else {
-                    layer.opacity = strength
-                    layer.draw(Image(uiImage: edges.left), in: rect)
+                    layer.draw(Image(uiImage: edges.left), in: shifted)
                 }
             }
         }
