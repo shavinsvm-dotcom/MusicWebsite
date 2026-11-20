@@ -673,6 +673,94 @@ struct PlayerGradient {
     ])
 }
 
+struct PlayerGradientView: View {
+    let gradient: PlayerGradient
+
+    var body: some View {
+        if #available(iOS 18.0, *) {
+            MeshGradient(
+                width: 3,
+                height: 3,
+                points: [
+                    [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
+                    [0.0, 0.5], [0.5, 0.5], [1.0, 0.5],
+                    [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
+                ],
+                colors: gradient.colors
+            )
+        } else {
+            ZStack {
+                LinearGradient(
+                    colors: [
+                        gradient.colors[0],
+                        gradient.colors[4],
+                        gradient.colors[8]
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                RadialGradient(
+                    colors: [
+                        gradient.colors[4].opacity(0.55),
+                        .clear
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 420
+                )
+            }
+        }
+    }
+}
+
+/// A full-screen, cover-derived wash for detail pages. It intentionally has
+/// no mask or fixed-height artwork, so it cannot end in a visible cut line.
+struct DetailBackdrop: View {
+    let artworkURL: URL?
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var gradient = PlayerGradient.fallback
+
+    private var base: Color {
+        Color(uiColor: .systemBackground)
+    }
+
+    var body: some View {
+        ZStack {
+            base
+
+            PlayerGradientView(gradient: gradient)
+                .opacity(colorScheme == .dark ? 0.76 : 0.18)
+                .saturation(colorScheme == .dark ? 1.16 : 0.88)
+
+            LinearGradient(
+                stops: [
+                    .init(color: base.opacity(0.58), location: 0),
+                    .init(color: .clear, location: 0.22),
+                    .init(color: .clear, location: 0.54),
+                    .init(color: base.opacity(0.54), location: 0.82),
+                    .init(color: base.opacity(0.94), location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .task(id: artworkURL) {
+            guard let artworkURL else {
+                gradient = .fallback
+                return
+            }
+
+            let next = await PlaybackBackdropCache.shared.prepareGradient(for: artworkURL)
+            guard !Task.isCancelled else { return }
+            gradient = next
+        }
+    }
+}
+
 private final class PlayerGradientBox {
     let gradient: PlayerGradient
 

@@ -495,7 +495,6 @@ struct PlaylistDetailView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var colorScheme
 
     let playlistID: UUID
     @Binding var showNowPlaying: Bool
@@ -518,6 +517,10 @@ struct PlaylistDetailView: View {
 
     private var isDownloading: Bool {
         tracks.contains { library.isDownloading($0) }
+    }
+
+    private var playlistArtworkURL: URL? {
+        playlist?.customCoverURL ?? tracks.compactMap(\.artworkURL).first
     }
 
     var body: some View {
@@ -656,13 +659,11 @@ struct PlaylistDetailView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background {
-            ZStack {
-                AppBackground()
-                playlistAmbience
-            }
+            DetailBackdrop(artworkURL: playlistArtworkURL)
         }
         .navigationTitle(playlist?.name ?? "Playlist")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -713,45 +714,6 @@ struct PlaylistDetailView: View {
         .sheet(isPresented: $showEditTracks) {
             PlaylistTracksEditor(playlistID: playlistID)
         }
-    }
-
-    private var playlistAmbience: some View {
-        GeometryReader { geometry in
-            PlaylistArtwork(
-                playlist: playlist ?? Playlist(name: "Playlist"),
-                tracks: tracks
-            )
-            .frame(width: geometry.size.width, height: geometry.size.height)
-            .scaleEffect(1.4)
-            .blur(radius: 52)
-            .opacity(colorScheme == .dark ? 0.54 : 0.32)
-            .overlay {
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .clear, location: 0.46),
-                        .init(color: Color(uiColor: .systemBackground).opacity(0.42), location: 0.78),
-                        .init(color: Color(uiColor: .systemBackground).opacity(0.7), location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black, location: 0.70),
-                        .init(color: .clear, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .drawingGroup(opaque: false)
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
     }
 
     private var subtitle: String {
@@ -1175,7 +1137,6 @@ struct SmartPlaylistCover: View {
 struct SmartPlaylistDetailView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
-    @Environment(\.colorScheme) private var colorScheme
 
     let smart: SmartPlaylist
     @Binding var showNowPlaying: Bool
@@ -1190,6 +1151,10 @@ struct SmartPlaylistDetailView: View {
 
     private var isDownloading: Bool {
         tracks.contains { library.isDownloading($0) }
+    }
+
+    private var artworkURL: URL? {
+        tracks.compactMap(\.artworkURL).first
     }
 
     var body: some View {
@@ -1325,49 +1290,11 @@ struct SmartPlaylistDetailView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background {
-            ZStack {
-                AppBackground()
-                smartAmbience
-            }
+            DetailBackdrop(artworkURL: artworkURL)
         }
         .navigationTitle(smart.title)
         .navigationBarTitleDisplayMode(.inline)
-    }
-
-    private var smartAmbience: some View {
-        GeometryReader { geometry in
-            SmartPlaylistCover(smart: smart, tracks: tracks)
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .scaleEffect(1.4)
-                .blur(radius: 52)
-                .opacity(colorScheme == .dark ? 0.5 : 0.3)
-                .overlay {
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .clear, location: 0.46),
-                            .init(color: Color(uiColor: .systemBackground).opacity(0.42), location: 0.78),
-                            .init(color: Color(uiColor: .systemBackground).opacity(0.7), location: 1)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .black, location: 0),
-                            .init(color: .black, location: 0.70),
-                            .init(color: .clear, location: 1)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .drawingGroup(opaque: false)
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
+        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var subtitle: String {

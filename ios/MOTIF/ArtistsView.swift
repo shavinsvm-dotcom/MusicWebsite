@@ -99,48 +99,52 @@ struct LibraryArtistDetailView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                header
+        ZStack {
+            DetailBackdrop(artworkURL: artworkURL)
 
-                if tracks.isEmpty {
-                    Text("No songs by this artist.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            ScrollView {
+                VStack(spacing: 0) {
+                    header
+
+                    if tracks.isEmpty {
+                        Text("No songs by this artist.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 20)
+                    } else {
+                        if !albums.isEmpty {
+                            albumSection
+                        }
+
+                        HStack(alignment: .firstTextBaseline) {
+                            SectionTitle(title: "All songs")
+                            Spacer()
+                            Text("\(tracks.count)")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.tertiary)
+                        }
                         .padding(.horizontal, 20)
-                } else {
-                    if !albums.isEmpty {
-                        albumSection
-                    }
+                        .padding(.bottom, 8)
 
-                    HStack(alignment: .firstTextBaseline) {
-                        SectionTitle(title: "All songs")
-                        Spacer()
-                        Text("\(tracks.count)")
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 8)
+                        LazyVStack(spacing: 0) {
+                            ForEach(tracks) { track in
+                                TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
 
-                    LazyVStack(spacing: 0) {
-                        ForEach(tracks) { track in
-                            TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
-
-                            if track.id != tracks.last?.id {
-                                Divider().opacity(0.35)
+                                if track.id != tracks.last?.id {
+                                    Divider().opacity(0.35)
+                                }
                             }
                         }
+                        .padding(.horizontal, 20)
                     }
-                    .padding(.horizontal, 20)
-                }
 
-                Spacer(minLength: 120)
+                    Spacer(minLength: 120)
+                }
             }
+            .scrollIndicators(.hidden)
+            .background(Color.clear)
         }
-        .scrollIndicators(.hidden)
-        .background(AppBackground())
         .navigationTitle(artistName)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
@@ -209,19 +213,6 @@ struct LibraryArtistDetailView: View {
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .padding(.bottom, 28)
-        .background(alignment: .top) {
-            RadialGradient(
-                colors: [
-                    Color(red: 0.36, green: 0.42, blue: 0.58).opacity(0.24),
-                    .clear
-                ],
-                center: .top,
-                startRadius: 0,
-                endRadius: 360
-            )
-            .frame(height: 460)
-            .allowsHitTesting(false)
-        }
     }
 
     private var albumSection: some View {
@@ -425,26 +416,30 @@ struct LibraryAlbumDetailView: View {
     private var tracks: [Track] { album.tracks }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                header
+        ZStack {
+            DetailBackdrop(artworkURL: album.artworkURL)
 
-                LazyVStack(spacing: 0) {
-                    ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
+            ScrollView {
+                VStack(spacing: 0) {
+                    header
 
-                        if track.id != tracks.last?.id {
-                            Divider().opacity(0.35)
+                    LazyVStack(spacing: 0) {
+                        ForEach(tracks) { track in
+                            TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
+
+                            if track.id != tracks.last?.id {
+                                Divider().opacity(0.35)
+                            }
                         }
                     }
-                }
-                .padding(.horizontal, 20)
+                    .padding(.horizontal, 20)
 
-                Spacer(minLength: 120)
+                    Spacer(minLength: 120)
+                }
             }
+            .scrollIndicators(.hidden)
+            .background(Color.clear)
         }
-        .scrollIndicators(.hidden)
-        .background(AppBackground())
         .navigationTitle(album.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)

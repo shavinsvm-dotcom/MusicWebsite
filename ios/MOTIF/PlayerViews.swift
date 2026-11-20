@@ -272,7 +272,7 @@ struct NowPlayingView: View {
             ZStack {
                 Color.black
 
-                gradientLayer
+                PlayerGradientView(gradient: gradient)
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .clipped()
                     .overlay(Color.black.opacity(0.18).allowsHitTesting(false))
@@ -293,44 +293,6 @@ struct NowPlayingView: View {
             .clipped()
         }
         .ignoresSafeArea()
-    }
-
-    @ViewBuilder
-    private var gradientLayer: some View {
-        if #available(iOS 18.0, *) {
-            MeshGradient(
-                width: 3,
-                height: 3,
-                points: [
-                    [0.0, 0.0], [0.5, 0.0], [1.0, 0.0],
-                    [0.0, 0.5], [0.5, 0.5], [1.0, 0.5],
-                    [0.0, 1.0], [0.5, 1.0], [1.0, 1.0]
-                ],
-                colors: gradient.colors
-            )
-        } else {
-            ZStack {
-                LinearGradient(
-                    colors: [
-                        gradient.colors[0],
-                        gradient.colors[4],
-                        gradient.colors[8]
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-
-                RadialGradient(
-                    colors: [
-                        gradient.colors[4].opacity(0.55),
-                        .clear
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: 420
-                )
-            }
-        }
     }
 
     private func loadGradient() async {
