@@ -240,6 +240,8 @@ struct ArtworkView: View {
             if let image = resolvedImage {
                 Image(uiImage: image)
                     .resizable()
+                    .interpolation(.high)
+                    .antialiased(true)
                     .scaledToFill()
             } else if url != nil, !failed {
                 ProgressView()
@@ -338,7 +340,7 @@ final class ArtworkImageCache {
     /// Loads and downsamples artwork once per URL. Playlist mosaics often ask
     /// for the same covers several times in one frame; sharing the task keeps
     /// those cells from starting duplicate network and decode work.
-    func loadImage(for url: URL, maxPixelSize: Int = 900) async -> UIImage? {
+    func loadImage(for url: URL, maxPixelSize: Int = 1200) async -> UIImage? {
         if let cached = image(for: url) { return cached }
 
         let key = url as NSURL

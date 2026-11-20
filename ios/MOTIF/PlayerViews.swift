@@ -288,12 +288,17 @@ struct NowPlayingView: View {
             )
 
             ZStack(alignment: .top) {
-                ArtworkView(
-                    url: track.artworkURL,
-                    seed: track.title + track.artist
-                )
+                ZStack {
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist
+                    )
+
+                    LivingLightOverlay(url: track.artworkURL, intensity: 0.92)
+                }
+                .compositingGroup()
                 .id(track.id)
-                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .transition(.opacity.combined(with: .scale(scale: 0.94)))
                 .frame(width: artSide, height: artSide)
                 .mask(
                     LinearGradient(
@@ -313,7 +318,7 @@ struct NowPlayingView: View {
                     y: geometry.size.height * 0.38
                 )
                 .animation(
-                    .spring(response: 0.46, dampingFraction: 0.86),
+                    .spring(response: 0.52, dampingFraction: 0.88),
                     value: track.id
                 )
 
