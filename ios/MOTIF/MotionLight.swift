@@ -403,8 +403,12 @@ final class HeroEdgeBlurCache {
         }
 
         let task = Task.detached(priority: .utility) { () -> HeroEdgeBlur? in
-            let source = ArtworkImageCache.shared.image(for: url)
-                ?? await ArtworkImageCache.shared.loadImage(for: url)
+            let source: UIImage?
+            if let cached = ArtworkImageCache.shared.image(for: url) {
+                source = cached
+            } else {
+                source = await ArtworkImageCache.shared.loadImage(for: url)
+            }
             guard let source else { return nil }
             return Self.render(source)
         }
