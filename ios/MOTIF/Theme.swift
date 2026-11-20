@@ -662,7 +662,7 @@ final class PlaybackBackdropCache {
 
     private let cache = NSCache<NSURL, UIImage>()
     private let context = CIContext(options: nil)
-    private let renderSize = CGSize(width: 240, height: 240)
+    private let renderSize = CGSize(width: 240, height: 420)
 
     private init() {
         cache.countLimit = 32
@@ -736,7 +736,7 @@ final class PlaybackBackdropCache {
         let input = CIImage(cgImage: cgImage)
         let blurred = input
             .clampedToExtent()
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 16])
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 30])
             .applyingFilter("CIColorControls", parameters: [
                 kCIInputSaturationKey: 1.38,
                 kCIInputBrightnessKey: -0.055,

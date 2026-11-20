@@ -285,26 +285,12 @@ struct NowPlayingView: View {
                     }
                 }
                 .frame(
-                    width: geometry.size.width * 1.06,
-                    height: geometry.size.width * 1.06
+                    width: geometry.size.width * 1.08,
+                    height: geometry.size.height * 1.08
                 )
-                .mask(
-                    RadialGradient(
-                        stops: [
-                            .init(color: .white, location: 0),
-                            .init(color: .white.opacity(0.72), location: 0.46),
-                            .init(color: .clear, location: 1)
-                        ],
-                        center: .center,
-                        startRadius: geometry.size.width * 0.06,
-                        endRadius: geometry.size.width * 0.66
-                    )
-                )
-                .opacity(0.52)
-                .position(
-                    x: geometry.size.width / 2,
-                    y: geometry.size.height * 0.38
-                )
+                .clipped()
+                .saturation(1.12)
+                .opacity(0.86)
 
                 LinearGradient(
                     stops: [
@@ -368,7 +354,6 @@ struct NowPlayingView: View {
 
                     if effectsReady {
                         HeroEdgeBlurOverlay(url: track.artworkURL, intensity: 1)
-                        LivingLightOverlay(url: track.artworkURL, intensity: 0.9)
                     }
                 }
                 .compositingGroup()
@@ -404,29 +389,32 @@ struct NowPlayingView: View {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
 
-                    VStack(alignment: .leading, spacing: 5) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(track.title)
-                            .font(.system(size: 52, weight: .heavy))
-                            .tracking(-2.0)
+                            .font(.system(size: 44, weight: .bold))
+                            .tracking(-1.2)
                             .foregroundStyle(.white)
+                            .multilineTextAlignment(.leading)
                             .lineLimit(2)
-                            .minimumScaleFactor(0.62)
+                            .minimumScaleFactor(0.68)
                             .fixedSize(horizontal: false, vertical: true)
 
                         Text(track.artist)
-                            .font(.system(size: 20, weight: .regular))
-                            .foregroundStyle(.white.opacity(0.66))
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.62))
                             .lineLimit(1)
+                            .truncationMode(.tail)
 
                         HStack(spacing: 8) {
                             Image(systemName: "opticaldisc")
-                                .font(.system(size: 13, weight: .regular))
+                                .font(.system(size: 12, weight: .medium))
                             Text(metadataText(track))
                                 .lineLimit(1)
+                                .truncationMode(.tail)
                         }
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.52))
-                        .padding(.top, 2)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.50))
+                        .padding(.top, 1)
 
                         Menu {
                             lyricsOptions(track)
@@ -435,8 +423,8 @@ struct NowPlayingView: View {
                                 track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
                                 systemImage: "quote.bubble"
                             )
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.70))
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.68))
                             .padding(.top, 3)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.94))
@@ -449,7 +437,7 @@ struct NowPlayingView: View {
                         .padding(.top, 10)
 
                     controls(track)
-                        .padding(.horizontal, 22)
+                        .padding(.horizontal, 24)
                         .padding(.top, 12)
                         .padding(.bottom, -14)
                 }
