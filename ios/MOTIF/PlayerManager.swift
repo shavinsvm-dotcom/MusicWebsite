@@ -1045,6 +1045,26 @@ final class PlayerManager: ObservableObject {
         if nowPlayingArtworkLoadingURL == artworkURL { return }
         nowPlayingArtworkLoadingURL = artworkURL
 
+        if artworkURL.isFileURL {
+            Task.detached(priority: .userInitiated) { [weak self] in
+                let data = try? Data(contentsOf: artworkURL)
+                await MainActor.run {
+                    guard let self else { return }
+                    if self.nowPlayingArtworkLoadingURL == artworkURL {
+                        self.nowPlayingArtworkLoadingURL = nil
+                    }
+                    guard let data,
+                          let image = UIImage(data: data),
+                          self.current?.artworkURL == artworkURL
+                    else { return }
+                    self.nowPlayingArtworkImage = image
+                    self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                    self.updateNowPlaying()
+                }
+            }
+            return
+        }
+
         URLSession.shared.dataTask(with: artworkURL) { [weak self] data, _, _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
