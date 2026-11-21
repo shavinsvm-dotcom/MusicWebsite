@@ -220,15 +220,15 @@ private struct PlayerBackdrop: View {
                         .opacity(0.78)
                 }
 
-                // A mirrored edge wash: the soft, deep falloff the controls
-                // sit on at the bottom is repeated at the top, so the close
-                // and menu buttons get the same blur-like depth instead of
-                // floating on bare artwork.
+                // The backdrop already mirrors the bottom's blurred
+                // refraction band above the cover, so the top only needs a
+                // light scrim to keep the bar readable. The bottom falloff
+                // stays exactly as it was.
                 LinearGradient(
                     stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .black.opacity(0.72), location: 0.12),
-                        .init(color: .black.opacity(0.34), location: 0.34),
+                        .init(color: .black.opacity(0.38), location: 0),
+                        .init(color: .black.opacity(0.15), location: 0.12),
+                        .init(color: .black.opacity(0.00), location: 0.30),
                         .init(color: .black.opacity(0.22), location: 0.50),
                         .init(color: .black.opacity(0.34), location: 0.66),
                         .init(color: .black.opacity(0.72), location: 0.88),
@@ -696,7 +696,8 @@ struct NowPlayingView: View {
                 .font(.system(size: 11, weight: .semibold))
                 .tracking(0.8)
                 .textCase(.uppercase)
-                .foregroundStyle(.white.opacity(0.66))
+                .foregroundStyle(.white.opacity(0.82))
+                .shadow(color: .black.opacity(0.50), radius: 6, y: 1)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
                 .accessibilityElement(children: .combine)

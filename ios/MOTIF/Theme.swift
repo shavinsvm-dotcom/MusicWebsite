@@ -951,9 +951,15 @@ final class PlaybackBackdropCache {
             .clampedToExtent()
 
         // A smooth colour wash fills the whole screen behind everything.
-        let base = placed
+        let wash = placed
             .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 38])
             .cropped(to: canvas)
+
+        // The band below the cover is the cover's lower edge smeared into a
+        // soft, streaky refraction. Mirror it above the cover so the top of
+        // the player gets that same band instead of a darker wash derived
+        // from the cover's top edge.
+        let base = mirroredTopBand(wash, canvas: canvas, bandHeight: originY)
 
         // The cover itself stays lightly frosted so it reads as artwork rather
         // than a featureless smear.
@@ -984,6 +990,53 @@ final class PlaybackBackdropCache {
             return nil
         }
         return UIImage(cgImage: output, scale: 1, orientation: .up)
+    }
+
+    /// Flips the band below the cover into the band above it. The copy is
+    /// solid at the screen edge and feathered into the original wash where it
+    /// meets the artwork, so the two bands read as one mirrored surface.
+    private static func mirroredTopBand(
+        _ wash: CIImage,
+        canvas: CGRect,
+        bandHeight: CGFloat
+    ) -> CIImage {
+        guard bandHeight > 1, bandHeight < canvas.height * 0.5 else {
+            return wash
+        }
+
+        let band = CGRect(
+            x: canvas.minX,
+            y: canvas.minY,
+            width: canvas.width,
+            height: bandHeight
+        )
+        let mirrored = wash
+            .cropped(to: band)
+            .transformed(by: CGAffineTransform(scaleX: 1, y: -1))
+            .transformed(by: CGAffineTransform(translationX: 0, y: canvas.maxY))
+
+        let seamY = canvas.maxY - bandHeight
+        let feather = min(bandHeight * 0.35, 170)
+        guard let mask = CIFilter(name: "CILinearGradient", parameters: [
+            "inputPoint0": CIVector(x: canvas.midX, y: seamY),
+            "inputPoint1": CIVector(x: canvas.midX, y: seamY + feather),
+            "inputColor0": CIColor.black,
+            "inputColor1": CIColor.white
+        ])?.outputImage?
+            .clampedToExtent()
+            .cropped(to: canvas),
+        let banded = CIFilter(name: "CIBlendWithMask", parameters: [
+            kCIInputImageKey: mirrored,
+            kCIInputBackgroundImageKey: wash,
+            "inputMaskImage": mask
+        ])?.outputImage
+        else { return wash }
+
+        // Composite over the untouched wash so the result always covers the
+        // full canvas, even if the mask filter reports only the band extent.
+        return banded
+            .composited(over: wash)
+            .cropped(to: canvas)
     }
 
     /// White through the middle of the screen, fading to black at the top and
