@@ -51,7 +51,7 @@ struct MiniPlayer: View {
                         Button {
                             tapFeedback()
                             skipPulse += 1
-                            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                            withAnimation(.spring(response: 0.30, dampingFraction: 0.52)) {
                                 player.previous()
                             }
                         } label: {
@@ -61,14 +61,14 @@ struct MiniPlayer: View {
                                 .motifBounce(tick: skipPulse)
                                 .contentShape(Circle())
                         }
-                        .buttonStyle(PlayerControlPressStyle(scale: 0.85))
+                        .buttonStyle(PlayerControlPressStyle(scale: 0.81))
                         .playerGlass(Circle())
                         .accessibilityLabel("Previous")
 
                         Button {
                             tapFeedback()
                             playPulse += 1
-                            withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
+                            withAnimation(.spring(response: 0.30, dampingFraction: 0.48)) {
                                 player.toggle()
                             }
                         } label: {
@@ -79,14 +79,14 @@ struct MiniPlayer: View {
                                 .motifReplace()
                                 .motifBounce(tick: playPulse)
                         }
-                        .buttonStyle(PlayerControlPressStyle(scale: 0.85))
+                        .buttonStyle(PlayerControlPressStyle(scale: 0.81))
                         .playerGlass(Circle())
                         .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                         Button {
                             tapFeedback()
                             skipPulse += 1
-                            withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                            withAnimation(.spring(response: 0.30, dampingFraction: 0.52)) {
                                 player.next()
                             }
                         } label: {
@@ -96,7 +96,7 @@ struct MiniPlayer: View {
                                 .motifBounce(tick: skipPulse)
                                 .contentShape(Circle())
                         }
-                        .buttonStyle(PlayerControlPressStyle(scale: 0.85))
+                        .buttonStyle(PlayerControlPressStyle(scale: 0.81))
                         .playerGlass(Circle())
                         .accessibilityLabel("Next")
                         }
@@ -220,11 +220,17 @@ private struct PlayerBackdrop: View {
                         .opacity(0.78)
                 }
 
+                // A mirrored edge wash: the soft, deep falloff the controls
+                // sit on at the bottom is repeated at the top, so the close
+                // and menu buttons get the same blur-like depth instead of
+                // floating on bare artwork.
                 LinearGradient(
                     stops: [
-                        .init(color: .black.opacity(0.58), location: 0),
-                        .init(color: .black.opacity(0.18), location: 0.28),
-                        .init(color: .black.opacity(0.30), location: 0.60),
+                        .init(color: .black, location: 0),
+                        .init(color: .black.opacity(0.72), location: 0.12),
+                        .init(color: .black.opacity(0.34), location: 0.34),
+                        .init(color: .black.opacity(0.22), location: 0.50),
+                        .init(color: .black.opacity(0.34), location: 0.66),
                         .init(color: .black.opacity(0.72), location: 0.88),
                         .init(color: .black, location: 1)
                     ],
@@ -528,7 +534,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .playerGlass(Circle())
                 }
-                .buttonStyle(PlayerControlPressStyle(scale: 0.9))
+                .buttonStyle(PlayerControlPressStyle(scale: 0.86))
                 .accessibilityLabel("Close player")
 
                 Spacer()
@@ -680,7 +686,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .playerGlass(Circle())
                 }
-                .buttonStyle(PlayerControlPressStyle(scale: 0.9))
+                .buttonStyle(PlayerControlPressStyle(scale: 0.86))
                 .accessibilityLabel("More options")
                 }
                 }
@@ -707,7 +713,7 @@ struct NowPlayingView: View {
                 active: library.isFavorite(track)
             ) {
                 haptic()
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
                     library.toggleFavorite(track)
                 }
             }
@@ -715,7 +721,7 @@ struct NowPlayingView: View {
 
             circularButton(icon: "shuffle", active: player.isShuffled) {
                 haptic()
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
                     player.toggleShuffle()
                 }
             }
@@ -728,7 +734,7 @@ struct NowPlayingView: View {
             Button {
                 haptic()
                 skipPulse += 1
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.74)) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.52)) {
                     player.previous()
                 }
             } label: {
@@ -739,13 +745,13 @@ struct NowPlayingView: View {
                     .motifBounce(tick: skipPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(scale: 0.85))
+            .buttonStyle(PlayerControlPressStyle(scale: 0.81))
             .accessibilityLabel("Previous")
 
             Button {
                 haptic()
                 playPulse += 1
-                withAnimation(.spring(response: 0.22, dampingFraction: 0.70)) {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.48)) {
                     player.toggle()
                 }
             } label: {
@@ -757,13 +763,13 @@ struct NowPlayingView: View {
                     .motifBounce(tick: playPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(scale: 0.92))
+            .buttonStyle(PlayerControlPressStyle(scale: 0.88))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
                 haptic()
                 skipPulse += 1
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.74)) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.52)) {
                     player.next()
                 }
             } label: {
@@ -774,7 +780,7 @@ struct NowPlayingView: View {
                     .motifBounce(tick: skipPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(scale: 0.85))
+            .buttonStyle(PlayerControlPressStyle(scale: 0.81))
             .accessibilityLabel("Next")
             }
         }
@@ -794,13 +800,13 @@ struct NowPlayingView: View {
                 .motifBounce(active)
                 .playerGlass(Circle())
         }
-        .buttonStyle(PlayerControlPressStyle(scale: 0.9))
+        .buttonStyle(PlayerControlPressStyle(scale: 0.86))
     }
 
     private var repeatButton: some View {
         Button {
             haptic()
-            withAnimation(.spring(response: 0.24, dampingFraction: 0.62)) {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
                 player.cycleRepeat()
             }
         } label: {
@@ -818,11 +824,11 @@ struct NowPlayingView: View {
                         .transition(.scale.combined(with: .opacity))
                 }
             }
-            .animation(.spring(response: 0.30, dampingFraction: 0.68), value: player.repeatMode)
+            .animation(.spring(response: 0.36, dampingFraction: 0.50), value: player.repeatMode)
             .frame(width: 42, height: 42)
             .playerGlass(Circle())
         }
-        .buttonStyle(PlayerControlPressStyle(scale: 0.9))
+        .buttonStyle(PlayerControlPressStyle(scale: 0.86))
         .accessibilityLabel("Repeat")
         .accessibilityValue(repeatLabel)
     }
