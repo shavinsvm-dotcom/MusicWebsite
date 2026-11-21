@@ -658,13 +658,16 @@ private struct AirPodsParticles: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
             Canvas { context, _ in
-                draw(elapsed: timeline.date.timeIntervalSince(start))
+                draw(
+                    context: &context,
+                    elapsed: timeline.date.timeIntervalSince(start)
+                )
             }
         }
         .allowsHitTesting(false)
     }
 
-    private func draw(elapsed: TimeInterval) {
+    private func draw(context: inout GraphicsContext, elapsed: TimeInterval) {
         let life: Double = 2.6
         guard elapsed < life else { return }
 
