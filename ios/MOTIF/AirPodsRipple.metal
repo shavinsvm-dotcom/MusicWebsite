@@ -61,6 +61,6 @@ using namespace metal;
         layer.sample(blueUV * size).b
     );
     color.rgb = mix(color.rgb, fringe, half(ring) * 0.85h);
-    color.rgb += half3(0.05h, 0.16h, 0.30h) * (half(ring) * half(1.0 - rippleT));
+    color.rgb += half3(0.10h) * (half(ring) * half(1.0 - rippleT));
     return color;
 }
