@@ -8,12 +8,13 @@ struct AirPodsMomentOverlay: View {
 
     @State private var snapshot: UIImage?
     @State private var revealed = false
-    @State private var cardIn = false
+    @State private var caseIn = false
+    @State private var lidOpen = false
+    @State private var budsOut = false
     @State private var settled = false
-    @State private var statusShown = false
+    @State private var burst: CGFloat = 0
     @State private var dismissing = false
     @State private var warp: CGFloat = 0
-    @State private var sweep: CGFloat = -1.3
     @State private var announced = false
 
     private let blue = Color(red: 0.33, green: 0.71, blue: 1.0)
@@ -21,18 +22,20 @@ struct AirPodsMomentOverlay: View {
     private let mint = Color(red: 0.49, green: 0.96, blue: 0.78)
     private let slate = Color(red: 0.64, green: 0.70, blue: 0.82)
 
-    private var cardShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 46, style: .continuous)
-    }
-
     var body: some View {
         ZStack {
             if let moment = monitor.moment {
                 GeometryReader { proxy in
                     let size = proxy.size
-                    let cardWidth = min(size.width * 0.70, 300)
-                    let cardHeight = cardWidth * 1.06
-                    let center = CGPoint(x: size.width / 2, y: size.height * 0.40)
+                    let heroWidth = min(size.width * 0.88, 330)
+                    let heroHeight = heroWidth * 0.98
+                    let stage = CGPoint(x: size.width / 2, y: size.height * 0.40)
+                    let caseWidth = heroWidth * 0.55
+                    let caseHeight = caseWidth * 0.90
+                    let caseCenter = CGPoint(
+                        x: stage.x,
+                        y: stage.y + heroHeight / 2 - 12 - caseHeight / 2
+                    )
                     let isConnected = moment.kind == .connected
 
                     ZStack {
@@ -40,8 +43,8 @@ struct AirPodsMomentOverlay: View {
 
                         if revealed {
                             AirPodsRings(
-                                center: center,
-                                radius: cardWidth * 0.58,
+                                center: caseCenter,
+                                radius: caseWidth * 0.72,
                                 blue: blue,
                                 cyan: cyan,
                                 collapsing: !isConnected
@@ -50,8 +53,8 @@ struct AirPodsMomentOverlay: View {
                             .allowsHitTesting(false)
 
                             AirPodsParticles(
-                                center: center,
-                                radius: cardWidth * 0.9,
+                                center: caseCenter,
+                                radius: caseWidth * 1.05,
                                 blue: blue,
                                 cyan: cyan
                             )
@@ -61,15 +64,15 @@ struct AirPodsMomentOverlay: View {
 
                         hero(
                             moment: moment,
-                            center: center,
-                            width: cardWidth,
-                            height: cardHeight
+                            stage: stage,
+                            width: heroWidth,
+                            height: heroHeight
                         )
 
                         footer(
                             moment: moment,
-                            center: center,
-                            cardHeight: cardHeight
+                            centerX: stage.x,
+                            y: stage.y + heroHeight / 2 + 42
                         )
                     }
                     .frame(width: size.width, height: size.height)
@@ -108,12 +111,13 @@ struct AirPodsMomentOverlay: View {
     private func reset() {
         snapshot = nil
         revealed = false
-        cardIn = false
+        caseIn = false
+        lidOpen = false
+        budsOut = false
         settled = false
-        statusShown = false
+        burst = 0
         dismissing = false
         warp = 0
-        sweep = -1.3
         announced = false
     }
 
@@ -172,174 +176,225 @@ struct AirPodsMomentOverlay: View {
 
     private func hero(
         moment: AirPodsMoment,
-        center: CGPoint,
+        stage: CGPoint,
         width: CGFloat,
         height: CGFloat
     ) -> some View {
         let isConnected = moment.kind == .connected
         let accent = isConnected ? cyan : slate
+        let caseW = width * 0.55
+        let caseH = caseW * 0.90
+        let caseTop = height - 12 - caseH
+        let lidH = caseH * 0.36
+        let openingY = caseTop + 8
 
         return ZStack {
             Ellipse()
                 .fill(
                     RadialGradient(
                         colors: [
-                            accent.opacity(isConnected ? 0.40 : 0.22),
+                            accent.opacity(isConnected ? 0.42 : 0.20),
                             .clear
                         ],
                         center: .center,
                         startRadius: 0,
-                        endRadius: width * 0.55
+                        endRadius: caseW * 0.62
                     )
                 )
-                .frame(width: width * 1.5, height: height * 0.30)
+                .frame(width: caseW * 1.6, height: caseH * 0.34)
                 .blur(radius: 26)
-                .offset(y: height * 0.52)
-                .opacity(cardIn ? 1 : 0)
+                .position(x: width / 2, y: caseTop + caseH + 2)
 
-            card(moment: moment, width: width, height: height)
-                .overlay(alignment: .bottomTrailing) {
-                    badge(moment: moment)
-                        .padding(10)
-                }
-
-            Image(systemName: moment.symbolName)
-                .font(.system(size: width * 0.44, weight: .regular))
-                .foregroundStyle(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white, location: 0),
-                            .init(color: .white.opacity(0.82), location: 0.62),
-                            .init(color: .white.opacity(0.96), location: 1)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
+            if burst > 0.001 {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                .white.opacity(0.45),
+                                cyan.opacity(0.20),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: caseW * 0.55
+                        )
                     )
+                    .frame(width: caseW * 1.2, height: caseW * 1.2)
+                    .scaleEffect(0.35 + burst * 1.3)
+                    .opacity(Double(1 - burst))
+                    .blur(radius: 12)
+                    .position(x: width / 2, y: openingY)
+            }
+
+            lid(width: caseW, height: lidH)
+                .position(x: width / 2, y: caseTop + lidH / 2)
+
+            budArea(width: width, openingY: openingY)
+                .position(x: width / 2, y: openingY / 2)
+
+            caseBody(
+                isConnected: isConnected,
+                width: caseW,
+                height: caseH,
+                lidHeight: lidH
+            )
+            .position(x: width / 2, y: caseTop + caseH / 2)
+
+            badge(isConnected: isConnected)
+                .position(
+                    x: width / 2 + caseW / 2 - 6,
+                    y: caseTop + caseH - 8
                 )
-                .shadow(color: accent.opacity(isConnected ? 0.55 : 0.18), radius: 30, y: 6)
-                .shadow(color: .black.opacity(0.35), radius: 10, y: 8)
-                .opacity(isConnected ? 1 : 0.52)
-                .saturation(isConnected ? 1 : 0.2)
-                .scaleEffect(settled ? 1.04 : 1)
-                .rotation3DEffect(
-                    .degrees(settled ? 0 : -16),
-                    axis: (x: 0, y: 1, z: 0),
-                    perspective: 0.55
-                )
-                .offset(y: -10)
         }
         .frame(width: width, height: height)
-        .position(center)
+        .scaleEffect(caseIn ? 1 : 0.86, anchor: .bottom)
         .rotation3DEffect(
-            .degrees(cardIn ? 0 : -24),
-            axis: (x: 0, y: 1, z: 0),
-            perspective: 0.55
-        )
-        .rotation3DEffect(
-            .degrees(cardIn ? 0 : 9),
+            .degrees(caseIn ? 0 : 10),
             axis: (x: 1, y: 0, z: 0),
-            perspective: 0.55
+            perspective: 0.6
         )
-        .scaleEffect(cardIn ? 1 : 0.80)
-        .offset(y: cardIn ? 0 : 80)
-        .opacity(cardIn ? 1 : 0)
+        .offset(y: caseIn ? 0 : 46)
+        .opacity(caseIn ? 1 : 0)
+        .position(stage)
     }
 
-    private func card(
-        moment: AirPodsMoment,
+    private func lid(width: CGFloat, height: CGFloat) -> some View {
+        let shape = RoundedRectangle(cornerRadius: width * 0.21, style: .continuous)
+
+        return shape
+            .fill(plasticFill)
+            .frame(width: width, height: height)
+            .overlay {
+                shape
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.48, green: 0.54, blue: 0.63)
+                                    .opacity(0.55),
+                                Color(red: 0.72, green: 0.77, blue: 0.84)
+                                    .opacity(0.16)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .opacity(lidOpen ? 1 : 0)
+            }
+            .overlay {
+                shape
+                    .strokeBorder(.white.opacity(0.62), lineWidth: 1)
+            }
+            .scaleEffect(x: 1, y: lidOpen ? 0.52 : 1, anchor: .bottom)
+            .offset(y: lidOpen ? -height : 0)
+            .shadow(color: .black.opacity(lidOpen ? 0.26 : 0), radius: 10, y: 4)
+    }
+
+    private func caseBody(
+        isConnected: Bool,
         width: CGFloat,
-        height: CGFloat
+        height: CGFloat,
+        lidHeight: CGFloat
     ) -> some View {
-        let isConnected = moment.kind == .connected
+        let shape = RoundedRectangle(cornerRadius: width * 0.21, style: .continuous)
         let accent = isConnected ? cyan : slate
 
-        return cardShape
-            .fill(
-                LinearGradient(
-                    colors: [
-                        Color.white.opacity(0.10),
-                        accent.opacity(0.05),
-                        Color.black.opacity(0.10)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .nativeGlass(cardShape)
-            .overlay {
-                cardShape
-                    .strokeBorder(
-                        LinearGradient(
-                            stops: [
-                                .init(color: .white.opacity(0.62), location: 0),
-                                .init(color: .white.opacity(0.10), location: 0.32),
-                                .init(color: .white.opacity(0.16), location: 0.68),
-                                .init(color: accent.opacity(0.40), location: 1)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1.2
-                    )
-            }
-            .overlay {
-                cardShape
-                    .inset(by: 7)
-                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.8)
-            }
+        return shape
+            .fill(plasticFill)
+            .frame(width: width, height: height)
             .overlay {
                 ZStack {
                     Ellipse()
                         .fill(
                             RadialGradient(
-                                colors: [
-                                    .white.opacity(0.30),
-                                    .white.opacity(0.06),
-                                    .clear
-                                ],
+                                colors: [.white.opacity(0.80), .clear],
                                 center: .center,
                                 startRadius: 0,
                                 endRadius: width * 0.55
                             )
                         )
-                        .frame(width: width * 1.1, height: height * 0.60)
-                        .offset(x: -width * 0.16, y: -height * 0.26)
-                        .blur(radius: 10)
+                        .frame(width: width * 0.95, height: height * 0.50)
+                        .offset(x: -width * 0.10, y: -height * 0.28)
+                        .blur(radius: 9)
                 }
                 .frame(width: width, height: height)
-                .clipShape(cardShape)
-                .blendMode(.plusLighter)
+                .clipShape(shape)
                 .allowsHitTesting(false)
             }
             .overlay {
-                ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    .clear,
-                                    .white.opacity(0.30),
-                                    .clear
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: width * 0.35)
-                        .rotationEffect(.degrees(18))
-                        .offset(x: sweep * width)
-                        .blur(radius: 5)
-                }
-                .frame(width: width, height: height)
-                .mask(cardShape)
-                .blendMode(.plusLighter)
-                .allowsHitTesting(false)
+                Rectangle()
+                    .fill(Color.black.opacity(0.14))
+                    .frame(width: width * 0.90, height: 1)
+                    .offset(y: -height / 2 + lidHeight)
+                    .opacity(lidOpen ? 0 : 1)
             }
-            .frame(width: width, height: height)
+            .overlay {
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.03, green: 0.05, blue: 0.09),
+                                Color(red: 0.10, green: 0.17, blue: 0.26)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: width * 0.76, height: height * 0.11)
+                    .offset(y: -height / 2 + 12)
+                    .opacity(lidOpen ? 1 : 0)
+            }
+            .overlay {
+                Capsule()
+                    .fill(accent.opacity(0.60))
+                    .frame(width: width * 0.62, height: 1.6)
+                    .blur(radius: 3)
+                    .offset(y: -height / 2 + 22)
+                    .opacity(lidOpen ? 1 : 0)
+            }
+            .overlay {
+                Circle()
+                    .fill(isConnected ? mint : Color(white: 0.56))
+                    .frame(width: 5, height: 5)
+                    .shadow(
+                        color: accent.opacity(isConnected ? 0.9 : 0.18),
+                        radius: 4
+                    )
+                    .offset(y: height * 0.17)
+            }
+            .overlay {
+                shape
+                    .strokeBorder(.white.opacity(0.65), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.42), radius: 28, y: 16)
+            .shadow(
+                color: accent.opacity(isConnected ? 0.22 : 0.10),
+                radius: 34,
+                y: 4
+            )
+            .saturation(isConnected ? 1 : 0.72)
     }
 
-    private func badge(moment: AirPodsMoment) -> some View {
-        let isConnected = moment.kind == .connected
+    private func budArea(width: CGFloat, openingY: CGFloat) -> some View {
+        ZStack {
+            AirPodBud(mirrored: false)
+                .frame(width: 44, height: 78)
+                .rotationEffect(.degrees(-7))
+                .offset(x: budsOut ? 0 : -14, y: budsOut ? 0 : 70)
+                .scaleEffect(budsOut ? 1 : 0.62)
+                .position(x: width / 2 - 38, y: openingY - 40)
+
+            AirPodBud(mirrored: true)
+                .frame(width: 44, height: 78)
+                .rotationEffect(.degrees(7))
+                .offset(x: budsOut ? 0 : 14, y: budsOut ? 0 : 70)
+                .scaleEffect(budsOut ? 1 : 0.62)
+                .position(x: width / 2 + 38, y: openingY - 40)
+        }
+        .frame(width: width, height: openingY)
+        .clipped()
+    }
+
+    private func badge(isConnected: Bool) -> some View {
         let accent = isConnected ? mint : slate
 
         return ZStack {
@@ -348,23 +403,23 @@ struct AirPodsMomentOverlay: View {
                 .nativeGlass(Circle())
                 .overlay {
                     Circle()
-                        .strokeBorder(.white.opacity(0.28), lineWidth: 0.8)
+                        .strokeBorder(.white.opacity(0.26), lineWidth: 0.8)
                 }
 
             Image(systemName: isConnected ? "checkmark" : "xmark")
-                .font(.system(size: 19, weight: .bold))
-                .foregroundStyle(isConnected ? accent : .white.opacity(0.72))
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(isConnected ? accent : .white.opacity(0.70))
         }
-        .frame(width: 54, height: 54)
-        .shadow(color: accent.opacity(isConnected ? 0.5 : 0.2), radius: 18, y: 6)
+        .frame(width: 46, height: 46)
+        .shadow(color: accent.opacity(0.40), radius: 14, y: 5)
         .scaleEffect(settled ? 1 : 0.30)
         .opacity(settled ? 1 : 0)
     }
 
     private func footer(
         moment: AirPodsMoment,
-        center: CGPoint,
-        cardHeight: CGFloat
+        centerX: CGFloat,
+        y: CGFloat
     ) -> some View {
         let isConnected = moment.kind == .connected
 
@@ -381,9 +436,9 @@ struct AirPodsMomentOverlay: View {
             statusChip(isConnected: isConnected)
         }
         .frame(maxWidth: 330)
-        .position(x: center.x, y: center.y + cardHeight / 2 + 66)
-        .opacity(statusShown ? 1 : 0)
-        .offset(y: statusShown ? 0 : 12)
+        .position(x: centerX, y: y)
+        .opacity(settled ? 1 : 0)
+        .offset(y: settled ? 0 : 12)
     }
 
     private func statusChip(isConnected: Bool) -> some View {
@@ -405,6 +460,18 @@ struct AirPodsMomentOverlay: View {
         }
     }
 
+    private var plasticFill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(white: 1.0),
+                Color(white: 0.96),
+                Color(white: 0.84)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
     @MainActor
     private func run(_ moment: AirPodsMoment) async {
         // A second moment can arrive while the first is still on screen (for
@@ -421,15 +488,23 @@ struct AirPodsMomentOverlay: View {
         }
 
         if moment.kind == .disconnected {
-            // Disconnect enters on the same settled product card, then dims.
-            settled = true
+            // The case enters open, with the buds still out, then puts them away.
+            lidOpen = true
+            budsOut = true
         }
 
         if reduceMotion {
-            cardIn = true
-            settled = true
-            statusShown = true
+            caseIn = true
             revealed = true
+            switch moment.kind {
+            case .connected:
+                lidOpen = true
+                budsOut = true
+            case .disconnected:
+                lidOpen = false
+                budsOut = false
+            }
+            settled = true
             MotifHaptics.play(moment.kind == .connected ? .success : .soft)
             announce(moment)
 
@@ -449,21 +524,34 @@ struct AirPodsMomentOverlay: View {
             }
         }
 
-        withAnimation(.spring(response: 0.62, dampingFraction: 0.78)) {
-            cardIn = true
+        withAnimation(.spring(response: 0.60, dampingFraction: 0.78)) {
+            caseIn = true
         }
+        MotifHaptics.play(.soft)
 
-        if moment.kind == .connected {
+        switch moment.kind {
+        case .connected:
+            try? await Task.sleep(nanoseconds: 360_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.52, dampingFraction: 0.80)) {
+                lidOpen = true
+            }
+            MotifHaptics.play(.light)
+
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.68)) {
+                budsOut = true
+            }
+            withAnimation(.easeOut(duration: 0.85)) {
+                burst = 1
+            }
             MotifHaptics.play(.soft)
 
-            try? await Task.sleep(nanoseconds: 560_000_000)
+            try? await Task.sleep(nanoseconds: 430_000_000)
             guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.40, dampingFraction: 0.74)) {
                 settled = true
-                statusShown = true
-            }
-            withAnimation(.easeInOut(duration: 0.80)) {
-                sweep = 1.35
             }
             MotifHaptics.play(.success)
             announce(moment)
@@ -471,17 +559,28 @@ struct AirPodsMomentOverlay: View {
             try? await Task.sleep(nanoseconds: 1_600_000_000)
             guard !Task.isCancelled else { return }
 
-        } else {
+        case .disconnected:
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.80)) {
+                budsOut = false
+            }
             MotifHaptics.play(.soft)
 
-            try? await Task.sleep(nanoseconds: 620_000_000)
+            try? await Task.sleep(nanoseconds: 460_000_000)
             guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.35)) {
-                statusShown = true
+            withAnimation(.spring(response: 0.50, dampingFraction: 0.86)) {
+                lidOpen = false
+            }
+
+            try? await Task.sleep(nanoseconds: 380_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.28)) {
+                settled = true
             }
             announce(moment)
 
-            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            try? await Task.sleep(nanoseconds: 1_300_000_000)
             guard !Task.isCancelled else { return }
         }
 
@@ -502,6 +601,60 @@ struct AirPodsMomentOverlay: View {
             argument: moment.kind == .connected
                 ? "\(moment.name) connected"
                 : "\(moment.name) disconnected"
+        )
+    }
+}
+
+/// One stylised AirPod: a glossy white head with a short stem, mirrorable so
+/// the pair faces each other.
+private struct AirPodBud: View {
+    let mirrored: Bool
+
+    var body: some View {
+        ZStack {
+            Capsule(style: .continuous)
+                .fill(budFill)
+                .frame(width: 15, height: 48)
+                .offset(y: 15)
+
+            Ellipse()
+                .fill(budFill)
+                .frame(width: 35, height: 39)
+                .offset(y: -17)
+                .overlay {
+                    Ellipse()
+                        .strokeBorder(Color.black.opacity(0.06), lineWidth: 0.8)
+                }
+
+            Ellipse()
+                .fill(Color.black.opacity(0.20))
+                .frame(width: 13, height: 7)
+                .offset(x: -8, y: -22)
+
+            Circle()
+                .fill(Color(white: 0.42).opacity(0.55))
+                .frame(width: 4, height: 4)
+                .offset(x: 4, y: -4)
+
+            Capsule(style: .continuous)
+                .fill(Color(white: 0.58))
+                .frame(width: 6, height: 11)
+                .offset(y: 36)
+        }
+        .frame(width: 44, height: 78)
+        .scaleEffect(x: mirrored ? -1 : 1, y: 1)
+        .shadow(color: .black.opacity(0.28), radius: 8, y: 4)
+    }
+
+    private var budFill: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(white: 1.0),
+                Color(white: 0.94),
+                Color(white: 0.76)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
         )
     }
 }
@@ -625,7 +778,7 @@ private struct AirPodsRings: View {
             lineWidth: 2
         )
 
-        // A slow halo breathing behind the glass.
+        // A slow halo breathing behind the case.
         let pulse = 0.5 + 0.5 * sin(elapsed * 2.4)
         let halo = radius * 0.92
         context.fill(
