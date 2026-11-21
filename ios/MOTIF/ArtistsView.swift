@@ -410,110 +410,93 @@ struct LibraryAlbumCard: View {
 
 struct LibraryAlbumDetailView: View {
     @EnvironmentObject private var player: PlayerManager
-    @Environment(\.colorScheme) private var colorScheme
-
     let album: LibraryAlbumGroup
     @Binding var showNowPlaying: Bool
-
-    @State private var showsCompactHeader = false
 
     private var tracks: [Track] { album.tracks }
 
     var body: some View {
-        GeometryReader { proxy in
-            let heroHeight = max(300, proxy.size.height * 0.46)
+        ZStack {
+            DetailBackdrop(artworkURL: album.artworkURL)
 
-            ZStack {
-                DetailBackdrop(artworkURL: album.artworkURL)
+            ScrollView {
+                VStack(spacing: 0) {
+                    header
 
-                ScrollView {
-                    VStack(spacing: 0) {
-                        EditorialHeroHeader(
-                            title: album.title,
-                            eyebrow: "Album",
-                            subtitle: albumSubtitle,
-                            coordinateSpace: "albumDetail",
-                            height: heroHeight,
-                            cover: {
-                                ArtworkView(
-                                    url: album.artworkURL,
-                                    seed: album.title + album.artist
-                                )
-                                .id(album.artworkURL)
-                            },
-                            actions: {
-                                if !tracks.isEmpty {
-                                    HStack(spacing: 10) {
-                                        Button {
-                                            play(shuffled: false)
-                                        } label: {
-                                            Label("Play", systemImage: "play.fill")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .padding(.horizontal, 22)
-                                                .frame(height: 42)
-                                                .background(Color.white, in: Capsule())
-                                                .foregroundStyle(.black)
-                                        }
-                                        .buttonStyle(MotifPressStyle(scale: 0.94))
+                    LazyVStack(spacing: 0) {
+                        ForEach(tracks) { track in
+                            TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
 
-                                        Button {
-                                            play(shuffled: true)
-                                        } label: {
-                                            Image(systemName: "shuffle")
-                                                .font(.system(size: 15, weight: .semibold))
-                                                .frame(width: 44, height: 42)
-                                                .foregroundStyle(.white)
-                                                .nativeGlass(Circle(), interactive: true)
-                                        }
-                                        .buttonStyle(MotifPressStyle(scale: 0.92))
-                                    }
-                                }
-                            }
-                        )
-
-                        LazyVStack(spacing: 0) {
-                            ForEach(tracks) { track in
-                                TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
-
-                                if track.id != tracks.last?.id {
-                                    Divider().opacity(0.35)
-                                }
+                            if track.id != tracks.last?.id {
+                                Divider().opacity(0.35)
                             }
                         }
-                        .padding(.horizontal, 20)
-
-                        Spacer(minLength: 120)
                     }
-                }
-                .coordinateSpace(name: "albumDetail")
-                .scrollIndicators(.hidden)
-            }
-            .overlay(alignment: .top) {
-                DetailNavScrim(visible: showsCompactHeader)
-            }
-            .onPreferenceChange(HeroScrollOffsetKey.self) { offset in
-                let next = offset < -heroHeight * 0.56
-                guard next != showsCompactHeader else { return }
-                withAnimation(.easeOut(duration: 0.20)) {
-                    showsCompactHeader = next
+                    .padding(.horizontal, 20)
+
+                    Spacer(minLength: 120)
                 }
             }
+            .scrollIndicators(.hidden)
+            .background(Color.clear)
         }
-        .ignoresSafeArea(edges: .top)
         .navigationTitle(album.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbarColorScheme(
-            showsCompactHeader && colorScheme == .light ? .light : .dark,
-            for: .navigationBar
-        )
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                CompactHeroTitle(title: album.title, visible: showsCompactHeader) {
-                    ArtworkView(url: album.artworkURL, seed: album.title + album.artist)
+    }
+
+    private var header: some View {
+        VStack(spacing: 16) {
+            ArtworkView(
+                url: album.artworkURL,
+                seed: album.title + album.artist
+            )
+                .frame(width: 220, height: 220)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.8)
+                }
+                .shadow(color: .black.opacity(0.24), radius: 24, y: 12)
+
+            VStack(spacing: 6) {
+                Text("ALBUM")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1.4)
+                    .foregroundStyle(.secondary)
+
+                Text(album.title)
+                    .font(.system(size: 31, weight: .bold))
+                    .tracking(-0.9)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+
+                Text(albumSubtitle)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+
+            if !tracks.isEmpty {
+                HStack(spacing: 10) {
+                    Button {
+                        play(shuffled: false)
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .padding(.horizontal, 22)
+                            .frame(height: 42)
+                            .background(Color.primary, in: Capsule())
+                            .foregroundStyle(Color(uiColor: .systemBackground))
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.94))
                 }
             }
         }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+        .padding(.top, 10)
+        .padding(.bottom, 28)
     }
 
     private var albumSubtitle: String {

@@ -95,9 +95,6 @@ struct MiniPlayer: View {
                 .frame(height: 50)
             }
             .background(miniPlayerSurface)
-            .background {
-                MiniPlayerRibbonGlow(artworkURL: track.artworkURL)
-            }
             .contentShape(Capsule())
             .shadow(color: .black.opacity(0.18), radius: 16, x: 0, y: 7)
             .modifier(
@@ -145,148 +142,29 @@ struct MiniPlayer: View {
 private struct MiniArtworkProgressRing: View {
     @EnvironmentObject private var player: PlayerManager
     @EnvironmentObject private var progress: PlaybackProgress
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @State private var isShifting = false
 
     private var fraction: CGFloat {
         guard player.duration > 0 else { return 0 }
         return CGFloat(min(max(progress.elapsed / player.duration, 0), 1))
     }
 
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 12.5, style: .continuous)
-    }
-
-    private var spectrum: AngularGradient {
-        AngularGradient(
-            colors: [
-                Color(red: 0.40, green: 0.74, blue: 1.00),
-                Color(red: 0.68, green: 0.55, blue: 1.00),
-                Color(red: 1.00, green: 0.52, blue: 0.76),
-                Color(red: 1.00, green: 0.78, blue: 0.48),
-                Color(red: 0.48, green: 0.96, blue: 0.84),
-                Color(red: 0.40, green: 0.74, blue: 1.00)
-            ],
-            center: .center
-        )
-    }
-
     var body: some View {
         ZStack {
-            shape
+            RoundedRectangle(cornerRadius: 12.5, style: .continuous)
                 .stroke(Color.white.opacity(0.16), lineWidth: 1.5)
 
-            shape
+            RoundedRectangle(cornerRadius: 12.5, style: .continuous)
                 .trim(from: 0, to: max(fraction, 0.001))
                 .stroke(
-                    spectrum,
-                    style: StrokeStyle(lineWidth: 2.0, lineCap: .round, lineJoin: .round)
+                    Color.white.opacity(0.94),
+                    style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .hueRotation(.degrees(isShifting ? 360 : 0))
-
-            // A blurred copy lifts the thin ring off the artwork without
-            // reading as a second, heavier progress bar.
-            shape
-                .trim(from: 0, to: max(fraction, 0.001))
-                .stroke(
-                    spectrum,
-                    style: StrokeStyle(lineWidth: 4.5, lineCap: .round, lineJoin: .round)
-                )
-                .rotationEffect(.degrees(-90))
-                .hueRotation(.degrees(isShifting ? 360 : 0))
-                .blur(radius: 2.8)
-                .opacity(0.46)
         }
         .frame(width: 38, height: 38)
         .animation(.linear(duration: 0.12), value: fraction)
-        .onAppear {
-            guard !reduceMotion, !isShifting else { return }
-            withAnimation(.linear(duration: 16).repeatForever(autoreverses: false)) {
-                isShifting = true
-            }
-        }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-    }
-}
-
-/// A pair of slow, cover-coloured ribbons that sit behind the closed mini
-/// player, bleeding a soft prismatic halo out past the glass pill.
-private struct MiniPlayerRibbonGlow: View {
-    let artworkURL: URL?
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    @State private var gradient = PlayerGradient.fallback
-    @State private var drifting = false
-
-    private var palette: [Color] {
-        let colors = gradient.colors
-        guard colors.count >= 9 else {
-            return [.purple, .blue, .pink, .cyan, .orange, .indigo]
-        }
-        return [colors[1], colors[3], colors[4], colors[5], colors[7], colors[2]]
-    }
-
-    var body: some View {
-        ZStack {
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [palette[0], palette[2], palette[4], palette[1]],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(height: 30)
-                .rotationEffect(.degrees(-2.5))
-                .offset(x: drifting ? 9 : -9, y: -3)
-
-            Capsule()
-                .fill(
-                    LinearGradient(
-                        colors: [palette[3], palette[1], palette[0], palette[4]],
-                        startPoint: .trailing,
-                        endPoint: .leading
-                    )
-                )
-                .frame(height: 24)
-                .rotationEffect(.degrees(2))
-                .offset(x: drifting ? -11 : 11, y: 5)
-                .opacity(0.82)
-        }
-        .padding(.horizontal, -8)
-        .padding(.vertical, -7)
-        .blur(radius: 18)
-        .saturation(1.18)
-        .opacity(0.55)
-        .allowsHitTesting(false)
-        .task(id: artworkURL) {
-            await loadPalette()
-        }
-        .onAppear {
-            guard !reduceMotion, !drifting else { return }
-            withAnimation(.easeInOut(duration: 8.5).repeatForever(autoreverses: true)) {
-                drifting = true
-            }
-        }
-    }
-
-    @MainActor
-    private func loadPalette() async {
-        guard let artworkURL else {
-            gradient = .fallback
-            return
-        }
-
-        if let cached = PlaybackBackdropCache.shared.gradient(for: artworkURL) {
-            gradient = cached
-            return
-        }
-
-        gradient = await PlaybackBackdropCache.shared.prepareGradient(for: artworkURL)
     }
 }
 

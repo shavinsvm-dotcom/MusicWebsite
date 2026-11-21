@@ -10,16 +10,6 @@ enum PlaylistCoverGenerator {
         case dunes
         case orbit
         case prism
-
-        var title: String {
-            switch self {
-            case .sweep: return "Sweep"
-            case .tide: return "Tide"
-            case .dunes: return "Dunes"
-            case .orbit: return "Orbit"
-            case .prism: return "Prism"
-            }
-        }
     }
 
     private struct Palette {
@@ -83,71 +73,35 @@ enum PlaylistCoverGenerator {
         )
     ]
 
-    private static let paletteNames: [String] = [
-        "Ultraviolet", "Sunset", "Lagoon", "Citrus", "Orchid",
-        "Cobalt", "Sorbet", "Glacier", "Spectrum", "Ember"
-    ]
-
-    struct Preview: Sendable {
-        let variant: Int
-        let pattern: String
-        let palette: String
-        let data: Data
-    }
-
-    private struct Selection {
-        let pattern: Pattern
-        let paletteIndex: Int
-        let seed: UInt64
-    }
+    private static let pixelSize: CGFloat = 1024
 
     static func jpegData(name: String, variant: Int) -> Data? {
         image(name: name, variant: variant)
             .jpegData(compressionQuality: 0.9)
     }
 
-    /// A small, cheap render used by the cover picker. Returns JPEG data so
-    /// the picker can generate its grid away from the main actor.
-    static func preview(name: String, variant: Int, side: CGFloat = 460) -> Preview? {
-        guard let data = image(name: name, variant: variant, pixelSize: side)
-            .jpegData(compressionQuality: 0.88)
-        else { return nil }
-
-        let selection = selection(name: name, variant: variant)
-        return Preview(
-            variant: variant,
-            pattern: selection.pattern.title,
-            palette: paletteNames[selection.paletteIndex],
-            data: data
-        )
-    }
-
-    static func image(name: String, variant: Int, pixelSize: CGFloat = 1024) -> UIImage {
+    static func image(name: String, variant: Int) -> UIImage {
         let size = CGSize(width: pixelSize, height: pixelSize)
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
         format.opaque = true
 
-        let selection = selection(name: name, variant: variant)
+        let step = abs(variant)
+        let nameSeed = stableSeed(for: name)
+        let pattern = Pattern.allCases[step % Pattern.allCases.count]
+        let paletteIndex = (step * 3 + Int(nameSeed % UInt64(palettes.count))) % palettes.count
+        let palette = palettes[paletteIndex]
+        let seed = mix(nameSeed ^ (UInt64(bitPattern: Int64(step)) &* 0x9E37_79B9_7F4A_7C15))
 
         return UIGraphicsImageRenderer(size: size, format: format).image { context in
             draw(
                 in: context.cgContext,
                 size: pixelSize,
-                seed: selection.seed,
-                pattern: selection.pattern,
-                palette: palettes[selection.paletteIndex]
+                seed: seed,
+                pattern: pattern,
+                palette: palette
             )
         }
-    }
-
-    private static func selection(name: String, variant: Int) -> Selection {
-        let step = abs(variant)
-        let nameSeed = stableSeed(for: name)
-        let pattern = Pattern.allCases[step % Pattern.allCases.count]
-        let paletteIndex = (step * 3 + Int(nameSeed % UInt64(palettes.count))) % palettes.count
-        let seed = mix(nameSeed ^ (UInt64(bitPattern: Int64(step)) &* 0x9E37_79B9_7F4A_7C15))
-        return Selection(pattern: pattern, paletteIndex: paletteIndex, seed: seed)
     }
 
     // MARK: - Canvas
