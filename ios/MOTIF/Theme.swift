@@ -178,25 +178,26 @@ private struct ScreenEntrance: ViewModifier {
     }
 }
 
+/// The app-wide press treatment. Touch-down is a short, damped compression;
+/// release is one smooth spring back to rest. Only scale and a whisper of
+/// dimming move, so a tap never looks like the button is shaking or flashing.
 struct MotifPressStyle: ButtonStyle {
-    var scale: CGFloat = 0.94
-    var opacity: Double = 0.86
+    var scale: CGFloat = 0.96
+    var opacity: Double = 0.94
     var haptic: MotifHaptics.Event? = .light
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
-        let spring: Animation = pressed
-            ? .spring(response: 0.16, dampingFraction: 0.78)
-            : .spring(response: 0.36, dampingFraction: 0.46)
+        let animation: Animation = pressed
+            ? .easeOut(duration: 0.12)
+            : .spring(response: 0.32, dampingFraction: 0.76)
 
         return configuration.label
             .scaleEffect(pressed ? scale : 1)
-            .offset(y: pressed ? 1.5 : 0)
-            .brightness(pressed ? -0.025 : 0)
             .opacity(pressed ? opacity : 1)
-            .animation(reduceMotion ? nil : spring, value: pressed)
+            .animation(reduceMotion ? nil : animation, value: pressed)
             .onChange(of: pressed) { isPressed in
                 guard isPressed, let haptic else { return }
                 MotifHaptics.play(haptic)
@@ -204,32 +205,25 @@ struct MotifPressStyle: ButtonStyle {
     }
 }
 
-/// Springy press treatment for the player's glass controls. Touch-down is
-/// quick and flashes the glass brighter, then release uses an under-damped
-/// spring so the control visibly pops past its resting size before settling.
+/// Matches the app-wide rhythm but compresses a little deeper for the player's
+/// glass controls. The glyph warms up slightly instead of flashing white, and
+/// the release settles without overshooting past the resting size.
 struct PlayerControlPressStyle: ButtonStyle {
-    var scale: CGFloat = 0.88
+    var scale: CGFloat = 0.90
     var haptic: MotifHaptics.Event? = .light
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
-        let spring: Animation = pressed
-            ? .spring(response: 0.10, dampingFraction: 0.82)
-            : .spring(response: 0.30, dampingFraction: 0.30)
+        let animation: Animation = pressed
+            ? .easeOut(duration: 0.10)
+            : .spring(response: 0.28, dampingFraction: 0.64)
 
         return configuration.label
             .scaleEffect(pressed ? scale : 1)
-            .offset(y: pressed ? 2 : 0)
-            .brightness(pressed ? 0.16 : 0)
-            .saturation(pressed ? 1.10 : 1)
-            .shadow(
-                color: .black.opacity(pressed ? 0.04 : 0.24),
-                radius: pressed ? 2 : 9,
-                y: pressed ? 1 : 4
-            )
-            .animation(reduceMotion ? nil : spring, value: pressed)
+            .brightness(pressed ? 0.05 : 0)
+            .animation(reduceMotion ? nil : animation, value: pressed)
             .onChange(of: pressed) { isPressed in
                 guard isPressed, let haptic else { return }
                 MotifHaptics.play(haptic)

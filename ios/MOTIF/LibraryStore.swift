@@ -877,6 +877,46 @@ final class LibraryStore: ObservableObject {
         save()
     }
 
+    /// Renders a prismatic ribbon cover off the main thread and points the
+    /// playlist at a fresh file name, which also busts the artwork cache so
+    /// the new cover appears immediately everywhere the playlist shows up.
+    @discardableResult
+    func generatePlaylistCover(_ playlistID: UUID, variant: Int) async -> Bool {
+        guard let playlist = playlists.first(where: { $0.id == playlistID }) else { return false }
+        let name = playlist.name
+
+        let data = await Task.detached(priority: .userInitiated) {
+            PlaylistCoverGenerator.jpegData(name: name, variant: variant)
+        }.value
+
+        guard let data,
+              let index = playlists.firstIndex(where: { $0.id == playlistID })
+        else { return false }
+
+        let destination = artworkDirectory
+            .appendingPathComponent(
+                "playlist-\(playlistID.uuidString)-\(UUID().uuidString.prefix(8)).jpg"
+            )
+
+        do {
+            try data.write(to: destination, options: .atomic)
+        } catch {
+            return false
+        }
+
+        removePlaylistCover(at: playlists[index].customCoverURL)
+        playlists[index].customCoverURL = destination
+        save()
+        return true
+    }
+
+    func clearPlaylistCover(_ playlistID: UUID) {
+        guard let index = playlists.firstIndex(where: { $0.id == playlistID }) else { return }
+        removePlaylistCover(at: playlists[index].customCoverURL)
+        playlists[index].customCoverURL = nil
+        save()
+    }
+
     @discardableResult
     func duplicatePlaylist(_ playlist: Playlist) -> Playlist? {
         var copy = Playlist(

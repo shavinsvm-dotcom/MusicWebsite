@@ -391,6 +391,7 @@ struct PlaylistArtwork: View {
     var body: some View {
         if let cover = playlist.customCoverURL {
             ArtworkView(url: cover, seed: playlist.name)
+                .id(cover)
         } else {
             PlaylistMosaic(tracks: tracks)
         }
@@ -501,6 +502,7 @@ struct PlaylistDetailView: View {
 
     @State private var showEditDetails = false
     @State private var showEditTracks = false
+    @State private var coverVariant = 0
 
     private var playlist: Playlist? {
         library.playlists.first(where: { $0.id == playlistID })
@@ -548,6 +550,20 @@ struct PlaylistDetailView: View {
                         .shadow(color: .black.opacity(0.18), radius: 18, y: 9)
                         .padding(7)
                         .nativeGlass(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                        .overlay(alignment: .bottomTrailing) {
+                            Button {
+                                generateCover()
+                            } label: {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(.primary)
+                                    .frame(width: 40, height: 40)
+                                    .nativeGlass(Circle(), interactive: true)
+                            }
+                            .buttonStyle(MotifPressStyle(scale: 0.9))
+                            .offset(x: 10, y: 10)
+                            .accessibilityLabel("Generate playlist cover")
+                        }
 
                     if let description = playlist?.description, !description.isEmpty {
                         Text(description)
@@ -574,7 +590,7 @@ struct PlaylistDetailView: View {
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(MotifPressStyle(scale: 0.90, opacity: 0.9))
                             .accessibilityLabel("Play playlist")
 
                             Divider()
@@ -586,7 +602,7 @@ struct PlaylistDetailView: View {
                                 Image(systemName: "shuffle")
                                     .frame(width: 38, height: 36)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(MotifPressStyle(scale: 0.90, opacity: 0.9))
                             .accessibilityLabel("Shuffle playlist")
 
                             if tracks.contains(where: { $0.isCloud }) {
@@ -603,7 +619,7 @@ struct PlaylistDetailView: View {
                                         }
                                     }
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(MotifPressStyle(scale: 0.90, opacity: 0.9))
                                 .disabled(downloadable.isEmpty || isDownloading)
                                 .accessibilityLabel(downloadable.isEmpty ? "Playlist downloaded" : "Download playlist")
                             }
@@ -667,39 +683,62 @@ struct PlaylistDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
-                    Button {
-                        showEditDetails = true
-                    } label: {
-                        Label("Edit details", systemImage: "pencil")
-                    }
-
-                    Button {
-                        showEditTracks = true
-                    } label: {
-                        Label("Edit tracks", systemImage: "arrow.up.arrow.down")
-                    }
-
                     if let playlist {
-                        Button {
-                            library.duplicatePlaylist(playlist)
-                        } label: {
-                            Label("Duplicate", systemImage: "plus.square.on.square")
+                        Section {
+                            Button {
+                                generateCover()
+                            } label: {
+                                Label(
+                                    playlist.customCoverURL == nil ? "Generate cover" : "Generate new cover",
+                                    systemImage: "wand.and.stars"
+                                )
+                            }
+
+                            if playlist.customCoverURL != nil {
+                                Button {
+                                    library.clearPlaylistCover(playlist.id)
+                                    MotifHaptics.play(.light)
+                                } label: {
+                                    Label("Use song artwork instead", systemImage: "square.grid.2x2")
+                                }
+                            }
                         }
 
-                        ShareLink(item: "\(playlist.name) — a playlist on Lilt") {
-                            Label("Share", systemImage: "square.and.arrow.up")
-                        }
-                    }
+                        Section {
+                            Button {
+                                showEditDetails = true
+                            } label: {
+                                Label("Edit details", systemImage: "pencil")
+                            }
 
-                    Divider()
-
-                    Button(role: .destructive) {
-                        if let playlist {
-                            library.deletePlaylist(playlist)
-                            dismiss()
+                            Button {
+                                showEditTracks = true
+                            } label: {
+                                Label("Edit tracks", systemImage: "arrow.up.arrow.down")
+                            }
                         }
-                    } label: {
-                        Label("Delete playlist", systemImage: "trash")
+
+                        Section {
+                            Button {
+                                library.duplicatePlaylist(playlist)
+                                MotifHaptics.play(.light)
+                            } label: {
+                                Label("Duplicate", systemImage: "plus.square.on.square")
+                            }
+
+                            ShareLink(item: "\(playlist.name) — a playlist on Lilt") {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                        }
+
+                        Section {
+                            Button(role: .destructive) {
+                                library.deletePlaylist(playlist)
+                                dismiss()
+                            } label: {
+                                Label("Delete playlist", systemImage: "trash")
+                            }
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -732,6 +771,17 @@ struct PlaylistDetailView: View {
             return "\(hours) hr \(minutes) min"
         }
         return "\(minutes) min"
+    }
+
+    @MainActor
+    private func generateCover() {
+        guard let playlist else { return }
+        let variant = coverVariant
+        coverVariant += 1
+        Task {
+            guard await library.generatePlaylistCover(playlist.id, variant: variant) else { return }
+            MotifHaptics.play(.success)
+        }
     }
 
     private func play(shuffled: Bool) {
@@ -976,6 +1026,7 @@ struct PlaylistEditorView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var coverData: Data?
     @State private var removeCover = false
+    @State private var coverVariant = 0
 
     init(playlist: Playlist? = nil) {
         self.playlist = playlist
@@ -999,29 +1050,46 @@ struct PlaylistEditorView: View {
                     HStack {
                         Spacer()
                         coverPreview
-                            .frame(width: 138, height: 138)
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .frame(width: 156, height: 156)
+                            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
                                     .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
                             }
                             .overlay(alignment: .bottomTrailing) {
-                                PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                                    Image(systemName: "photo")
+                                Button {
+                                    generateCover()
+                                } label: {
+                                    Image(systemName: "wand.and.stars")
                                         .font(.system(size: 15, weight: .semibold))
                                         .foregroundStyle(.primary)
-                                        .frame(width: 34, height: 34)
+                                        .frame(width: 36, height: 36)
                                         .nativeGlass(Circle(), interactive: true)
                                 }
-                                .offset(x: 6, y: 6)
+                                .buttonStyle(MotifPressStyle(scale: 0.9))
+                                .offset(x: 8, y: 8)
+                                .accessibilityLabel("Generate cover")
                             }
+                            .shadow(color: .black.opacity(0.18), radius: 14, y: 7)
                         Spacer()
                     }
                     .listRowBackground(Color.clear)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 10)
+                }
 
-                    if playlist?.customCoverURL != nil || coverData != nil {
-                        Button("Remove Cover", role: .destructive) {
+                Section("Cover") {
+                    Button {
+                        generateCover()
+                    } label: {
+                        Label("Generate artwork", systemImage: "wand.and.stars")
+                    }
+
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Label("Choose photo", systemImage: "photo")
+                    }
+
+                    if hasCover {
+                        Button("Remove cover", role: .destructive) {
                             coverData = nil
                             selectedPhoto = nil
                             removeCover = true
@@ -1058,6 +1126,33 @@ struct PlaylistEditorView: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private var hasCover: Bool {
+        coverData != nil || (!removeCover && playlist?.customCoverURL != nil)
+    }
+
+    /// Renders the same on-device artwork used by the detail menu, but keeps
+    /// it as pending data until the playlist is saved.
+    @MainActor
+    private func generateCover() {
+        let variant = coverVariant
+        coverVariant += 1
+        let coverName = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Playlist"
+            : name
+
+        Task {
+            let data = await Task.detached(priority: .userInitiated) {
+                PlaylistCoverGenerator.jpegData(name: coverName, variant: variant)
+            }.value
+
+            guard let data else { return }
+            coverData = data
+            selectedPhoto = nil
+            removeCover = false
+            MotifHaptics.play(.light)
+        }
     }
 
     @ViewBuilder
