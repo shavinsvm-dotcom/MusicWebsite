@@ -6,9 +6,10 @@ struct AirPodsMomentOverlay: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @StateObject private var sceneController = AirPodsCaseSceneController()
     @State private var snapshot: UIImage?
     @State private var revealed = false
+    @State private var caseShown = false
+    @State private var budsOut = false
     @State private var settled = false
     @State private var burst: CGFloat = 0
     @State private var dismissing = false
@@ -18,6 +19,7 @@ struct AirPodsMomentOverlay: View {
     private let mint = Color(red: 0.49, green: 0.96, blue: 0.78)
     private let silver = Color(white: 0.70)
     private let slate = Color(white: 0.55)
+    private let iconWhite = Color(white: 0.97)
 
     var body: some View {
         ZStack {
@@ -25,7 +27,7 @@ struct AirPodsMomentOverlay: View {
                 GeometryReader { proxy in
                     let size = proxy.size
                     let heroWidth = min(size.width * 0.92, 360)
-                    let heroHeight = heroWidth * 0.95
+                    let iconScale = heroWidth / 340
                     let stage = CGPoint(x: size.width / 2, y: size.height * 0.39)
                     let isConnected = moment.kind == .connected
 
@@ -56,14 +58,13 @@ struct AirPodsMomentOverlay: View {
                         hero(
                             isConnected: isConnected,
                             stage: stage,
-                            width: heroWidth,
-                            height: heroHeight
+                            width: heroWidth
                         )
 
                         footer(
                             moment: moment,
                             centerX: stage.x,
-                            y: stage.y + heroHeight / 2 + 42
+                            y: stage.y + (budsOut ? 118.0 : 200.0) * iconScale
                         )
                     }
                     .frame(width: size.width, height: size.height)
@@ -102,12 +103,13 @@ struct AirPodsMomentOverlay: View {
     private func reset() {
         snapshot = nil
         revealed = false
+        caseShown = false
+        budsOut = false
         settled = false
         burst = 0
         dismissing = false
         warp = 0
         announced = false
-        sceneController.reset()
     }
 
     @ViewBuilder
@@ -164,10 +166,11 @@ struct AirPodsMomentOverlay: View {
     private func hero(
         isConnected: Bool,
         stage: CGPoint,
-        width: CGFloat,
-        height: CGFloat
+        width: CGFloat
     ) -> some View {
-        ZStack {
+        let scale = width / 340
+
+        return ZStack {
             Circle()
                 .fill(
                     RadialGradient(
@@ -177,53 +180,110 @@ struct AirPodsMomentOverlay: View {
                         ],
                         center: .center,
                         startRadius: 0,
-                        endRadius: width * 0.45
+                        endRadius: 170
                     )
                 )
-                .frame(width: width * 0.95, height: width * 0.95)
-                .blur(radius: 20)
-                .position(x: width / 2, y: height * 0.46)
+                .frame(width: 300, height: 300)
+                .blur(radius: 24)
+                .position(x: 170, y: 180)
 
             if burst > 0.001 {
                 Circle()
                     .fill(
                         RadialGradient(
                             colors: [
-                                .white.opacity(0.40),
-                                .white.opacity(0.10),
+                                .white.opacity(0.42),
+                                .white.opacity(0.12),
                                 .clear
                             ],
                             center: .center,
                             startRadius: 0,
-                            endRadius: width * 0.24
+                            endRadius: 90
                         )
                     )
-                    .frame(width: width * 0.55, height: width * 0.55)
+                    .frame(width: 220, height: 220)
                     .scaleEffect(0.35 + burst * 1.4)
                     .opacity(Double(1 - burst))
-                    .blur(radius: 12)
-                    .position(x: width / 2, y: height * 0.40)
+                    .blur(radius: 14)
+                    .position(x: 170, y: 180)
             }
 
             Ellipse()
                 .fill(
                     RadialGradient(
-                        colors: [.white.opacity(0.20), .clear],
+                        colors: [.white.opacity(0.16), .clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: width * 0.30
+                        endRadius: 130
                     )
                 )
-                .frame(width: width * 0.60, height: height * 0.06)
+                .frame(width: 260, height: 22)
                 .blur(radius: 18)
-                .position(x: width / 2, y: height * 0.80)
+                .position(x: 170, y: 300)
+                .opacity(caseShown ? 1 : 0)
 
-            AirPodsCaseSceneView(controller: sceneController)
-                .frame(width: width, height: height)
-                .allowsHitTesting(false)
+            ZStack {
+                openCaseLid
+                    .opacity(caseShown ? 1 : 0)
+                    .scaleEffect(caseShown ? 1 : 0.95)
+                    .offset(y: caseShown ? 0 : 16)
+                    .position(x: 170, y: 150)
+
+                bud(side: -1)
+                bud(side: 1)
+
+                openCaseBody
+                    .opacity(caseShown ? 1 : 0)
+                    .scaleEffect(caseShown ? 1 : 0.95)
+                    .offset(y: caseShown ? 0 : 16)
+                    .position(x: 170, y: 246)
+            }
         }
-        .frame(width: width, height: height)
+        .frame(width: 340, height: 320)
+        .opacity(revealed ? 1 : 0)
+        .scaleEffect(scale)
         .position(stage)
+    }
+
+    private func bud(side: CGFloat) -> some View {
+        AirPodsBudIcon(mirrored: side < 0)
+            .scaleEffect(budsOut ? 1 : 0.55)
+            .position(
+                x: 170 + side * (budsOut ? 58 : 34),
+                y: budsOut ? 120 : 172
+            )
+    }
+
+    private var openCaseLid: some View {
+        RoundedRectangle(cornerRadius: 42, style: .continuous)
+            .fill(iconWhite)
+            .frame(width: 190, height: 160)
+            .overlay {
+                RoundedRectangle(cornerRadius: 34, style: .continuous)
+                    .fill(.black)
+                    .frame(width: 144, height: 118)
+                    .offset(y: 20)
+                    .blendMode(.destinationOut)
+            }
+            .compositingGroup()
+            .shadow(color: .black.opacity(0.35), radius: 18, y: 10)
+            .shadow(color: .white.opacity(0.08), radius: 22)
+    }
+
+    private var openCaseBody: some View {
+        RoundedRectangle(cornerRadius: 36, style: .continuous)
+            .fill(iconWhite)
+            .frame(width: 190, height: 112)
+            .overlay {
+                Capsule()
+                    .fill(.black)
+                    .frame(width: 22, height: 7)
+                    .offset(y: -20)
+                    .blendMode(.destinationOut)
+            }
+            .compositingGroup()
+            .shadow(color: .black.opacity(0.35), radius: 18, y: 10)
+            .shadow(color: .white.opacity(0.08), radius: 22)
     }
 
     private func footer(
@@ -280,22 +340,20 @@ struct AirPodsMomentOverlay: View {
             await Task.yield()
         }
 
-        sceneController.reset()
-
         if snapshot == nil {
             await Task.yield()
             snapshot = WindowSnapshot.capture()
         }
 
         if moment.kind == .disconnected {
-            // Enter with the case already open and the buds out, then put
-            // everything away. It stays hidden until the entrance animation.
-            sceneController.present(open: true, visible: false)
+            // Enter with the buds already out, then put them away.
+            budsOut = true
         }
 
         if reduceMotion {
-            sceneController.present(open: moment.kind == .connected)
             revealed = true
+            caseShown = false
+            budsOut = moment.kind == .connected
             settled = true
             MotifHaptics.play(moment.kind == .connected ? .success : .soft)
             announce(moment)
@@ -316,25 +374,28 @@ struct AirPodsMomentOverlay: View {
             }
         }
 
-        sceneController.appear()
+        withAnimation(.spring(response: 0.58, dampingFraction: 0.80)) {
+            caseShown = true
+        }
         MotifHaptics.play(.soft)
 
         switch moment.kind {
         case .connected:
-            try? await Task.sleep(nanoseconds: 380_000_000)
+            try? await Task.sleep(nanoseconds: 420_000_000)
             guard !Task.isCancelled else { return }
-            sceneController.openLid()
-            MotifHaptics.play(.light)
 
-            try? await Task.sleep(nanoseconds: 320_000_000)
-            guard !Task.isCancelled else { return }
-            sceneController.budsOut()
+            withAnimation(.spring(response: 0.72, dampingFraction: 0.68)) {
+                budsOut = true
+            }
+            withAnimation(.easeInOut(duration: 0.50)) {
+                caseShown = false
+            }
             withAnimation(.easeOut(duration: 0.85)) {
                 burst = 1
             }
-            MotifHaptics.play(.soft)
+            MotifHaptics.play(.light)
 
-            try? await Task.sleep(nanoseconds: 460_000_000)
+            try? await Task.sleep(nanoseconds: 560_000_000)
             guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.40, dampingFraction: 0.74)) {
                 settled = true
@@ -342,24 +403,24 @@ struct AirPodsMomentOverlay: View {
             MotifHaptics.play(.success)
             announce(moment)
 
-            try? await Task.sleep(nanoseconds: 1_650_000_000)
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
             guard !Task.isCancelled else { return }
 
         case .disconnected:
-            try? await Task.sleep(nanoseconds: 650_000_000)
+            try? await Task.sleep(nanoseconds: 560_000_000)
             guard !Task.isCancelled else { return }
-            sceneController.retractBuds()
+
+            withAnimation(.spring(response: 0.62, dampingFraction: 0.82)) {
+                budsOut = false
+            }
             MotifHaptics.play(.soft)
 
-            try? await Task.sleep(nanoseconds: 480_000_000)
-            guard !Task.isCancelled else { return }
-            sceneController.closeLid()
-
-            try? await Task.sleep(nanoseconds: 400_000_000)
+            try? await Task.sleep(nanoseconds: 560_000_000)
             guard !Task.isCancelled else { return }
             withAnimation(.easeOut(duration: 0.28)) {
                 settled = true
             }
+            MotifHaptics.play(.light)
             announce(moment)
 
             try? await Task.sleep(nanoseconds: 1_300_000_000)
@@ -384,6 +445,54 @@ struct AirPodsMomentOverlay: View {
                 ? "\(moment.name) connected"
                 : "\(moment.name) disconnected"
         )
+    }
+}
+
+/// A single white AirPods bud, traced from the flat two-tone reference: an
+/// oval head with a speaker slot and vent cut out, and a rounded stem.
+private struct AirPodsBudIcon: View {
+    var mirrored = false
+
+    private let fill = Color(white: 0.97)
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(fill)
+                .frame(width: 20, height: 64)
+                .offset(x: -7, y: 30)
+
+            head
+                .offset(y: -14)
+        }
+        .frame(width: 78, height: 132)
+        .scaleEffect(x: mirrored ? -1 : 1, y: 1)
+        .shadow(color: .black.opacity(0.35), radius: 14, y: 8)
+        .shadow(color: .white.opacity(0.10), radius: 18)
+    }
+
+    private var head: some View {
+        Ellipse()
+            .fill(fill)
+            .frame(width: 70, height: 56)
+            .overlay {
+                ZStack {
+                    Capsule()
+                        .fill(.black)
+                        .frame(width: 26, height: 11)
+                        .rotationEffect(.degrees(-18))
+                        .offset(x: 8, y: -6)
+
+                    Capsule()
+                        .fill(.black)
+                        .frame(width: 15, height: 6)
+                        .rotationEffect(.degrees(-18))
+                        .offset(x: -13, y: 13)
+                }
+                .blendMode(.destinationOut)
+            }
+            .compositingGroup()
+            .rotationEffect(.degrees(14))
     }
 }
 
