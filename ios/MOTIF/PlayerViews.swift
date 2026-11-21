@@ -191,41 +191,50 @@ private struct PlayerBackdrop: View {
     @State private var gradient = PlayerGradient.fallback
 
     var body: some View {
-        let screen = UIScreen.main.bounds.size
-        let canvas = CGSize(width: screen.width * 1.42, height: screen.height * 1.42)
-        let displayImage = image ?? cachedImage
+        GeometryReader { geometry in
+            // Overscan by a small, fixed margin so the blurred cover always
+            // reaches every physical edge, without zooming the artwork itself
+            // far beyond the screen.
+            let screen = geometry.size
+            let bleed: CGFloat = 36
+            let canvas = CGSize(
+                width: screen.width + bleed * 2,
+                height: screen.height + bleed * 2
+            )
+            let displayImage = image ?? cachedImage
 
-        ZStack {
-            Color.black
+            ZStack {
+                Color.black
 
-            PlayerGradientView(gradient: gradient)
-                .frame(width: canvas.width, height: canvas.height)
-                .clipped()
+                PlayerGradientView(gradient: gradient)
+                    .frame(width: canvas.width, height: canvas.height)
+                    .clipped()
 
-            if let displayImage {
-                imageLayer(displayImage, canvas: canvas)
-            } else if let artworkURL {
-                AsyncImage(url: artworkURL) { phase in
-                    if let image = phase.image {
-                        imageLayer(image, canvas: canvas)
+                if let displayImage {
+                    imageLayer(displayImage, canvas: canvas)
+                } else if let artworkURL {
+                    AsyncImage(url: artworkURL) { phase in
+                        if let image = phase.image {
+                            imageLayer(image, canvas: canvas)
+                        }
                     }
                 }
-            }
 
-            LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.58), location: 0),
-                    .init(color: .black.opacity(0.16), location: 0.28),
-                    .init(color: .black.opacity(0.26), location: 0.60),
-                    .init(color: .black.opacity(0.72), location: 0.88),
-                    .init(color: .black, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.58), location: 0),
+                        .init(color: .black.opacity(0.16), location: 0.28),
+                        .init(color: .black.opacity(0.26), location: 0.60),
+                        .init(color: .black.opacity(0.72), location: 0.88),
+                        .init(color: .black, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            .frame(width: screen.width, height: screen.height)
+            .clipped()
         }
-        .frame(width: screen.width, height: screen.height)
-        .clipped()
         .ignoresSafeArea()
         .task(id: artworkURL) {
             await load()
