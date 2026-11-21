@@ -205,11 +205,12 @@ struct MotifPressStyle: ButtonStyle {
     }
 }
 
-/// Matches the app-wide rhythm but compresses a little deeper for the player's
-/// glass controls. The glyph warms up slightly instead of flashing white, and
-/// the release settles without overshooting past the resting size.
+/// Transport and glass controls move as one piece: the whole control, glass
+/// included, compresses by a few percent and springs back with no overshoot.
+/// Nothing inside the button animates separately, which is what made the old
+/// transport taps look jittery.
 struct PlayerControlPressStyle: ButtonStyle {
-    var scale: CGFloat = 0.90
+    var scale: CGFloat = 0.95
     var haptic: MotifHaptics.Event? = .light
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -217,12 +218,11 @@ struct PlayerControlPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
         let animation: Animation = pressed
-            ? .easeOut(duration: 0.10)
-            : .spring(response: 0.28, dampingFraction: 0.64)
+            ? .easeOut(duration: 0.09)
+            : .spring(response: 0.26, dampingFraction: 0.80)
 
         return configuration.label
             .scaleEffect(pressed ? scale : 1)
-            .brightness(pressed ? 0.05 : 0)
             .animation(reduceMotion ? nil : animation, value: pressed)
             .onChange(of: pressed) { isPressed in
                 guard isPressed, let haptic else { return }

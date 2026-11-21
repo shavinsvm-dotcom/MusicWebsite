@@ -7,8 +7,6 @@ struct MiniPlayer: View {
     @Binding var showNowPlaying: Bool
     let transitionSourceID: String
     let transitionNamespace: Namespace.ID
-    @State private var playPulse = 0
-    @State private var skipPulse = 0
     @State private var simplifySurface = false
 
     var body: some View {
@@ -47,54 +45,48 @@ struct MiniPlayer: View {
 
                     GlassGroup(spacing: 8) {
                         HStack(spacing: 8) {
-                        Button {
-                            skipPulse += 1
-                            withAnimation(.spring(response: 0.30, dampingFraction: 0.52)) {
-                                player.previous()
+                            Button {
+                                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                    player.previous()
+                                }
+                            } label: {
+                                Image(systemName: "backward.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .frame(width: 32, height: 32)
+                                    .contentShape(Circle())
+                                    .playerGlass(Circle())
                             }
-                        } label: {
-                            Image(systemName: "backward.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                                .frame(width: 32, height: 32)
-                                .motifBounce(tick: skipPulse)
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(PlayerControlPressStyle(scale: 0.81))
-                        .playerGlass(Circle())
-                        .accessibilityLabel("Previous")
+                            .buttonStyle(PlayerControlPressStyle())
+                            .accessibilityLabel("Previous")
 
-                        Button {
-                            playPulse += 1
-                            withAnimation(.spring(response: 0.30, dampingFraction: 0.48)) {
-                                player.toggle()
+                            Button {
+                                withAnimation(.easeOut(duration: 0.16)) {
+                                    player.toggle()
+                                }
+                            } label: {
+                                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(width: 36, height: 36)
+                                    .contentShape(Circle())
+                                    .motifReplace()
+                                    .playerGlass(Circle())
                             }
-                        } label: {
-                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(width: 36, height: 36)
-                                .contentShape(Circle())
-                                .motifReplace()
-                                .motifBounce(tick: playPulse)
-                        }
-                        .buttonStyle(PlayerControlPressStyle(scale: 0.81, haptic: .medium))
-                        .playerGlass(Circle())
-                        .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+                            .buttonStyle(PlayerControlPressStyle(haptic: .medium))
+                            .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
-                        Button {
-                            skipPulse += 1
-                            withAnimation(.spring(response: 0.30, dampingFraction: 0.52)) {
-                                player.next()
+                            Button {
+                                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                    player.next()
+                                }
+                            } label: {
+                                Image(systemName: "forward.fill")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .frame(width: 32, height: 32)
+                                    .contentShape(Circle())
+                                    .playerGlass(Circle())
                             }
-                        } label: {
-                            Image(systemName: "forward.fill")
-                                .font(.system(size: 13, weight: .semibold))
-                                .frame(width: 32, height: 32)
-                                .motifBounce(tick: skipPulse)
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(PlayerControlPressStyle(scale: 0.81))
-                        .playerGlass(Circle())
-                        .accessibilityLabel("Next")
+                            .buttonStyle(PlayerControlPressStyle())
+                            .accessibilityLabel("Next")
                         }
                     }
                 }
@@ -275,8 +267,6 @@ struct NowPlayingView: View {
     let onClose: () -> Void
 
     @ObservedObject private var equalizer = Equalizer.shared
-    @State private var playPulse = 0
-    @State private var skipPulse = 0
     @State private var showQueue = false
     @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
@@ -525,7 +515,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .playerGlass(Circle())
                 }
-                .buttonStyle(PlayerControlPressStyle(scale: 0.86))
+                .buttonStyle(PlayerControlPressStyle())
                 .accessibilityLabel("Close player")
 
                 Spacer()
@@ -677,7 +667,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .playerGlass(Circle())
                 }
-                .buttonStyle(PlayerControlPressStyle(scale: 0.86))
+                .buttonStyle(PlayerControlPressStyle())
                 .accessibilityLabel("More options")
                 }
                 }
@@ -722,8 +712,7 @@ struct NowPlayingView: View {
             Spacer(minLength: 2)
 
             Button {
-                skipPulse += 1
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.52)) {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
                     player.previous()
                 }
             } label: {
@@ -731,15 +720,13 @@ struct NowPlayingView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
-                    .motifBounce(tick: skipPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(scale: 0.81))
+            .buttonStyle(PlayerControlPressStyle())
             .accessibilityLabel("Previous")
 
             Button {
-                playPulse += 1
-                withAnimation(.spring(response: 0.30, dampingFraction: 0.48)) {
+                withAnimation(.easeOut(duration: 0.16)) {
                     player.toggle()
                 }
             } label: {
@@ -748,15 +735,13 @@ struct NowPlayingView: View {
                     .foregroundStyle(.white)
                     .frame(width: 68, height: 68)
                     .motifReplace()
-                    .motifBounce(tick: playPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(scale: 0.88, haptic: .medium))
+            .buttonStyle(PlayerControlPressStyle(haptic: .medium))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
-                skipPulse += 1
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.52)) {
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
                     player.next()
                 }
             } label: {
@@ -764,10 +749,9 @@ struct NowPlayingView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 42, height: 42)
-                    .motifBounce(tick: skipPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(scale: 0.81))
+            .buttonStyle(PlayerControlPressStyle())
             .accessibilityLabel("Next")
             }
         }
@@ -787,7 +771,7 @@ struct NowPlayingView: View {
                 .motifBounce(active)
                 .playerGlass(Circle())
         }
-        .buttonStyle(PlayerControlPressStyle(scale: 0.86))
+        .buttonStyle(PlayerControlPressStyle())
     }
 
     private var repeatButton: some View {
@@ -814,7 +798,7 @@ struct NowPlayingView: View {
             .frame(width: 42, height: 42)
             .playerGlass(Circle())
         }
-        .buttonStyle(PlayerControlPressStyle(scale: 0.86))
+        .buttonStyle(PlayerControlPressStyle())
         .accessibilityLabel("Repeat")
         .accessibilityValue(repeatLabel)
     }

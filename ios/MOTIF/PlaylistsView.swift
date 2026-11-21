@@ -502,7 +502,6 @@ struct PlaylistDetailView: View {
 
     @State private var showEditDetails = false
     @State private var showEditTracks = false
-    @State private var coverVariant = 0
 
     private var playlist: Playlist? {
         library.playlists.first(where: { $0.id == playlistID })
@@ -776,10 +775,8 @@ struct PlaylistDetailView: View {
     @MainActor
     private func generateCover() {
         guard let playlist else { return }
-        let variant = coverVariant
-        coverVariant += 1
         Task {
-            guard await library.generatePlaylistCover(playlist.id, variant: variant) else { return }
+            guard await library.generatePlaylistCover(playlist.id) else { return }
             MotifHaptics.play(.success)
         }
     }

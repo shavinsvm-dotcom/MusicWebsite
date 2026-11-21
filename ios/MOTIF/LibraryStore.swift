@@ -35,6 +35,10 @@ final class LibraryStore: ObservableObject {
     private var pendingSave: LibrarySnapshot?
     private var saveTask: Task<Void, Never>?
 
+    /// Keeps consecutive generated covers from ever picking the same colour
+    /// and pattern pair, even if the view's own counter starts over.
+    private var coverGenerationCount = 0
+
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
         self.documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -881,12 +885,14 @@ final class LibraryStore: ObservableObject {
     /// playlist at a fresh file name, which also busts the artwork cache so
     /// the new cover appears immediately everywhere the playlist shows up.
     @discardableResult
-    func generatePlaylistCover(_ playlistID: UUID, variant: Int) async -> Bool {
+    func generatePlaylistCover(_ playlistID: UUID) async -> Bool {
         guard let playlist = playlists.first(where: { $0.id == playlistID }) else { return false }
         let name = playlist.name
+        coverGenerationCount += 1
+        let seedVariant = coverGenerationCount
 
         let data = await Task.detached(priority: .userInitiated) {
-            PlaylistCoverGenerator.jpegData(name: name, variant: variant)
+            PlaylistCoverGenerator.jpegData(name: name, variant: seedVariant)
         }.value
 
         guard let data,
