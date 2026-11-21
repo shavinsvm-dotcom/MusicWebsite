@@ -72,6 +72,7 @@ final class PlayerManager: ObservableObject {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var interruptionObserver: NSObjectProtocol?
+    private var liveActivitySeekToken = 0
     private var routeChangeObserver: NSObjectProtocol?
     private var itemStatusObservation: NSKeyValueObservation?
     private var wasPlayingBeforeInterruption = false
@@ -103,6 +104,7 @@ final class PlayerManager: ObservableObject {
         configureRemoteCommands()
         installSystemObservers()
         installTimeObserver()
+        installPlaybackIntentObserver()
 
         if #available(iOS 16.2, *) {
             liveActivity = Activity<MusicActivityAttributes>.activities.first
@@ -295,7 +297,7 @@ final class PlayerManager: ObservableObject {
 
     func previous() {
         if elapsed > 3 {
-            seek(to: 0)
+            restartCurrentTrack()
             return
         }
 
@@ -312,7 +314,7 @@ final class PlayerManager: ObservableObject {
                 currentIndex = queue.count - 1
                 load(queue[currentIndex])
             } else {
-                seek(to: 0)
+                restartCurrentTrack()
             }
             return
         }
@@ -355,6 +357,11 @@ final class PlayerManager: ObservableObject {
         updateNowPlaying()
     }
 
+    private func restartCurrentTrack() {
+        liveActivitySeekToken += 1
+        seek(to: 0)
+    }
+
     private func load(_ track: Track) {
         cancelCrossfade()
         automixNextIndex = nil
@@ -387,7 +394,7 @@ final class PlayerManager: ObservableObject {
     private func handleTrackEnded() {
         if isCrossfading { return }
         if repeatMode == .one {
-            seek(to: 0)
+            restartCurrentTrack()
             resume()
             return
         }
@@ -433,12 +440,33 @@ final class PlayerManager: ObservableObject {
             return
         }
         if nextIndex < 0 {
-            seek(to: 0)
+            restartCurrentTrack()
             return
         }
 
         currentIndex = nextIndex
         load(queue[nextIndex])
+    }
+
+    private func installPlaybackIntentObserver() {
+        _ = NotificationCenter.default.addObserver(
+            forName: PlaybackIntentBridge.notification,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            guard let raw = note.object as? String,
+                  let command = PlaybackCommand(rawValue: raw)
+            else { return }
+
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch command {
+                case .togglePlayback: self.toggle()
+                case .nextTrack: self.next()
+                case .previousTrack: self.previous()
+                }
+            }
+        }
     }
 
     private func installTimeObserver() {
@@ -1200,7 +1228,7 @@ final class PlayerManager: ObservableObject {
 
         // The Live Activity paints progress from its own timer, so it only
         // needs state changes and a slow seek check, not a tick every second.
-        let signature = "\(track.id.uuidString)-\(isPlaying)-\(Int(elapsed / 5))\(Int(duration))"
+        let signature = "\(track.id.uuidString)-\(isPlaying)-\(Int(elapsed / 5))\(Int(duration))-\(liveActivitySeekToken)"
         guard signature != liveActivitySignature else { return }
         liveActivitySignature = signature
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }

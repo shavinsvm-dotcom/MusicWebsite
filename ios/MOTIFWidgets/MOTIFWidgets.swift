@@ -1,4 +1,5 @@
 import ActivityKit
+import AppIntents
 import SwiftUI
 import WidgetKit
 
@@ -477,6 +478,15 @@ struct MOTIFLiveActivity: Widget {
                         }
                         .font(.system(size: 9, weight: .medium).monospacedDigit())
                         .foregroundStyle(.white.opacity(0.5))
+
+                        if #available(iOS 17.0, *) {
+                            LiveActivityControls(
+                                isPlaying: context.state.isPlaying,
+                                size: 30,
+                                spacing: 14
+                            )
+                            .padding(.top, 4)
+                        }
                     }
                     .padding(.horizontal, 4)
                 }
@@ -571,47 +581,57 @@ private struct LiveActivityLockScreenView: View {
                 endPoint: .bottom
             )
 
-            HStack(spacing: 12) {
-                LiveActivityArtwork(
-                    urlString: state.artworkURL,
-                    size: 46,
-                    cornerRadius: 10
-                )
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    LiveActivityArtwork(
+                        urlString: state.artworkURL,
+                        size: 46,
+                        cornerRadius: 10
+                    )
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(state.title)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(state.artist)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .lineLimit(1)
-                    if state.isPlaying {
-                        ProgressView(
-                            timerInterval: timerRange,
-                            countsDown: false
-                        )
-                        .tint(.white)
-                        .padding(.top, 2)
-                    } else {
-                        ProgressView(value: progress)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(state.title)
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                        Text(state.artist)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.white.opacity(0.6))
+                            .lineLimit(1)
+                        if state.isPlaying {
+                            ProgressView(
+                                timerInterval: timerRange,
+                                countsDown: false
+                            )
                             .tint(.white)
                             .padding(.top, 2)
+                        } else {
+                            ProgressView(value: progress)
+                                .tint(.white)
+                                .padding(.top, 2)
+                        }
                     }
+
+                    Spacer(minLength: 8)
+
+                    Group {
+                        if state.isPlaying {
+                            Text(timerInterval: timerRange, countsDown: false)
+                        } else {
+                            Text(timeText)
+                        }
+                    }
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.6))
                 }
 
-                Spacer(minLength: 8)
-
-                Group {
-                    if state.isPlaying {
-                        Text(timerInterval: timerRange, countsDown: false)
-                    } else {
-                        Text(timeText)
-                    }
+                if #available(iOS 17.0, *) {
+                    LiveActivityControls(
+                        isPlaying: state.isPlaying,
+                        size: 40,
+                        spacing: 22
+                    )
                 }
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.6))
             }
             .padding(14)
         }
@@ -648,5 +668,79 @@ private struct LiveActivityLockScreenView: View {
     private var timeText: String {
         let value = max(0, Int(state.elapsed))
         return String(format: "%d:%02d", value / 60, value % 60)
+    }
+}
+
+@available(iOS 17.0, *)
+private struct LiveActivityControls: View {
+    let isPlaying: Bool
+    var size: CGFloat = 36
+    var spacing: CGFloat = 18
+
+    var body: some View {
+        HStack(spacing: spacing) {
+            control(
+                MotifPreviousTrackIntent(),
+                symbol: "backward.fill",
+                label: "Previous track"
+            )
+            control(
+                MotifTogglePlaybackIntent(),
+                symbol: isPlaying ? "pause.fill" : "play.fill",
+                label: isPlaying ? "Pause" : "Play"
+            )
+            control(
+                MotifNextTrackIntent(),
+                symbol: "forward.fill",
+                label: "Next track"
+            )
+        }
+    }
+
+    private func control<I: AppIntent>(
+        _ intent: I,
+        symbol: String,
+        label: String
+    ) -> some View {
+        Button(intent: intent) {
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.36, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: size, height: size)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .nativeLiveGlass(in: .circle, interactive: true)
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func nativeLiveGlass<S: Shape>(in shape: S, interactive: Bool) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            if interactive {
+                glassEffect(.regular.interactive(), in: shape)
+            } else {
+                glassEffect(.regular, in: shape)
+            }
+        } else {
+            liveGlassFallback(shape)
+        }
+        #else
+        liveGlassFallback(shape)
+        #endif
+    }
+
+    @ViewBuilder
+    private func liveGlassFallback<S: Shape>(_ shape: S) -> some View {
+        background {
+            shape
+                .fill(Color.white.opacity(0.09))
+                .overlay {
+                    shape.stroke(Color.white.opacity(0.14), lineWidth: 0.7)
+                }
+        }
     }
 }

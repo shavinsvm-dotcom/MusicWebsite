@@ -35,8 +35,11 @@ final class AnimatedArtworkStore {
     private var renders: [String: Task<URL?, Never>] = [:]
 
     private static let frameRate: Int32 = 24
-    private static let durationSeconds = 6
-    private static let maxCachedVideos = 16
+    private static let durationSeconds = 8
+    private static let maxCachedVideos = 12
+    /// Bump when the generated look changes so the system and the disk cache
+    /// pick up the new video instead of reusing an old render.
+    private static let renderVersion = "2"
 
     private init() {
         let base = FileManager.default.urls(
@@ -56,7 +59,7 @@ final class AnimatedArtworkStore {
             hash ^= UInt64(byte)
             hash = hash &* 1_099_511_628_211
         }
-        return String(hash, radix: 16)
+        return "\(String(hash, radix: 16))-\(Self.renderVersion)"
     }
 
     /// The first frame of the video. The system uses it while the video loads
@@ -208,22 +211,44 @@ final class AnimatedArtworkStore {
     private func apply(progress: Double, to composition: Composition) -> CIImage {
         let canvas = CGRect(origin: .zero, size: composition.size)
         let center = CGPoint(x: canvas.midX, y: canvas.midY)
-        let scale = 1.025 + 0.055 * progress
-        let dx = (progress - 0.5) * composition.size.width * 0.014
-        let dy = (progress - 0.5) * composition.size.height * 0.012
+
+        // A slow Ken Burns push: enough movement to read on a Lock Screen,
+        // still restrained enough to loop without feeling like a slideshow.
+        let scale = 1.05 + 0.10 * progress
+        let dx = (progress - 0.5) * composition.size.width * 0.028
+        let dy = (progress - 0.5) * composition.size.height * 0.020
+        let angle = (progress - 0.5) * 0.6 * .pi / 180
 
         var transform = CGAffineTransform(
             translationX: center.x + dx,
             y: center.y + dy
         )
+        transform = transform.rotated(by: angle)
         transform = transform.scaledBy(x: scale, y: scale)
         transform = transform.translatedBy(x: -center.x, y: -center.y)
 
         let animated = composition.foreground.transformed(by: transform)
-        if let background = composition.background {
-            return animated.composited(over: background).cropped(to: canvas)
+        guard let background = composition.background else {
+            return animated.cropped(to: canvas)
         }
-        return animated.cropped(to: canvas)
+
+        // Drift the blurred bed the other way for a little depth. It stays
+        // larger than the frame, so the edges never come into view.
+        let backgroundScale = 1.05 + 0.04 * progress
+        var backgroundTransform = CGAffineTransform(
+            translationX: center.x - dx * 0.35,
+            y: center.y - dy * 0.35
+        )
+        backgroundTransform = backgroundTransform.scaledBy(
+            x: backgroundScale,
+            y: backgroundScale
+        )
+        backgroundTransform = backgroundTransform.translatedBy(
+            x: -center.x,
+            y: -center.y
+        )
+        let animatedBackground = background.transformed(by: backgroundTransform)
+        return animated.composited(over: animatedBackground).cropped(to: canvas)
     }
 
     private func fillTransform(from source: CGSize, to target: CGSize) -> CGAffineTransform {
@@ -260,7 +285,7 @@ final class AnimatedArtworkStore {
         }
 
         let compression: [String: Any] = [
-            AVVideoAverageBitRateKey: 3_500_000,
+            AVVideoAverageBitRateKey: 4_000_000,
             AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
             AVVideoExpectedSourceFrameRateKey: Self.frameRate,
             AVVideoMaxKeyFrameIntervalKey: Int(Self.frameRate) * 2
