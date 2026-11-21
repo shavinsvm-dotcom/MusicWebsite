@@ -83,6 +83,10 @@ final class PlayerManager: ObservableObject {
     private var infoTick = 0
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var nowPlayingArtworkURL: URL?
+    private var nowPlayingArtworkImage: UIImage?
+    private var nowPlayingAnimatedArtworkURL: URL?
+    private var nowPlayingSquareAnimatedArtwork: Any?
+    private var nowPlayingTallAnimatedArtwork: Any?
     private var crossfadeTask: Task<Void, Never>?
     private var tempoRestoreTask: Task<Void, Never>?
     private var automixNextIndex: Int?
@@ -993,9 +997,7 @@ final class PlayerManager: ObservableObject {
 
     private func updateNowPlaying() {
         guard let track = current else {
-            nowPlayingArtwork = nil
-            nowPlayingArtworkURL = nil
-            nowPlayingArtworkLoadingURL = nil
+            resetNowPlayingArtwork()
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             SharedNowPlaying.clear()
             WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
@@ -1020,21 +1022,24 @@ final class PlayerManager: ObservableObject {
         ]
 
         guard let artworkURL = track.artworkURL else {
-            nowPlayingArtwork = nil
-            nowPlayingArtworkURL = nil
-            nowPlayingArtworkLoadingURL = nil
+            resetNowPlayingArtwork()
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
             return
         }
 
         if nowPlayingArtworkURL == artworkURL, let artwork = nowPlayingArtwork {
             info[MPMediaItemPropertyArtwork] = artwork
+            addAnimatedArtwork(to: &info, artworkURL: artworkURL)
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
             return
         }
 
         nowPlayingArtworkURL = artworkURL
         nowPlayingArtwork = nil
+        nowPlayingArtworkImage = nil
+        nowPlayingAnimatedArtworkURL = nil
+        nowPlayingSquareAnimatedArtwork = nil
+        nowPlayingTallAnimatedArtwork = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
         if nowPlayingArtworkLoadingURL == artworkURL { return }
@@ -1050,10 +1055,97 @@ final class PlayerManager: ObservableObject {
                       let image = UIImage(data: data),
                       self.current?.artworkURL == artworkURL
                 else { return }
+                self.nowPlayingArtworkImage = image
                 self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
                 self.updateNowPlaying()
             }
         }.resume()
+    }
+
+    private func resetNowPlayingArtwork() {
+        nowPlayingArtwork = nil
+        nowPlayingArtworkURL = nil
+        nowPlayingArtworkLoadingURL = nil
+        nowPlayingArtworkImage = nil
+        nowPlayingAnimatedArtworkURL = nil
+        nowPlayingSquareAnimatedArtwork = nil
+        nowPlayingTallAnimatedArtwork = nil
+    }
+
+    /// Adds the iOS 26 animated-artwork objects next to the static cover.
+    /// The Lock Screen uses the 3:4 variant for its full-screen artwork, and
+    /// the system asks for the generated video only when it is displayed.
+    private func addAnimatedArtwork(to info: inout [String: Any], artworkURL: URL) {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            guard let image = nowPlayingArtworkImage else { return }
+
+            if nowPlayingAnimatedArtworkURL != artworkURL {
+                let store = AnimatedArtworkStore.shared
+                let baseID = store.artworkID(for: artworkURL)
+                let supported = MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys
+                var square: MPMediaItemAnimatedArtwork?
+                var tall: MPMediaItemAnimatedArtwork?
+
+                if supported.contains(MPNowPlayingInfoProperty1x1AnimatedArtwork) {
+                    square = MPMediaItemAnimatedArtwork(
+                        artworkID: "\(baseID)-1x1",
+                        previewImageRequestHandler: { size in
+                            store.preview(
+                                image: image,
+                                artworkID: baseID,
+                                aspect: .square,
+                                requestedSize: size
+                            )
+                        },
+                        videoAssetFileURLRequestHandler: { _ in
+                            await store.video(
+                                image: image,
+                                artworkID: baseID,
+                                aspect: .square
+                            )
+                        }
+                    )
+                }
+
+                if supported.contains(MPNowPlayingInfoProperty3x4AnimatedArtwork) {
+                    tall = MPMediaItemAnimatedArtwork(
+                        artworkID: "\(baseID)-3x4",
+                        previewImageRequestHandler: { size in
+                            store.preview(
+                                image: image,
+                                artworkID: baseID,
+                                aspect: .tall,
+                                requestedSize: size
+                            )
+                        },
+                        videoAssetFileURLRequestHandler: { _ in
+                            await store.video(
+                                image: image,
+                                artworkID: baseID,
+                                aspect: .tall
+                            )
+                        }
+                    )
+                }
+
+                nowPlayingAnimatedArtworkURL = artworkURL
+                nowPlayingSquareAnimatedArtwork = square.map { $0 as Any }
+                nowPlayingTallAnimatedArtwork = tall.map { $0 as Any }
+
+                if tall != nil {
+                    store.warm(image: image, artworkID: baseID, aspect: .tall)
+                }
+            }
+
+            if let square = nowPlayingSquareAnimatedArtwork as? MPMediaItemAnimatedArtwork {
+                info[MPNowPlayingInfoProperty1x1AnimatedArtwork] = square
+            }
+            if let tall = nowPlayingTallAnimatedArtwork as? MPMediaItemAnimatedArtwork {
+                info[MPNowPlayingInfoProperty3x4AnimatedArtwork] = tall
+            }
+        }
+        #endif
     }
 
     private func updatePlaybackSurfaces(for track: Track) {
