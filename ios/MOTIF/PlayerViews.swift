@@ -195,40 +195,48 @@ private struct PlayerBackdrop: View {
     }
 
     var body: some View {
-        ZStack {
-            Color.black
+        GeometryReader { geometry in
+            let screen = geometry.size
 
-            // The wash only shows while the pre-blurred cover is still being
-            // prepared. Once it arrives the gradient is dropped entirely, so
-            // no full-screen mesh is composited under an opaque image.
-            if displayImage == nil {
-                PlayerGradientView(gradient: gradient)
+            ZStack {
+                Color.black
+
+                // The wash only shows while the pre-blurred cover is still
+                // being prepared. Once it arrives the gradient is dropped
+                // entirely, so no full-screen mesh sits under an opaque image.
+                if displayImage == nil {
+                    PlayerGradientView(gradient: gradient)
+                }
+
+                // The cache image is already blurred and colour-graded, so it
+                // is drawn as a plain fill instead of paying for another live
+                // full-surface blur on every frame.
+                if let displayImage {
+                    Image(uiImage: displayImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: screen.width, height: screen.height)
+                        .clipped()
+                        .opacity(0.78)
+                }
+
+                LinearGradient(
+                    stops: [
+                        .init(color: .black.opacity(0.58), location: 0),
+                        .init(color: .black.opacity(0.18), location: 0.28),
+                        .init(color: .black.opacity(0.30), location: 0.60),
+                        .init(color: .black.opacity(0.72), location: 0.88),
+                        .init(color: .black, location: 1)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             }
-
-            // The cache image is already blurred and colour-graded. Blurring
-            // it again at screen size cost a second full-surface GPU pass on
-            // every frame, which made the player feel heavy; a plain fill is
-            // essentially free and looks identical.
-            if let displayImage {
-                Image(uiImage: displayImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                    .opacity(0.78)
-            }
-
-            LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.58), location: 0),
-                    .init(color: .black.opacity(0.18), location: 0.28),
-                    .init(color: .black.opacity(0.30), location: 0.60),
-                    .init(color: .black.opacity(0.72), location: 0.88),
-                    .init(color: .black, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            // Pin the backdrop to the screen. Without a definite height the
+            // resizable image reports its own aspect-derived height, which
+            // stretches the player's root ZStack and clips its chrome.
+            .frame(width: screen.width, height: screen.height)
+            .clipped()
         }
         .ignoresSafeArea()
         .task(id: artworkURL) {
