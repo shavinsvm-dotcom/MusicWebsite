@@ -215,22 +215,20 @@ private struct PlayerBackdrop: View {
                     .scaledToFill()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipped()
-                    .opacity(0.82)
+                    .opacity(0.78)
             }
 
             LinearGradient(
                 stops: [
                     .init(color: .black.opacity(0.58), location: 0),
                     .init(color: .black.opacity(0.18), location: 0.28),
-                    .init(color: .black.opacity(0.28), location: 0.60),
+                    .init(color: .black.opacity(0.30), location: 0.60),
                     .init(color: .black.opacity(0.72), location: 0.88),
                     .init(color: .black, location: 1)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
-
-            Color.black.opacity(0.10)
         }
         .ignoresSafeArea()
         .task(id: artworkURL) {

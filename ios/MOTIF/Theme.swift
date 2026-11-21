@@ -780,14 +780,13 @@ final class PlaybackBackdropCache {
     private let lock = NSLock()
     private var renders: [NSURL: Task<UIImage?, Never>] = [:]
 
-    /// A blurred backdrop is only low-frequency colour, so a small canvas
-    /// stretched by the GPU looks the same while cutting blur work and memory
-    /// by roughly 85% versus rendering near screen size.
-    private let renderSize = CGSize(width: 324, height: 576)
+    /// Matches the aspect of modern iPhones closely enough that the backdrop
+    /// needs almost no cropping, so the cover is never magnified to fill.
+    private let renderSize = CGSize(width: 720, height: 1560)
 
     private init() {
-        cache.countLimit = 32
-        cache.totalCostLimit = 24 * 1024 * 1024
+        cache.countLimit = 24
+        cache.totalCostLimit = 48 * 1024 * 1024
         gradientCache.countLimit = 48
     }
 
@@ -918,53 +917,98 @@ final class PlaybackBackdropCache {
         return rendered
     }
 
-    func preparedImage(for url: URL) -> UIImage? {
-        if let cached = image(for: url) { return cached }
-        guard let artwork = ArtworkImageCache.shared.image(for: url) else { return nil }
-        guard let rendered = Self.render(artwork, size: renderSize, context: context) else {
-            return nil
-        }
-        cache.setObject(rendered, forKey: url as NSURL)
-        return rendered
-    }
-
     private static func render(_ image: UIImage, size: CGSize, context: CIContext) -> UIImage? {
-        guard image.size.width > 0, image.size.height > 0 else { return nil }
+        guard image.size.width > 0,
+              image.size.height > 0,
+              image.size.height.isFinite,
+              image.size.width.isFinite
+        else { return nil }
 
+        // Draw the full cover once at the screen's width, upright. Filling
+        // the height with a crop would only show half the artwork and read as
+        // zoomed in, so the cover keeps its whole frame instead.
+        let coverSize = CGSize(
+            width: size.width,
+            height: size.width * image.size.height / image.size.width
+        )
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
         format.opaque = true
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        let scaled = renderer.image { _ in
-            let factor = max(size.width / image.size.width, size.height / image.size.height)
-            let drawSize = CGSize(
-                width: image.size.width * factor,
-                height: image.size.height * factor
-            )
-            image.draw(in: CGRect(
-                x: (size.width - drawSize.width) / 2,
-                y: (size.height - drawSize.height) / 2,
-                width: drawSize.width,
-                height: drawSize.height
-            ))
-        }
+        let cover = UIGraphicsImageRenderer(size: coverSize, format: format)
+            .image { _ in
+                image.draw(in: CGRect(origin: .zero, size: coverSize))
+            }
 
-        guard let cgImage = scaled.cgImage else { return nil }
-        let input = CIImage(cgImage: cgImage)
-        let blurred = input
+        guard let cgImage = cover.cgImage else { return nil }
+
+        let canvas = CGRect(origin: .zero, size: size)
+        let originY = (size.height - coverSize.height) / 2
+        let placed = CIImage(cgImage: cgImage)
+            .transformed(by: CGAffineTransform(translationX: 0, y: originY))
             .clampedToExtent()
-            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 10])
+
+        // A smooth colour wash fills the whole screen behind everything.
+        let base = placed
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 38])
+            .cropped(to: canvas)
+
+        // The cover itself stays lightly frosted so it reads as artwork rather
+        // than a featureless smear.
+        let detail = placed
+            .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 7])
+            .cropped(to: canvas)
+
+        // Fade the detailed cover into the wash toward the top and bottom.
+        // This is what removes the hard edge where a fill-crop used to cut the
+        // artwork, and leaves a soft fold-like falloff instead.
+        guard let mask = verticalDetailMask(canvas: canvas),
+              let blended = CIFilter(name: "CIBlendWithMask", parameters: [
+                  kCIInputImageKey: detail,
+                  kCIInputBackgroundImageKey: base,
+                  "inputMaskImage": mask
+              ])?.outputImage
+        else { return nil }
+
+        let graded = blended
             .applyingFilter("CIColorControls", parameters: [
-                kCIInputSaturationKey: 1.08,
-                kCIInputBrightnessKey: -0.02,
+                kCIInputSaturationKey: 1.04,
+                kCIInputBrightnessKey: -0.01,
                 kCIInputContrastKey: 1.0
             ])
-            .cropped(to: input.extent)
+            .cropped(to: canvas)
 
-        guard let output = context.createCGImage(blurred, from: input.extent) else {
+        guard let output = context.createCGImage(graded, from: canvas) else {
             return nil
         }
         return UIImage(cgImage: output, scale: 1, orientation: .up)
+    }
+
+    /// White through the middle of the screen, fading to black at the top and
+    /// bottom. Used as the detail layer's alpha mask.
+    private static func verticalDetailMask(canvas: CGRect) -> CIImage? {
+        let center = CIVector(x: canvas.midX, y: canvas.midY)
+        let top = CIVector(x: canvas.midX, y: canvas.maxY)
+        let bottom = CIVector(x: canvas.midX, y: canvas.minY)
+
+        guard let upper = CIFilter(name: "CILinearGradient", parameters: [
+            "inputPoint0": center,
+            "inputPoint1": top,
+            "inputColor0": CIColor.white,
+            "inputColor1": CIColor.black
+        ])?.outputImage?.clampedToExtent().cropped(to: canvas),
+        let lower = CIFilter(name: "CILinearGradient", parameters: [
+            "inputPoint0": center,
+            "inputPoint1": bottom,
+            "inputColor0": CIColor.white,
+            "inputColor1": CIColor.black
+        ])?.outputImage?.clampedToExtent().cropped(to: canvas)
+        else { return nil }
+
+        return upper
+            .applyingFilter("CIMultiplyCompositing", parameters: [
+                kCIInputBackgroundImageKey: lower
+            ])
+            .cropped(to: canvas)
     }
 }
 
