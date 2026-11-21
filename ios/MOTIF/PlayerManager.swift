@@ -1,5 +1,4 @@
 import AVFoundation
-import ActivityKit
 import Combine
 import Foundation
 import MediaPlayer
@@ -72,7 +71,6 @@ final class PlayerManager: ObservableObject {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var interruptionObserver: NSObjectProtocol?
-    private var liveActivitySeekToken = 0
     private var routeChangeObserver: NSObjectProtocol?
     private var itemStatusObservation: NSKeyValueObservation?
     private var wasPlayingBeforeInterruption = false
@@ -84,10 +82,6 @@ final class PlayerManager: ObservableObject {
     private var infoTick = 0
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var nowPlayingArtworkURL: URL?
-    private var nowPlayingArtworkImage: UIImage?
-    private var nowPlayingAnimatedArtworkURL: URL?
-    private var nowPlayingSquareAnimatedArtwork: Any?
-    private var nowPlayingTallAnimatedArtwork: Any?
     private var crossfadeTask: Task<Void, Never>?
     private var tempoRestoreTask: Task<Void, Never>?
     private var automixNextIndex: Int?
@@ -96,19 +90,12 @@ final class PlayerManager: ObservableObject {
     private var isCrossfading = false
     private var sleepTask: Task<Void, Never>?
     private let automixAnalysis = AutomixAnalysisService.shared
-    private var liveActivity: Any?
-    private var liveActivitySignature: String?
 
     init() {
         configureAudioSession()
         configureRemoteCommands()
         installSystemObservers()
         installTimeObserver()
-        installPlaybackIntentObserver()
-
-        if #available(iOS 16.2, *) {
-            liveActivity = Activity<MusicActivityAttributes>.activities.first
-        }
     }
 
     func play(_ track: Track, queue newQueue: [Track]? = nil) {
@@ -297,7 +284,7 @@ final class PlayerManager: ObservableObject {
 
     func previous() {
         if elapsed > 3 {
-            restartCurrentTrack()
+            seek(to: 0)
             return
         }
 
@@ -314,7 +301,7 @@ final class PlayerManager: ObservableObject {
                 currentIndex = queue.count - 1
                 load(queue[currentIndex])
             } else {
-                restartCurrentTrack()
+                seek(to: 0)
             }
             return
         }
@@ -357,11 +344,6 @@ final class PlayerManager: ObservableObject {
         updateNowPlaying()
     }
 
-    private func restartCurrentTrack() {
-        liveActivitySeekToken += 1
-        seek(to: 0)
-    }
-
     private func load(_ track: Track) {
         cancelCrossfade()
         automixNextIndex = nil
@@ -394,7 +376,7 @@ final class PlayerManager: ObservableObject {
     private func handleTrackEnded() {
         if isCrossfading { return }
         if repeatMode == .one {
-            restartCurrentTrack()
+            seek(to: 0)
             resume()
             return
         }
@@ -440,33 +422,12 @@ final class PlayerManager: ObservableObject {
             return
         }
         if nextIndex < 0 {
-            restartCurrentTrack()
+            seek(to: 0)
             return
         }
 
         currentIndex = nextIndex
         load(queue[nextIndex])
-    }
-
-    private func installPlaybackIntentObserver() {
-        _ = NotificationCenter.default.addObserver(
-            forName: PlaybackIntentBridge.notification,
-            object: nil,
-            queue: .main
-        ) { [weak self] note in
-            guard let raw = note.object as? String,
-                  let command = PlaybackCommand(rawValue: raw)
-            else { return }
-
-            Task { @MainActor [weak self] in
-                guard let self else { return }
-                switch command {
-                case .togglePlayback: self.toggle()
-                case .nextTrack: self.next()
-                case .previousTrack: self.previous()
-                }
-            }
-        }
     }
 
     private func installTimeObserver() {
@@ -1025,11 +986,12 @@ final class PlayerManager: ObservableObject {
 
     private func updateNowPlaying() {
         guard let track = current else {
-            resetNowPlayingArtwork()
+            nowPlayingArtwork = nil
+            nowPlayingArtworkURL = nil
+            nowPlayingArtworkLoadingURL = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             SharedNowPlaying.clear()
             WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
-            endLiveActivity()
             return
         }
 
@@ -1050,48 +1012,25 @@ final class PlayerManager: ObservableObject {
         ]
 
         guard let artworkURL = track.artworkURL else {
-            resetNowPlayingArtwork()
+            nowPlayingArtwork = nil
+            nowPlayingArtworkURL = nil
+            nowPlayingArtworkLoadingURL = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
             return
         }
 
         if nowPlayingArtworkURL == artworkURL, let artwork = nowPlayingArtwork {
             info[MPMediaItemPropertyArtwork] = artwork
-            addAnimatedArtwork(to: &info, artworkURL: artworkURL)
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
             return
         }
 
         nowPlayingArtworkURL = artworkURL
         nowPlayingArtwork = nil
-        nowPlayingArtworkImage = nil
-        nowPlayingAnimatedArtworkURL = nil
-        nowPlayingSquareAnimatedArtwork = nil
-        nowPlayingTallAnimatedArtwork = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
         if nowPlayingArtworkLoadingURL == artworkURL { return }
         nowPlayingArtworkLoadingURL = artworkURL
-
-        if artworkURL.isFileURL {
-            Task.detached(priority: .userInitiated) { [weak self] in
-                let data = try? Data(contentsOf: artworkURL)
-                await MainActor.run {
-                    guard let self else { return }
-                    if self.nowPlayingArtworkLoadingURL == artworkURL {
-                        self.nowPlayingArtworkLoadingURL = nil
-                    }
-                    guard let data,
-                          let image = UIImage(data: data),
-                          self.current?.artworkURL == artworkURL
-                    else { return }
-                    self.nowPlayingArtworkImage = image
-                    self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                    self.updateNowPlaying()
-                }
-            }
-            return
-        }
 
         URLSession.shared.dataTask(with: artworkURL) { [weak self] data, _, _ in
             Task { @MainActor [weak self] in
@@ -1103,97 +1042,10 @@ final class PlayerManager: ObservableObject {
                       let image = UIImage(data: data),
                       self.current?.artworkURL == artworkURL
                 else { return }
-                self.nowPlayingArtworkImage = image
                 self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
                 self.updateNowPlaying()
             }
         }.resume()
-    }
-
-    private func resetNowPlayingArtwork() {
-        nowPlayingArtwork = nil
-        nowPlayingArtworkURL = nil
-        nowPlayingArtworkLoadingURL = nil
-        nowPlayingArtworkImage = nil
-        nowPlayingAnimatedArtworkURL = nil
-        nowPlayingSquareAnimatedArtwork = nil
-        nowPlayingTallAnimatedArtwork = nil
-    }
-
-    /// Adds the iOS 26 animated-artwork objects next to the static cover.
-    /// The Lock Screen uses the 3:4 variant for its full-screen artwork, and
-    /// the system asks for the generated video only when it is displayed.
-    private func addAnimatedArtwork(to info: inout [String: Any], artworkURL: URL) {
-        #if compiler(>=6.2)
-        if #available(iOS 26.0, *) {
-            guard let image = nowPlayingArtworkImage else { return }
-
-            if nowPlayingAnimatedArtworkURL != artworkURL {
-                let store = AnimatedArtworkStore.shared
-                let baseID = store.artworkID(for: artworkURL)
-                let supported = MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys
-                var square: MPMediaItemAnimatedArtwork?
-                var tall: MPMediaItemAnimatedArtwork?
-
-                if supported.contains(MPNowPlayingInfoProperty1x1AnimatedArtwork) {
-                    square = MPMediaItemAnimatedArtwork(
-                        artworkID: "\(baseID)-1x1",
-                        previewImageRequestHandler: { size in
-                            store.preview(
-                                image: image,
-                                artworkID: baseID,
-                                aspect: .square,
-                                requestedSize: size
-                            )
-                        },
-                        videoAssetFileURLRequestHandler: { _ in
-                            await store.video(
-                                image: image,
-                                artworkID: baseID,
-                                aspect: .square
-                            )
-                        }
-                    )
-                }
-
-                if supported.contains(MPNowPlayingInfoProperty3x4AnimatedArtwork) {
-                    tall = MPMediaItemAnimatedArtwork(
-                        artworkID: "\(baseID)-3x4",
-                        previewImageRequestHandler: { size in
-                            store.preview(
-                                image: image,
-                                artworkID: baseID,
-                                aspect: .tall,
-                                requestedSize: size
-                            )
-                        },
-                        videoAssetFileURLRequestHandler: { _ in
-                            await store.video(
-                                image: image,
-                                artworkID: baseID,
-                                aspect: .tall
-                            )
-                        }
-                    )
-                }
-
-                nowPlayingAnimatedArtworkURL = artworkURL
-                nowPlayingSquareAnimatedArtwork = square.map { $0 as Any }
-                nowPlayingTallAnimatedArtwork = tall.map { $0 as Any }
-
-                if tall != nil {
-                    store.warm(image: image, artworkID: baseID, aspect: .tall)
-                }
-            }
-
-            if let square = nowPlayingSquareAnimatedArtwork as? MPMediaItemAnimatedArtwork {
-                info[MPNowPlayingInfoProperty1x1AnimatedArtwork] = square
-            }
-            if let tall = nowPlayingTallAnimatedArtwork as? MPMediaItemAnimatedArtwork {
-                info[MPNowPlayingInfoProperty3x4AnimatedArtwork] = tall
-            }
-        }
-        #endif
     }
 
     private func updatePlaybackSurfaces(for track: Track) {
@@ -1218,58 +1070,6 @@ final class PlayerManager: ObservableObject {
             lastWidgetSurfaceUpdate = now
             lastWidgetTrackID = track.id
             lastWidgetIsPlaying = isPlaying
-        }
-
-        syncLiveActivity(for: track)
-    }
-
-    private func syncLiveActivity(for track: Track) {
-        guard #available(iOS 16.2, *) else { return }
-
-        // The Live Activity paints progress from its own timer, so it only
-        // needs state changes and a slow seek check, not a tick every second.
-        let signature = "\(track.id.uuidString)-\(isPlaying)-\(Int(elapsed / 5))\(Int(duration))-\(liveActivitySeekToken)"
-        guard signature != liveActivitySignature else { return }
-        liveActivitySignature = signature
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-
-        let state = MusicActivityAttributes.ContentState(
-            title: track.title,
-            artist: track.artist,
-            album: track.album,
-            artworkURL: track.artworkURL?.absoluteString,
-            isPlaying: isPlaying,
-            elapsed: elapsed,
-            duration: duration,
-            updatedAt: Date()
-        )
-
-        if let activity = liveActivity as? Activity<MusicActivityAttributes> {
-            Task {
-                await activity.update(ActivityContent(state: state, staleDate: nil))
-            }
-        } else {
-            do {
-                liveActivity = try Activity.request(
-                    attributes: MusicActivityAttributes(trackID: track.id.uuidString),
-                    content: ActivityContent(state: state, staleDate: nil),
-                    pushType: nil
-                )
-            } catch {
-                liveActivitySignature = nil
-            }
-        }
-    }
-
-    private func endLiveActivity() {
-        guard #available(iOS 16.2, *) else { return }
-        liveActivitySignature = nil
-        let activities = Activity<MusicActivityAttributes>.activities
-        liveActivity = nil
-        Task {
-            for activity in activities {
-                await activity.end(nil, dismissalPolicy: .immediate)
-            }
         }
     }
 }

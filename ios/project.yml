@@ -42,8 +42,6 @@ targets:
     platform: iOS
     sources:
       - path: MOTIFWidgets
-      - path: MOTIF/MusicActivityAttributes.swift
-      - path: MOTIF/PlaybackIntents.swift
       - path: MOTIF/SharedNowPlaying.swift
       - path: MOTIF/SharedLibrary.swift
     settings:
