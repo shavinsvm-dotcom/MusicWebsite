@@ -56,7 +56,7 @@ struct AirPodsConnectOverlay: View {
                     .padding(.vertical, 8)
                     .nativeGlass(Capsule(), interactive: true)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MotifPressStyle(scale: 0.97))
                 .accessibilityLabel("\(connection.name) connected")
                 .padding(.horizontal, 16)
                 .padding(.top, topPadding)

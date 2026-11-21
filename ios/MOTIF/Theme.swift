@@ -181,21 +181,26 @@ private struct ScreenEntrance: ViewModifier {
 struct MotifPressStyle: ButtonStyle {
     var scale: CGFloat = 0.94
     var opacity: Double = 0.86
+    var haptic: MotifHaptics.Event? = .light
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
         let spring: Animation = pressed
-            ? .spring(response: 0.14, dampingFraction: 0.84)
-            : .spring(response: 0.38, dampingFraction: 0.42)
+            ? .spring(response: 0.16, dampingFraction: 0.78)
+            : .spring(response: 0.36, dampingFraction: 0.46)
 
         return configuration.label
             .scaleEffect(pressed ? scale : 1)
-            .offset(y: pressed ? 1 : 0)
-            .brightness(pressed ? -0.02 : 0)
+            .offset(y: pressed ? 1.5 : 0)
+            .brightness(pressed ? -0.025 : 0)
             .opacity(pressed ? opacity : 1)
             .animation(reduceMotion ? nil : spring, value: pressed)
+            .onChange(of: pressed) { isPressed in
+                guard isPressed, let haptic else { return }
+                MotifHaptics.play(haptic)
+            }
     }
 }
 
@@ -204,25 +209,31 @@ struct MotifPressStyle: ButtonStyle {
 /// spring so the control visibly pops past its resting size before settling.
 struct PlayerControlPressStyle: ButtonStyle {
     var scale: CGFloat = 0.88
+    var haptic: MotifHaptics.Event? = .light
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
         let spring: Animation = pressed
-            ? .spring(response: 0.12, dampingFraction: 0.82)
-            : .spring(response: 0.34, dampingFraction: 0.34)
+            ? .spring(response: 0.10, dampingFraction: 0.82)
+            : .spring(response: 0.30, dampingFraction: 0.30)
 
         return configuration.label
             .scaleEffect(pressed ? scale : 1)
             .offset(y: pressed ? 2 : 0)
-            .brightness(pressed ? 0.12 : 0)
+            .brightness(pressed ? 0.16 : 0)
+            .saturation(pressed ? 1.10 : 1)
             .shadow(
-                color: .black.opacity(pressed ? 0.05 : 0.26),
-                radius: pressed ? 2 : 8,
+                color: .black.opacity(pressed ? 0.04 : 0.24),
+                radius: pressed ? 2 : 9,
                 y: pressed ? 1 : 4
             )
             .animation(reduceMotion ? nil : spring, value: pressed)
+            .onChange(of: pressed) { isPressed in
+                guard isPressed, let haptic else { return }
+                MotifHaptics.play(haptic)
+            }
     }
 }
 

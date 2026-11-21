@@ -10,7 +10,6 @@ struct MiniPlayer: View {
     @State private var playPulse = 0
     @State private var skipPulse = 0
     @State private var simplifySurface = false
-    private static let tapGenerator = UIImpactFeedbackGenerator(style: .soft)
 
     var body: some View {
         if let track = player.current {
@@ -49,7 +48,6 @@ struct MiniPlayer: View {
                     GlassGroup(spacing: 8) {
                         HStack(spacing: 8) {
                         Button {
-                            tapFeedback()
                             skipPulse += 1
                             withAnimation(.spring(response: 0.30, dampingFraction: 0.52)) {
                                 player.previous()
@@ -66,7 +64,6 @@ struct MiniPlayer: View {
                         .accessibilityLabel("Previous")
 
                         Button {
-                            tapFeedback()
                             playPulse += 1
                             withAnimation(.spring(response: 0.30, dampingFraction: 0.48)) {
                                 player.toggle()
@@ -79,12 +76,11 @@ struct MiniPlayer: View {
                                 .motifReplace()
                                 .motifBounce(tick: playPulse)
                         }
-                        .buttonStyle(PlayerControlPressStyle(scale: 0.81))
+                        .buttonStyle(PlayerControlPressStyle(scale: 0.81, haptic: .medium))
                         .playerGlass(Circle())
                         .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                         Button {
-                            tapFeedback()
                             skipPulse += 1
                             withAnimation(.spring(response: 0.30, dampingFraction: 0.52)) {
                                 player.next()
@@ -149,9 +145,6 @@ struct MiniPlayer: View {
         }
     }
 
-    private func tapFeedback() {
-        Self.tapGenerator.impactOccurred(intensity: 0.7)
-    }
 }
 
 private struct MiniArtworkProgressRing: View {
@@ -292,7 +285,6 @@ struct NowPlayingView: View {
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 58
     @ScaledMetric(relativeTo: .body) private var artistSize: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11
-    private static let controlHaptics = UIImpactFeedbackGenerator(style: .light)
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
@@ -525,7 +517,6 @@ struct NowPlayingView: View {
             GlassGroup(spacing: 10) {
                 HStack {
                     Button {
-                        haptic()
                         onClose()
                 } label: {
                     Image(systemName: "chevron.down")
@@ -613,7 +604,7 @@ struct NowPlayingView: View {
 
                     Section("Playback") {
                         Button {
-                            haptic()
+                            MotifHaptics.play(.light)
                             withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
                                 player.setAutomix(!player.automixEnabled)
                             }
@@ -625,7 +616,7 @@ struct NowPlayingView: View {
                         }
 
                         Button {
-                            haptic()
+                            MotifHaptics.play(.light)
                             showEqualizer = true
                         } label: {
                             Label(
@@ -713,7 +704,6 @@ struct NowPlayingView: View {
                 icon: library.isFavorite(track) ? "heart.fill" : "heart",
                 active: library.isFavorite(track)
             ) {
-                haptic()
                 withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
                     library.toggleFavorite(track)
                 }
@@ -721,7 +711,6 @@ struct NowPlayingView: View {
             .accessibilityLabel(library.isFavorite(track) ? "Remove favorite" : "Favorite")
 
             circularButton(icon: "shuffle", active: player.isShuffled) {
-                haptic()
                 withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
                     player.toggleShuffle()
                 }
@@ -733,7 +722,6 @@ struct NowPlayingView: View {
             Spacer(minLength: 2)
 
             Button {
-                haptic()
                 skipPulse += 1
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.52)) {
                     player.previous()
@@ -750,7 +738,6 @@ struct NowPlayingView: View {
             .accessibilityLabel("Previous")
 
             Button {
-                haptic()
                 playPulse += 1
                 withAnimation(.spring(response: 0.30, dampingFraction: 0.48)) {
                     player.toggle()
@@ -764,11 +751,10 @@ struct NowPlayingView: View {
                     .motifBounce(tick: playPulse)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(scale: 0.88))
+            .buttonStyle(PlayerControlPressStyle(scale: 0.88, haptic: .medium))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
-                haptic()
                 skipPulse += 1
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.52)) {
                     player.next()
@@ -806,7 +792,6 @@ struct NowPlayingView: View {
 
     private var repeatButton: some View {
         Button {
-            haptic()
             withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
                 player.cycleRepeat()
             }
@@ -864,10 +849,6 @@ struct NowPlayingView: View {
         }
     }
 
-    private func haptic() {
-        Self.controlHaptics.impactOccurred(intensity: 0.62)
-        Self.controlHaptics.prepare()
-    }
 
     private func metadataText(_ track: Track) -> String {
         let album = track.album.isEmpty ? "Single" : track.album
