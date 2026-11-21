@@ -223,7 +223,7 @@ final class AirPodsCaseSceneController: ObservableObject {
         let hingeGeometry = SCNCylinder(radius: 0.032, height: 0.88)
         hingeGeometry.materials = [Self.greyMetal]
         let hinge = SCNNode(geometry: hingeGeometry)
-        hinge.eulerAngles = SCNVector3(0, 0, .pi / 2)
+        hinge.eulerAngles = SCNVector3(0, 0, Float.pi / 2)
         hinge.position = SCNVector3(0, 0.98, -0.243)
         root.addChildNode(hinge)
 
