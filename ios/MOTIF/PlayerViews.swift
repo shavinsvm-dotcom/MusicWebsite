@@ -190,50 +190,47 @@ private struct PlayerBackdrop: View {
     @State private var image: UIImage?
     @State private var gradient = PlayerGradient.fallback
 
+    private var displayImage: UIImage? {
+        image ?? cachedImage
+    }
+
     var body: some View {
-        GeometryReader { geometry in
-            // Overscan by a small, fixed margin so the blurred cover always
-            // reaches every physical edge, without zooming the artwork itself
-            // far beyond the screen.
-            let screen = geometry.size
-            let bleed: CGFloat = 36
-            let canvas = CGSize(
-                width: screen.width + bleed * 2,
-                height: screen.height + bleed * 2
-            )
-            let displayImage = image ?? cachedImage
+        ZStack {
+            Color.black
 
-            ZStack {
-                Color.black
-
+            // The wash only shows while the pre-blurred cover is still being
+            // prepared. Once it arrives the gradient is dropped entirely, so
+            // no full-screen mesh is composited under an opaque image.
+            if displayImage == nil {
                 PlayerGradientView(gradient: gradient)
-                    .frame(width: canvas.width, height: canvas.height)
-                    .clipped()
-
-                if let displayImage {
-                    imageLayer(displayImage, canvas: canvas)
-                } else if let artworkURL {
-                    AsyncImage(url: artworkURL) { phase in
-                        if let image = phase.image {
-                            imageLayer(image, canvas: canvas)
-                        }
-                    }
-                }
-
-                LinearGradient(
-                    stops: [
-                        .init(color: .black.opacity(0.58), location: 0),
-                        .init(color: .black.opacity(0.16), location: 0.28),
-                        .init(color: .black.opacity(0.26), location: 0.60),
-                        .init(color: .black.opacity(0.72), location: 0.88),
-                        .init(color: .black, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
             }
-            .frame(width: screen.width, height: screen.height)
-            .clipped()
+
+            // The cache image is already blurred and colour-graded. Blurring
+            // it again at screen size cost a second full-surface GPU pass on
+            // every frame, which made the player feel heavy; a plain fill is
+            // essentially free and looks identical.
+            if let displayImage {
+                Image(uiImage: displayImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .opacity(0.82)
+            }
+
+            LinearGradient(
+                stops: [
+                    .init(color: .black.opacity(0.58), location: 0),
+                    .init(color: .black.opacity(0.18), location: 0.28),
+                    .init(color: .black.opacity(0.28), location: 0.60),
+                    .init(color: .black.opacity(0.72), location: 0.88),
+                    .init(color: .black, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            Color.black.opacity(0.10)
         }
         .ignoresSafeArea()
         .task(id: artworkURL) {
@@ -241,40 +238,25 @@ private struct PlayerBackdrop: View {
         }
     }
 
-    private func imageLayer(_ image: UIImage, canvas: CGSize) -> some View {
-        Image(uiImage: image)
-            .resizable()
-            .scaledToFill()
-            .frame(width: canvas.width, height: canvas.height)
-            .clipped()
-            .blur(radius: 10)
-            .saturation(1.18)
-            .opacity(0.94)
-    }
-
-    private func imageLayer(_ image: Image, canvas: CGSize) -> some View {
-        image
-            .resizable()
-            .scaledToFill()
-            .frame(width: canvas.width, height: canvas.height)
-            .clipped()
-            .blur(radius: 10)
-            .saturation(1.18)
-            .opacity(0.94)
-    }
-
     private func load() async {
-        guard let artworkURL else { return }
-
-        if let cached = PlaybackBackdropCache.shared.image(for: artworkURL) {
-            image = cached
+        guard let artworkURL else {
+            image = nil
+            gradient = .fallback
+            return
         }
+
+        image = PlaybackBackdropCache.shared.image(for: artworkURL)
+        gradient = PlaybackBackdropCache.shared.gradient(for: artworkURL) ?? .fallback
 
         async let gradientTask = PlaybackBackdropCache.shared.prepareGradient(for: artworkURL)
         async let imageTask = PlaybackBackdropCache.shared.prepare(for: artworkURL)
 
-        gradient = await gradientTask
+        let nextGradient = await gradientTask
+        guard !Task.isCancelled else { return }
+        gradient = nextGradient
+
         if let prepared = await imageTask {
+            guard !Task.isCancelled else { return }
             image = prepared
         }
     }

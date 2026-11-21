@@ -453,8 +453,11 @@ final class HeroEdgeBlurCache {
     private let cache = NSCache<NSURL, Box>()
     private let lock = NSLock()
     private var tasks: [NSURL: Task<HeroEdgeBlur?, Never>] = [:]
-    private static let ciContext = CIContext(options: nil)
-    private static let renderSide: CGFloat = 620
+    private static let ciContext = CIContext(options: [.cacheIntermediates: false])
+    // The edges are heavily frosted, so a 440 pt square stretches to the
+    // artwork without visible loss while halving the masked-blur pixel work
+    // that used to hitch right after the player opened.
+    private static let renderSide: CGFloat = 440
 
     private init() {
         cache.countLimit = 12
@@ -568,14 +571,14 @@ final class HeroEdgeBlurCache {
         if let filter = CIFilter(name: "CIMaskedVariableBlur", parameters: [
             "inputImage": input.clampedToExtent(),
             "inputMask": mask,
-            kCIInputRadiusKey: 56
+            kCIInputRadiusKey: 40
         ]), let output = filter.outputImage {
             blurred = output.cropped(to: extent)
         } else {
             // Fallback for platforms where the variable-blur filter is absent.
             blurred = input
                 .clampedToExtent()
-                .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 30])
+                .applyingFilter("CIGaussianBlur", parameters: [kCIInputRadiusKey: 22])
                 .cropped(to: extent)
         }
 
