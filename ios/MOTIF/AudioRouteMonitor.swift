@@ -3,21 +3,39 @@ import Combine
 import Foundation
 import UIKit
 
-struct AirPodsConnection: Identifiable, Equatable {
+enum AirPodsMomentKind: Equatable {
+    case connected
+    case disconnected
+}
+
+struct AirPodsMoment: Identifiable, Equatable {
     let id = UUID()
+    let kind: AirPodsMomentKind
     let name: String
     let symbolName: String
 }
 
 @MainActor
 final class AudioRouteMonitor: ObservableObject {
-    @Published private(set) var connection: AirPodsConnection?
+    @Published private(set) var moment: AirPodsMoment?
+
+    private struct Device {
+        let name: String
+        let symbolName: String
+    }
 
     private var observer: NSObjectProtocol?
     private var dismissTask: Task<Void, Never>?
-    private var lastShownAt = Date.distantPast
+    private var lastConnectedAt = Date.distantPast
+    private var knownAirPods: Device?
 
     init() {
+        // Seed the last known route so removing AirPods that were already
+        // connected when the app launched still gets a disconnect moment.
+        if let output = currentAirPodsOutput() {
+            knownAirPods = device(for: output)
+        }
+
         observer = NotificationCenter.default.addObserver(
             forName: AVAudioSession.routeChangeNotification,
             object: nil,
@@ -38,7 +56,21 @@ final class AudioRouteMonitor: ObservableObject {
 
     func dismiss() {
         dismissTask?.cancel()
-        connection = nil
+        moment = nil
+    }
+
+    /// Plays a moment without a real route change. Used by the debug control
+    /// so the motion can be replayed without unplugging anything.
+    func playPreview(_ kind: AirPodsMomentKind) {
+        let device = knownAirPods
+            ?? Device(name: "AirPods Pro", symbolName: "airpodspro")
+        let next = AirPodsMoment(
+            kind: kind,
+            name: device.name,
+            symbolName: device.symbolName
+        )
+        moment = next
+        scheduleDismiss(for: next)
     }
 
     private func handleRouteChange(_ notification: Notification) {
@@ -47,47 +79,79 @@ final class AudioRouteMonitor: ObservableObject {
             let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason)
         else { return }
 
-        if reason == .oldDeviceUnavailable {
-            if !currentAirPodsOutputExists() {
-                dismiss()
+        switch reason {
+        case .oldDeviceUnavailable:
+            // The notification arrives after the device has left the route,
+            // so the name comes from the last AirPods route we saw.
+            guard let previous = knownAirPods, currentAirPodsOutput() == nil else {
+                return
             }
-            return
+            knownAirPods = nil
+            show(.disconnected, device: previous, debounced: false)
+
+        case .newDeviceAvailable:
+            guard let output = currentAirPodsOutput() else { return }
+            let next = device(for: output)
+            let wasKnown = knownAirPods != nil
+            knownAirPods = next
+            guard !wasKnown else { return }
+            show(.connected, device: next, debounced: true)
+
+        default:
+            break
+        }
+    }
+
+    private func show(
+        _ kind: AirPodsMomentKind,
+        device: Device,
+        debounced: Bool
+    ) {
+        guard UIApplication.shared.applicationState == .active else { return }
+
+        if debounced {
+            let now = Date()
+            guard now.timeIntervalSince(lastConnectedAt) > 3.0 else { return }
+            lastConnectedAt = now
         }
 
-        guard reason == .newDeviceAvailable else { return }
-        guard UIApplication.shared.applicationState == .active else { return }
-        guard connection == nil else { return }
+        let next = AirPodsMoment(
+            kind: kind,
+            name: device.name,
+            symbolName: device.symbolName
+        )
+        moment = next
+        scheduleDismiss(for: next)
+    }
 
-        let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
-        guard let output = outputs.first(where: isBluetoothOutput),
-              output.portName.localizedCaseInsensitiveContains("airpods")
-        else { return }
+    private func scheduleDismiss(for moment: AirPodsMoment) {
+        dismissTask?.cancel()
+        dismissTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            guard self?.moment?.id == moment.id else { return }
+            self?.moment = nil
+        }
+    }
 
-        let now = Date()
-        guard now.timeIntervalSince(lastShownAt) > 3.0 else { return }
+    private func currentAirPodsOutput() -> AVAudioSessionPortDescription? {
+        AVAudioSession.sharedInstance().currentRoute.outputs.first {
+            isBluetoothOutput($0)
+                && $0.portName.localizedCaseInsensitiveContains("airpods")
+        }
+    }
 
+    private func device(for output: AVAudioSessionPortDescription) -> Device {
         let name = output.portName.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowercased = name.lowercased()
         let symbol = lowercased.contains("max")
             ? "airpodsmax"
             : (lowercased.contains("pro") ? "airpodspro" : "airpods")
 
-        lastShownAt = now
-        let next = AirPodsConnection(name: name, symbolName: symbol)
-        connection = next
-        dismissTask?.cancel()
-        dismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000)
-            guard !Task.isCancelled else { return }
-            guard self?.connection?.id == next.id else { return }
-            self?.connection = nil
-        }
-    }
-
-    private func currentAirPodsOutputExists() -> Bool {
-        AVAudioSession.sharedInstance().currentRoute.outputs.contains {
-            isBluetoothOutput($0) && $0.portName.localizedCaseInsensitiveContains("airpods")
-        }
+        return Device(
+            name: name.isEmpty ? "AirPods" : name,
+            symbolName: symbol
+        )
     }
 
     private func isBluetoothOutput(_ output: AVAudioSessionPortDescription) -> Bool {

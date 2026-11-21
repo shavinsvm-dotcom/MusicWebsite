@@ -41,9 +41,15 @@ struct RootView: View {
             .environmentObject(library)
             .environmentObject(player)
             .environmentObject(player.progress)
+            .overlay(alignment: .trailing) {
+                if !showNowPlaying {
+                    AirPodsMomentDebugButton(monitor: routeMonitor)
+                        .padding(.trailing, 6)
+                }
+            }
             .overlay {
                 if !showNowPlaying {
-                    AirPodsConnectOverlay(monitor: routeMonitor)
+                    AirPodsMomentOverlay(monitor: routeMonitor)
                 }
             }
             .fullScreenCover(isPresented: $showNowPlaying) {
@@ -237,8 +243,12 @@ struct RootView: View {
         .environmentObject(library)
         .environmentObject(player)
         .environmentObject(player.progress)
+        .overlay(alignment: .trailing) {
+            AirPodsMomentDebugButton(monitor: routeMonitor)
+                .padding(.trailing, 6)
+        }
         .overlay {
-            AirPodsConnectOverlay(monitor: routeMonitor)
+            AirPodsMomentOverlay(monitor: routeMonitor)
         }
     }
 

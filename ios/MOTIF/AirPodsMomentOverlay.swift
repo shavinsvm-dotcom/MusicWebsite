@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-struct AirPodsConnectOverlay: View {
+struct AirPodsMomentOverlay: View {
     @ObservedObject var monitor: AudioRouteMonitor
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -9,7 +9,9 @@ struct AirPodsConnectOverlay: View {
     @State private var snapshot: UIImage?
     @State private var revealed = false
     @State private var together = false
-    @State private var connected = false
+    @State private var settled = false
+    @State private var statusShown = false
+    @State private var departed = false
     @State private var dismissing = false
     @State private var warp: CGFloat = 0
     @State private var announced = false
@@ -17,27 +19,29 @@ struct AirPodsConnectOverlay: View {
     private let blue = Color(red: 0.33, green: 0.71, blue: 1.0)
     private let cyan = Color(red: 0.55, green: 0.93, blue: 1.0)
     private let mint = Color(red: 0.49, green: 0.96, blue: 0.78)
+    private let slate = Color(red: 0.63, green: 0.69, blue: 0.80)
 
     var body: some View {
         ZStack {
-            if let connection = monitor.connection {
+            if let moment = monitor.moment {
                 GeometryReader { proxy in
                     let size = proxy.size
                     let center = CGPoint(x: size.width / 2, y: size.height * 0.36)
+                    let isConnected = moment.kind == .connected
 
                     ZStack {
-                        background(size: size)
+                        background(moment: moment, size: size)
 
                         if revealed {
-                            radar(center: center)
+                            radar(moment: moment, center: center)
                         }
 
-                        nodes(connection: connection, center: center, size: size)
+                        nodes(moment: moment, center: center, size: size)
                             .opacity(revealed ? 1 : 0)
 
-                        status(connection: connection, center: center)
-                            .opacity(connected ? 1 : 0)
-                            .offset(y: connected ? 0 : 14)
+                        status(moment: moment, center: center)
+                            .opacity(statusShown ? 1 : 0)
+                            .offset(y: statusShown ? 0 : 14)
                     }
                     .frame(width: size.width, height: size.height)
                     .contentShape(Rectangle())
@@ -45,7 +49,11 @@ struct AirPodsConnectOverlay: View {
                         monitor.dismiss()
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(connection.name) connected")
+                    .accessibilityLabel(
+                        isConnected
+                            ? "\(moment.name) connected"
+                            : "\(moment.name) disconnected"
+                    )
                     .accessibilityHint("Double tap to dismiss")
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction {
@@ -54,15 +62,15 @@ struct AirPodsConnectOverlay: View {
                 }
                 .ignoresSafeArea()
                 .environment(\.colorScheme, .dark)
-                .task(id: connection.id) {
-                    await run(connection)
+                .task(id: moment.id) {
+                    await run(moment)
                 }
                 .opacity(dismissing ? 0 : 1)
             }
         }
         .ignoresSafeArea()
-        .onChange(of: monitor.connection) { connection in
-            if connection == nil {
+        .onChange(of: monitor.moment) { moment in
+            if moment == nil {
                 reset()
             }
         }
@@ -72,14 +80,19 @@ struct AirPodsConnectOverlay: View {
         snapshot = nil
         revealed = false
         together = false
-        connected = false
+        settled = false
+        statusShown = false
+        departed = false
         dismissing = false
         warp = 0
         announced = false
     }
 
     @ViewBuilder
-    private func background(size: CGSize) -> some View {
+    private func background(moment: AirPodsMoment, size: CGSize) -> some View {
+        let isConnected = moment.kind == .connected
+        let accent = isConnected ? blue : slate
+
         ZStack {
             Color.black
 
@@ -89,6 +102,7 @@ struct AirPodsConnectOverlay: View {
                     .scaledToFill()
                     .frame(width: size.width, height: size.height)
                     .clipped()
+                    .saturation(isConnected ? 1 : 0.35)
                     .modifier(
                         AirPodsRippleEffect(
                             progress: reduceMotion ? 0 : warp,
@@ -110,8 +124,9 @@ struct AirPodsConnectOverlay: View {
 
             RadialGradient(
                 colors: [
-                    blue.opacity(0.30),
-                    Color(red: 0.45, green: 0.48, blue: 1.0).opacity(0.12),
+                    accent.opacity(isConnected ? 0.30 : 0.20),
+                    Color(red: 0.45, green: 0.48, blue: 1.0)
+                        .opacity(isConnected ? 0.12 : 0.08),
                     .clear
                 ],
                 center: UnitPoint(x: 0.5, y: 0.36),
@@ -127,19 +142,24 @@ struct AirPodsConnectOverlay: View {
         return CGFloat(sin(Double(warp) * .pi)) * 3.5
     }
 
-    private func radar(center: CGPoint) -> some View {
-        AirPodsRadar(blue: blue, cyan: cyan)
-            .frame(width: 300, height: 300)
-            .position(center)
-            .allowsHitTesting(false)
+    private func radar(moment: AirPodsMoment, center: CGPoint) -> some View {
+        AirPodsRadar(
+            blue: blue,
+            cyan: cyan,
+            collapsing: moment.kind == .disconnected
+        )
+        .frame(width: 300, height: 300)
+        .position(center)
+        .allowsHitTesting(false)
     }
 
     private func nodes(
-        connection: AirPodsConnection,
+        moment: AirPodsMoment,
         center: CGPoint,
         size: CGSize
     ) -> some View {
         let separation: CGFloat = together ? 0 : 76
+        let isConnected = moment.kind == .connected
 
         return ZStack {
             Circle()
@@ -157,19 +177,25 @@ struct AirPodsConnectOverlay: View {
                 )
                 .frame(width: 148, height: 148)
                 .position(center)
-                .opacity(together ? (connected ? 0.30 : 0.72) : 0)
+                .opacity(together ? (settled ? 0.30 : 0.72) : 0)
                 .blur(radius: 12)
                 .allowsHitTesting(false)
 
             deviceNode(symbol: "iphone", diameter: 86, accent: blue)
                 .position(x: center.x - separation, y: center.y)
-                .opacity(connected ? 0 : 1)
-                .scaleEffect(connected ? 0.62 : 1)
+                .opacity(settled ? 0 : 1)
+                .scaleEffect(settled ? 0.62 : 1)
 
-            deviceNode(symbol: connection.symbolName, diameter: 108, accent: cyan)
-                .position(x: center.x + separation, y: center.y)
-                .scaleEffect(connected ? 1.05 : 1)
-                .zIndex(2)
+            deviceNode(
+                symbol: moment.symbolName,
+                diameter: 108,
+                accent: isConnected ? cyan : slate
+            )
+            .position(x: center.x + separation, y: center.y)
+            .scaleEffect(settled ? 1.05 : 1)
+            .offset(x: departed ? 44 : 0, y: departed ? -14 : 0)
+            .opacity(departed ? 0 : 1)
+            .zIndex(2)
         }
         .frame(width: size.width, height: size.height)
     }
@@ -201,9 +227,11 @@ struct AirPodsConnectOverlay: View {
         .frame(width: diameter, height: diameter)
     }
 
-    private func status(connection: AirPodsConnection, center: CGPoint) -> some View {
-        VStack(spacing: 8) {
-            Text(connection.name)
+    private func status(moment: AirPodsMoment, center: CGPoint) -> some View {
+        let isConnected = moment.kind == .connected
+
+        return VStack(spacing: 8) {
+            Text(moment.name)
                 .font(.system(size: 31, weight: .bold))
                 .tracking(-0.8)
                 .foregroundStyle(.white)
@@ -213,11 +241,15 @@ struct AirPodsConnectOverlay: View {
                 .shadow(color: .black.opacity(0.45), radius: 12, y: 2)
 
             HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(mint)
+                Image(
+                    systemName: isConnected
+                        ? "checkmark.circle.fill"
+                        : "xmark.circle.fill"
+                )
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(isConnected ? mint : slate)
 
-                Text("Connected")
+                Text(isConnected ? "Connected" : "Disconnected")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.white.opacity(0.66))
             }
@@ -227,20 +259,41 @@ struct AirPodsConnectOverlay: View {
     }
 
     @MainActor
-    private func run(_ connection: AirPodsConnection) async {
-        guard !revealed else { return }
+    private func run(_ moment: AirPodsMoment) async {
+        // A second moment can arrive while the first is still on screen (for
+        // example connect, then unplugging straight away). Start the new one
+        // from a clean slate instead of freezing the old frame.
+        if revealed {
+            reset()
+            await Task.yield()
+        }
 
         if snapshot == nil {
             await Task.yield()
             snapshot = WindowSnapshot.capture()
         }
 
-        if reduceMotion {
+        if moment.kind == .disconnected {
+            // The disconnect moment begins on the settled, connected frame.
             together = true
-            connected = true
+            settled = true
+        }
+
+        if reduceMotion {
+            switch moment.kind {
+            case .connected:
+                together = true
+                settled = true
+            case .disconnected:
+                together = false
+                settled = false
+                departed = true
+            }
+
+            statusShown = true
             revealed = true
-            MotifHaptics.play(.success)
-            announce(connection)
+            MotifHaptics.play(moment.kind == .connected ? .success : .soft)
+            announce(moment)
 
             try? await Task.sleep(nanoseconds: 2_100_000_000)
             guard !Task.isCancelled else { return }
@@ -251,27 +304,56 @@ struct AirPodsConnectOverlay: View {
         withAnimation(.easeOut(duration: 0.22)) {
             revealed = true
         }
-        withAnimation(.linear(duration: 2.2)) {
-            warp = 1
-        }
-        MotifHaptics.play(.soft)
 
-        try? await Task.sleep(nanoseconds: 520_000_000)
-        guard !Task.isCancelled else { return }
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.76)) {
-            together = true
+        switch moment.kind {
+        case .connected:
+            withAnimation(.linear(duration: 2.2)) {
+                warp = 1
+            }
+            MotifHaptics.play(.soft)
+
+            try? await Task.sleep(nanoseconds: 520_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.76)) {
+                together = true
+            }
+
+            try? await Task.sleep(nanoseconds: 360_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
+                settled = true
+                statusShown = true
+            }
+            MotifHaptics.play(.success)
+            announce(moment)
+
+            try? await Task.sleep(nanoseconds: 1_550_000_000)
+            guard !Task.isCancelled else { return }
+
+        case .disconnected:
+            MotifHaptics.play(.soft)
+
+            try? await Task.sleep(nanoseconds: 380_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.spring(response: 0.55, dampingFraction: 0.82)) {
+                together = false
+                settled = false
+            }
+            withAnimation(.easeOut(duration: 0.28)) {
+                statusShown = true
+            }
+            announce(moment)
+
+            try? await Task.sleep(nanoseconds: 340_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.40)) {
+                departed = true
+            }
+
+            try? await Task.sleep(nanoseconds: 1_250_000_000)
+            guard !Task.isCancelled else { return }
         }
 
-        try? await Task.sleep(nanoseconds: 360_000_000)
-        guard !Task.isCancelled else { return }
-        withAnimation(.spring(response: 0.36, dampingFraction: 0.82)) {
-            connected = true
-        }
-        MotifHaptics.play(.success)
-        announce(connection)
-
-        try? await Task.sleep(nanoseconds: 1_550_000_000)
-        guard !Task.isCancelled else { return }
         withAnimation(.easeIn(duration: 0.32)) {
             dismissing = true
         }
@@ -281,19 +363,56 @@ struct AirPodsConnectOverlay: View {
         monitor.dismiss()
     }
 
-    private func announce(_ connection: AirPodsConnection) {
+    private func announce(_ moment: AirPodsMoment) {
         guard !announced else { return }
         announced = true
         UIAccessibility.post(
             notification: .announcement,
-            argument: "\(connection.name) connected"
+            argument: moment.kind == .connected
+                ? "\(moment.name) connected"
+                : "\(moment.name) disconnected"
         )
+    }
+}
+
+/// A small floating control for replaying either moment without changing the
+/// audio route. It is intentionally tiny and out of the way; delete this view
+/// and its two call sites once the motion has been signed off.
+struct AirPodsMomentDebugButton: View {
+    @ObservedObject var monitor: AudioRouteMonitor
+
+    var body: some View {
+        Menu {
+            Button {
+                monitor.playPreview(.connected)
+            } label: {
+                Label("Replay connect", systemImage: "airpodspro")
+            }
+
+            Button {
+                monitor.playPreview(.disconnected)
+            } label: {
+                Label("Play disconnect", systemImage: "airpods")
+            }
+        } label: {
+            Image(systemName: "waveform.badge.magnifyingglass")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.85))
+                .frame(width: 30, height: 30)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.16), lineWidth: 0.7)
+                }
+        }
+        .accessibilityLabel("AirPods animation debug")
     }
 }
 
 private struct AirPodsRadar: View {
     let blue: Color
     let cyan: Color
+    var collapsing: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -340,7 +459,9 @@ private struct AirPodsRadar: View {
             let progress = (elapsed - Double(index) * 0.16) / 1.15
             guard progress > 0, progress < 1 else { continue }
 
-            let radius = 44 + CGFloat(progress) * (maxRadius - 44)
+            let radius = collapsing
+                ? maxRadius - CGFloat(progress) * (maxRadius - 44)
+                : 44 + CGFloat(progress) * (maxRadius - 44)
             let opacity = sin(progress * .pi) * 0.52
             let rect = CGRect(
                 x: center.x - radius,
@@ -356,7 +477,7 @@ private struct AirPodsRadar: View {
             )
         }
 
-        let angle = elapsed * 105
+        let angle = elapsed * 105 * (collapsing ? -1 : 1)
         var arc = Path()
         arc.addArc(
             center: center,
@@ -376,7 +497,7 @@ private struct AirPodsRadar: View {
             lineWidth: 1.8
         )
 
-        if elapsed > 1.55 {
+        if !collapsing, elapsed > 1.55 {
             let settle = min((elapsed - 1.55) / 0.25, 1)
             context.stroke(
                 Path(
