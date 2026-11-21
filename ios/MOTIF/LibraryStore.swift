@@ -895,9 +895,15 @@ final class LibraryStore: ObservableObject {
             PlaylistCoverGenerator.jpegData(name: name, variant: seedVariant)
         }.value
 
-        guard let data,
-              let index = playlists.firstIndex(where: { $0.id == playlistID })
-        else { return false }
+        guard let data else { return false }
+        return applyGeneratedPlaylistCover(playlistID, data: data)
+    }
+
+    /// Saves already-rendered artwork, using a fresh file name so the artwork
+    /// cache and every visible playlist thumbnail pick it up immediately.
+    @discardableResult
+    func applyGeneratedPlaylistCover(_ playlistID: UUID, data: Data) -> Bool {
+        guard let index = playlists.firstIndex(where: { $0.id == playlistID }) else { return false }
 
         let destination = artworkDirectory
             .appendingPathComponent(
