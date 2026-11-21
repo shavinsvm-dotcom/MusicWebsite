@@ -9,78 +9,48 @@ struct AirPodsMomentOverlay: View {
     @State private var snapshot: UIImage?
     @State private var revealed = false
     @State private var settled = false
-    @State private var burst: CGFloat = 0
+    @State private var ripple: CGFloat = 0
     @State private var dismissing = false
-    @State private var warp: CGFloat = 0
     @State private var announced = false
-
-    private let mint = Color(red: 0.49, green: 0.96, blue: 0.78)
-    private let silver = Color(white: 0.70)
-    private let slate = Color(white: 0.55)
 
     var body: some View {
         ZStack {
             if let moment = monitor.moment {
                 GeometryReader { proxy in
                     let size = proxy.size
-                    let origin = CGPoint(
-                        x: size.width - 46,
-                        y: max(70, size.height * 0.08)
-                    )
                     let isConnected = moment.kind == .connected
-                    let labelWidth = min(300, size.width - 44)
 
                     ZStack {
-                        background(
-                            moment: moment,
-                            size: size,
-                            origin: origin
-                        )
+                        backdrop(size: size)
 
-                        if revealed && !reduceMotion {
-                            AirPodsRings(
-                                center: origin,
-                                radius: 26,
-                                spread: sqrt(size.width * size.width + size.height * size.height),
-                                bright: .white,
-                                soft: silver,
-                                collapsing: !isConnected
-                            )
-                            .frame(width: size.width, height: size.height)
-                            .allowsHitTesting(false)
+                        VStack(spacing: 0) {
+                            statusTile
+                                .padding(.bottom, 22)
 
-                            AirPodsParticles(
-                                center: origin,
-                                radius: 58,
-                                bright: .white,
-                                soft: silver
-                            )
-                            .frame(width: size.width, height: size.height)
-                            .allowsHitTesting(false)
+                            VStack(spacing: 0) {
+                                Text(moment.name)
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .tracking(-0.3)
+                                    .foregroundStyle(.white)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                                    .minimumScaleFactor(0.8)
+                                    .padding(.bottom, 7)
+
+                                HStack(spacing: 5) {
+                                    Image(systemName: isConnected ? "checkmark" : "xmark")
+                                        .font(.system(size: 11, weight: .semibold))
+
+                                    Text(isConnected ? "Connected" : "Disconnected")
+                                        .font(.footnote)
+                                }
+                                .foregroundStyle(.white.opacity(0.60))
+                            }
+                            .opacity(settled ? 1 : 0)
+                            .offset(y: settled ? 0 : 6)
                         }
-
-                        if burst > 0.001 {
-                            Circle()
-                                .strokeBorder(.white.opacity(0.55), lineWidth: 1.4)
-                                .frame(width: 120, height: 120)
-                                .scaleEffect(0.25 + burst * 2.6)
-                                .opacity(Double(1 - burst) * 0.8)
-                                .blur(radius: 1.5)
-                                .position(origin)
-                                .allowsHitTesting(false)
-                        }
-
-                        statusIcon(
-                            isConnected: isConnected,
-                            origin: origin
-                        )
-
-                        footer(
-                            moment: moment,
-                            centerX: size.width - 22 - labelWidth / 2,
-                            y: origin.y + 76,
-                            width: labelWidth
-                        )
+                        .frame(maxWidth: 300)
+                        .position(x: size.width / 2, y: size.height * 0.47)
                     }
                     .frame(width: size.width, height: size.height)
                     .contentShape(Rectangle())
@@ -119,20 +89,13 @@ struct AirPodsMomentOverlay: View {
         snapshot = nil
         revealed = false
         settled = false
-        burst = 0
+        ripple = 0
         dismissing = false
-        warp = 0
         announced = false
     }
 
     @ViewBuilder
-    private func background(
-        moment: AirPodsMoment,
-        size: CGSize,
-        origin: CGPoint
-    ) -> some View {
-        let isConnected = moment.kind == .connected
-
+    private func backdrop(size: CGSize) -> some View {
         ZStack {
             Color.black
 
@@ -142,140 +105,39 @@ struct AirPodsMomentOverlay: View {
                     .scaledToFill()
                     .frame(width: size.width, height: size.height)
                     .clipped()
-                    .saturation(isConnected ? 1 : 0.30)
-                    .modifier(
-                        AirPodsRippleEffect(
-                            progress: reduceMotion ? 0 : warp,
-                            size: size,
-                            origin: origin
-                        )
-                    )
-                    .blur(radius: warpBlur)
+                    .blur(radius: 24)
+                    .overlay(Color.black.opacity(0.46))
+            } else {
+                Color.black.opacity(0.94)
             }
-
-            LinearGradient(
-                stops: [
-                    .init(color: .black.opacity(0.30), location: 0),
-                    .init(color: .black.opacity(0.44), location: 0.44),
-                    .init(color: .black.opacity(0.74), location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            RadialGradient(
-                colors: [
-                    .white.opacity(isConnected ? 0.16 : 0.05),
-                    .clear
-                ],
-                center: UnitPoint(
-                    x: origin.x / max(size.width, 1),
-                    y: origin.y / max(size.height, 1)
-                ),
-                startRadius: 2,
-                endRadius: size.height * 0.55
-            )
         }
         .opacity(revealed ? 1 : 0)
     }
 
-    private var warpBlur: CGFloat {
-        guard !reduceMotion else { return 0 }
-        return CGFloat(sin(Double(warp) * .pi)) * 1.6
-    }
-
-    private func statusIcon(
-        isConnected: Bool,
-        origin: CGPoint
-    ) -> some View {
+    private var statusTile: some View {
         ZStack {
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [
-                            .white.opacity(isConnected ? 0.30 : 0.10),
-                            .clear
-                        ],
-                        center: .center,
-                        startRadius: 6,
-                        endRadius: 78
-                    )
-                )
-                .frame(width: 156, height: 156)
-                .blur(radius: 16)
-                .opacity(revealed ? 1 : 0)
-
-            ZStack {
-                SingleAirPodGlyph()
-                    .frame(width: 28, height: 42)
-                    .shadow(color: .black.opacity(0.40), radius: 5, y: 2)
-            }
-            .frame(width: 56, height: 56)
-            .nativeGlass(Circle())
-            .overlay {
+            if !reduceMotion {
                 Circle()
-                    .strokeBorder(.white.opacity(0.26), lineWidth: 0.8)
+                    .strokeBorder(.white, lineWidth: 0.8)
+                    .frame(width: 96, height: 96)
+                    .scaleEffect(1 + ripple * 1.65)
+                    .opacity(Double(sin(Double(ripple) * .pi)) * 0.22)
             }
-            .overlay(alignment: .bottomTrailing) {
-                Circle()
-                    .fill(isConnected ? mint : slate)
-                    .frame(width: 11, height: 11)
-                    .overlay {
-                        Circle()
-                            .strokeBorder(.black.opacity(0.45), lineWidth: 2)
-                    }
-                    .offset(x: 1, y: 1)
-            }
-            .shadow(color: .black.opacity(0.30), radius: 14, y: 8)
-            .scaleEffect(revealed ? 1 : 0.55)
-            .opacity(revealed ? 1 : 0)
+
+            SingleAirPodGlyph()
+                .frame(width: 28, height: 42)
+                .scaleEffect(1.30)
+                .shadow(color: .black.opacity(0.30), radius: 4, y: 1)
+                .frame(width: 96, height: 96)
+                .nativeGlass(Circle())
+                .overlay {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.14), lineWidth: 0.5)
+                }
         }
-        .position(origin)
-    }
-
-    private func footer(
-        moment: AirPodsMoment,
-        centerX: CGFloat,
-        y: CGFloat,
-        width: CGFloat
-    ) -> some View {
-        let isConnected = moment.kind == .connected
-
-        return VStack(alignment: .trailing, spacing: 8) {
-            Text(moment.name)
-                .font(.system(size: 22, weight: .semibold))
-                .tracking(-0.3)
-                .foregroundStyle(.white)
-                .multilineTextAlignment(.trailing)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-                .shadow(color: .black.opacity(0.40), radius: 8, y: 2)
-
-            statusChip(isConnected: isConnected)
-        }
-        .frame(width: width, alignment: .trailing)
-        .position(x: centerX, y: y)
-        .opacity(settled ? 1 : 0)
-        .offset(y: settled ? 0 : -8)
-    }
-
-    private func statusChip(isConnected: Bool) -> some View {
-        HStack(spacing: 7) {
-            Image(systemName: isConnected ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isConnected ? mint : slate)
-
-            Text(isConnected ? "Connected" : "Disconnected")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.82))
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .nativeGlass(Capsule())
-        .overlay {
-            Capsule()
-                .strokeBorder(.white.opacity(0.20), lineWidth: 0.8)
-        }
+        .frame(width: 96, height: 96)
+        .scaleEffect(revealed ? 1 : 0.92)
+        .opacity(revealed ? 1 : 0)
     }
 
     @MainActor
@@ -299,52 +161,39 @@ struct AirPodsMomentOverlay: View {
             MotifHaptics.play(moment.kind == .connected ? .success : .soft)
             announce(moment)
 
-            try? await Task.sleep(nanoseconds: 2_100_000_000)
+            try? await Task.sleep(nanoseconds: 1_900_000_000)
             guard !Task.isCancelled else { return }
             monitor.dismiss()
             return
         }
 
-        withAnimation(.spring(response: 0.46, dampingFraction: 0.74)) {
+        withAnimation(.spring(response: 0.48, dampingFraction: 0.82)) {
             revealed = true
         }
         MotifHaptics.play(.soft)
 
         if moment.kind == .connected {
-            withAnimation(.linear(duration: 2.2)) {
-                warp = 1
+            withAnimation(.easeOut(duration: 1.35)) {
+                ripple = 1
             }
-
-            try? await Task.sleep(nanoseconds: 120_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.90)) {
-                burst = 1
-            }
-            MotifHaptics.play(.light)
-
-            try? await Task.sleep(nanoseconds: 560_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(response: 0.36, dampingFraction: 0.80)) {
-                settled = true
-            }
-            MotifHaptics.play(.success)
-            announce(moment)
-
-            try? await Task.sleep(nanoseconds: 1_800_000_000)
-            guard !Task.isCancelled else { return }
-
         } else {
-            try? await Task.sleep(nanoseconds: 480_000_000)
-            guard !Task.isCancelled else { return }
-            withAnimation(.spring(response: 0.36, dampingFraction: 0.80)) {
-                settled = true
+            // Collapse the ring inward for the negative beat.
+            ripple = 1
+            withAnimation(.easeOut(duration: 1.10)) {
+                ripple = 0
             }
-            MotifHaptics.play(.light)
-            announce(moment)
-
-            try? await Task.sleep(nanoseconds: 1_600_000_000)
-            guard !Task.isCancelled else { return }
         }
+
+        try? await Task.sleep(nanoseconds: 180_000_000)
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeOut(duration: 0.30)) {
+            settled = true
+        }
+        MotifHaptics.play(moment.kind == .connected ? .success : .soft)
+        announce(moment)
+
+        try? await Task.sleep(nanoseconds: 1_700_000_000)
+        guard !Task.isCancelled else { return }
 
         withAnimation(.easeIn(duration: 0.30)) {
             dismissing = true
@@ -439,201 +288,6 @@ struct AirPodsMomentDebugButton: View {
                 }
         }
         .accessibilityLabel("AirPods animation debug")
-    }
-}
-
-private struct AirPodsRings: View {
-    let center: CGPoint
-    let radius: CGFloat
-    let spread: CGFloat
-    let bright: Color
-    let soft: Color
-    let collapsing: Bool
-
-    @State private var start = Date()
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-            Canvas { context, size in
-                draw(
-                    context: &context,
-                    size: size,
-                    elapsed: timeline.date.timeIntervalSince(start)
-                )
-            }
-        }
-    }
-
-    private func draw(
-        context: inout GraphicsContext,
-        size: CGSize,
-        elapsed: TimeInterval
-    ) {
-        guard size.width > 1, size.height > 1 else { return }
-
-        let maxRadius = max(spread, radius)
-
-        // Expanding (or collapsing) AirDrop-style rings from the status icon.
-        for index in 0..<3 {
-            let progress = (elapsed - Double(index) * 0.18) / 1.5
-            guard progress > 0, progress < 1 else { continue }
-
-            let p = CGFloat(progress)
-            let current = collapsing
-                ? maxRadius - p * (maxRadius - radius)
-                : radius + p * (maxRadius - radius)
-            let fade = Double(sin(p * .pi))
-
-            let rect = CGRect(
-                x: center.x - current,
-                y: center.y - current,
-                width: current * 2,
-                height: current * 2
-            )
-
-            context.stroke(
-                Path(ellipseIn: rect),
-                with: .linearGradient(
-                    Gradient(colors: [
-                        .clear,
-                        bright.opacity(fade * 0.40),
-                        soft.opacity(fade * 0.14),
-                        .clear
-                    ]),
-                    startPoint: CGPoint(x: rect.minX, y: rect.minY),
-                    endPoint: CGPoint(x: rect.maxX, y: rect.maxY)
-                ),
-                lineWidth: 1.2
-            )
-        }
-
-        // A single rotating scan arc, like the AirDrop radar.
-        let angle = elapsed * (collapsing ? -95 : 95)
-        let arcRadius = radius + CGFloat(min(elapsed, 1.2)) * 90
-        var arc = Path()
-        arc.addArc(
-            center: center,
-            radius: arcRadius,
-            startAngle: .degrees(angle),
-            endAngle: .degrees(angle + 52),
-            clockwise: false
-        )
-        context.stroke(
-            arc,
-            with: .linearGradient(
-                Gradient(colors: [.clear, bright.opacity(0.36), .clear]),
-                startPoint: CGPoint(x: center.x - arcRadius, y: center.y),
-                endPoint: CGPoint(x: center.x + arcRadius, y: center.y)
-            ),
-            lineWidth: 1.6
-        )
-
-        // A slow halo breathing behind the icon.
-        let pulse = 0.5 + 0.5 * sin(elapsed * 2.4)
-        let halo = max(90, spread * 0.10)
-        context.fill(
-            Path(
-                ellipseIn: CGRect(
-                    x: center.x - halo,
-                    y: center.y - halo,
-                    width: halo * 2,
-                    height: halo * 2
-                )
-            ),
-            with: .radialGradient(
-                Gradient(colors: [bright.opacity(0.09 * pulse), .clear]),
-                center: center,
-                startRadius: 6,
-                endRadius: halo
-            )
-        )
-    }
-}
-
-private struct AirPodsParticles: View {
-    let center: CGPoint
-    let radius: CGFloat
-    let bright: Color
-    let soft: Color
-
-    @State private var start = Date()
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
-            Canvas { context, _ in
-                draw(
-                    context: &context,
-                    elapsed: timeline.date.timeIntervalSince(start)
-                )
-            }
-        }
-        .allowsHitTesting(false)
-    }
-
-    private func draw(context: inout GraphicsContext, elapsed: TimeInterval) {
-        let life: Double = 2.4
-        guard elapsed < life else { return }
-
-        for index in 0..<24 {
-            let seed = Double(index) * 0.6180339887
-            let angle = seed * .pi * 2 + Double(index) * 0.37
-            let orbit = Double(radius)
-                * (0.55 + 0.65 * (seed * 7).truncatingRemainder(dividingBy: 1))
-            let rise = elapsed
-                * (6 + 10 * (seed * 3).truncatingRemainder(dividingBy: 1))
-            let sway = sin(elapsed * 0.8 + seed * 6) * 6
-            let x = Double(center.x) + cos(angle) * orbit + sway
-            let y = Double(center.y) - rise + sin(angle) * orbit * 0.35
-
-            let appear = min(elapsed / 0.4, 1)
-                * min(max((life - elapsed) / 0.6, 0), 1)
-            let twinkle = 0.35 + 0.65 * (0.5 + 0.5 * sin(elapsed * 3 + seed * 9))
-            let dot = 1.0 + 1.4 * (seed * 5).truncatingRemainder(dividingBy: 1)
-            let tint = index % 3 == 0 ? bright : soft
-
-            context.fill(
-                Path(ellipseIn: CGRect(x: x, y: y, width: dot, height: dot)),
-                with: .color(tint.opacity(0.42 * appear * twinkle))
-            )
-        }
-    }
-}
-
-private struct AirPodsRippleEffect: ViewModifier, Animatable {
-    var progress: CGFloat
-    let size: CGSize
-    let origin: CGPoint
-
-    var animatableData: CGFloat {
-        get { progress }
-        set { progress = newValue }
-    }
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        if #available(iOS 17.0, *) {
-            // layerEffect samples the layer in a vertically flipped space.
-            // Pre-flip the snapshot so the shader's flip cancels it out, and
-            // hand it the status icon's origin in that same flipped space.
-            content
-                .scaleEffect(x: 1, y: -1)
-                .layerEffect(
-                    Shader(
-                        function: ShaderFunction(library: .default, name: "airPodsRipple"),
-                        arguments: [
-                            .float(Float(progress * 2.2)),
-                            .float2(Float(size.width), Float(size.height)),
-                            .float2(
-                                Float(origin.x / max(size.width, 1)),
-                                Float(1 - origin.y / max(size.height, 1))
-                            )
-                        ]
-                    ),
-                    maxSampleOffset: CGSize(width: 240, height: 240)
-                )
-        } else {
-            content
-        }
     }
 }
 
