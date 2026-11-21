@@ -41,7 +41,7 @@ struct RootView: View {
             .environmentObject(library)
             .environmentObject(player)
             .environmentObject(player.progress)
-            .overlay(alignment: .top) {
+            .overlay {
                 if !showNowPlaying {
                     AirPodsConnectOverlay(monitor: routeMonitor)
                 }
@@ -237,8 +237,8 @@ struct RootView: View {
         .environmentObject(library)
         .environmentObject(player)
         .environmentObject(player.progress)
-        .overlay(alignment: .top) {
-            AirPodsConnectOverlay(monitor: routeMonitor, topPadding: 54)
+        .overlay {
+            AirPodsConnectOverlay(monitor: routeMonitor)
         }
     }
 

@@ -1,6 +1,7 @@
 import AVFoundation
 import Combine
 import Foundation
+import UIKit
 
 struct AirPodsConnection: Identifiable, Equatable {
     let id = UUID()
@@ -54,6 +55,8 @@ final class AudioRouteMonitor: ObservableObject {
         }
 
         guard reason == .newDeviceAvailable else { return }
+        guard UIApplication.shared.applicationState == .active else { return }
+        guard connection == nil else { return }
 
         let outputs = AVAudioSession.sharedInstance().currentRoute.outputs
         guard let output = outputs.first(where: isBluetoothOutput),
@@ -61,7 +64,7 @@ final class AudioRouteMonitor: ObservableObject {
         else { return }
 
         let now = Date()
-        guard now.timeIntervalSince(lastShownAt) > 1.5 else { return }
+        guard now.timeIntervalSince(lastShownAt) > 3.0 else { return }
 
         let name = output.portName.trimmingCharacters(in: .whitespacesAndNewlines)
         let lowercased = name.lowercased()
@@ -70,12 +73,11 @@ final class AudioRouteMonitor: ObservableObject {
             : (lowercased.contains("pro") ? "airpodspro" : "airpods")
 
         lastShownAt = now
-        MotifHaptics.play(.success)
         let next = AirPodsConnection(name: name, symbolName: symbol)
         connection = next
         dismissTask?.cancel()
         dismissTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 2_600_000_000)
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard !Task.isCancelled else { return }
             guard self?.connection?.id == next.id else { return }
             self?.connection = nil
