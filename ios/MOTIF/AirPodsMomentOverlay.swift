@@ -480,13 +480,13 @@ private struct AirPodsBudIcon: View {
                     Capsule()
                         .fill(.black)
                         .frame(width: 26, height: 11)
-                        .rotationEffect(.degrees(-18))
+                        .rotationEffect(.degrees(-6))
                         .offset(x: 8, y: -6)
 
                     Capsule()
                         .fill(.black)
                         .frame(width: 15, height: 6)
-                        .rotationEffect(.degrees(-18))
+                        .rotationEffect(.degrees(-6))
                         .offset(x: -13, y: 13)
                 }
                 .blendMode(.destinationOut)
