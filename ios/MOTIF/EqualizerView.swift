@@ -38,7 +38,11 @@ struct EqualizerView: View {
                 }
 
                 Section {
-                    Button("Reset") {
+                    GlassActionButton(
+                        title: "Reset",
+                        systemImage: "arrow.counterclockwise",
+                        accessibilityLabel: "Reset equalizer"
+                    ) {
                         equalizer.reset()
                     }
                     .disabled(!equalizer.isEnabled)

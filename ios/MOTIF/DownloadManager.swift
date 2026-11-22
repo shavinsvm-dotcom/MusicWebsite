@@ -133,27 +133,39 @@ private struct DownloadJobRow: View {
     private var actions: some View {
         switch job.state {
         case .queued, .downloading:
-            Button("Cancel", role: .destructive) {
+            GlassActionButton(
+                title: "Cancel",
+                systemImage: "xmark",
+                accessibilityLabel: "Cancel download"
+            ) {
                 library.cancelDownload(job.id)
             }
-            .font(.caption.weight(.semibold))
         case .failed, .cancelled:
             HStack(spacing: 10) {
-                Button("Retry") {
+                GlassActionButton(
+                    title: "Retry",
+                    systemImage: "arrow.clockwise",
+                    accessibilityLabel: "Retry download"
+                ) {
                     library.retryDownload(job)
                 }
-                .font(.caption.weight(.semibold))
 
-                Button("Remove", role: .destructive) {
+                GlassActionButton(
+                    title: "Remove",
+                    systemImage: "trash",
+                    accessibilityLabel: "Remove download"
+                ) {
                     library.removeDownloadJob(job.id)
                 }
-                .font(.caption)
             }
         case .completed:
-            Button("Remove", role: .destructive) {
+            GlassActionButton(
+                title: "Remove",
+                systemImage: "trash",
+                accessibilityLabel: "Remove download"
+            ) {
                 library.removeDownloadJob(job.id)
             }
-            .font(.caption)
         }
     }
 }

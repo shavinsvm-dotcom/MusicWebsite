@@ -447,8 +447,11 @@ struct NowPlayingView: View {
                                 systemImage: "quote.bubble"
                             )
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.64))
-                            .padding(.top, 2)
+                            .foregroundStyle(.white.opacity(0.78))
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .playerGlass(Capsule(), interactive: true)
+                            .contentShape(Capsule())
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.94))
                     }

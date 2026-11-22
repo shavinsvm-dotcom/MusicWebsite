@@ -7,7 +7,6 @@ struct LibraryView: View {
         case songs
         case albums
         case artists
-        case playlists
         case downloads
         case cloud
 
@@ -18,7 +17,6 @@ struct LibraryView: View {
             case .songs: return "Songs"
             case .albums: return "Albums"
             case .artists: return "Artists"
-            case .playlists: return "Playlists"
             case .downloads: return "Downloads"
             case .cloud: return "Cloud"
             }
@@ -53,7 +51,6 @@ struct LibraryView: View {
     @AppStorage("motif.library.sort") private var sortRaw = SongSort.recentlyAdded.rawValue
 
     @State private var showImporter = false
-    @State private var showNewPlaylist = false
     @State private var showDownloads = false
     @State private var showSettings = false
     @State private var importError: String?
@@ -130,10 +127,6 @@ struct LibraryView: View {
 
                     if library.tracks.isEmpty {
                         emptyState
-
-                        if !library.playlists.isEmpty {
-                            playlistsGrid
-                        }
                     } else {
                         switch section {
                         case .songs:
@@ -142,8 +135,6 @@ struct LibraryView: View {
                             albumsGrid
                         case .artists:
                             artistsGrid
-                        case .playlists:
-                            playlistsGrid
                         case .downloads:
                             downloads
                         case .cloud:
@@ -171,16 +162,12 @@ struct LibraryView: View {
                     importError = error.localizedDescription
                 }
             }
-            .sheet(isPresented: $showNewPlaylist) {
-                PlaylistEditorView()
-            }
             .sheet(isPresented: $showDownloads) {
                 DownloadManagerView()
                     .environmentObject(library)
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
-                    .environmentObject(library)
                     .environmentObject(player)
             }
             .alert(
@@ -206,47 +193,20 @@ struct LibraryView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Your Library")
-                    .font(.system(size: 34, weight: .bold))
-                    .tracking(-1.1)
-                    .foregroundStyle(.primary)
-                    .minimumScaleFactor(0.82)
-                    .lineLimit(1)
-
-                Text(summaryLine)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        ScreenHeader(title: "Your Library", subtitle: summaryLine) {
+            GlassIconButton(
+                systemImage: "gearshape",
+                label: "Settings",
+                size: 36
+            ) {
+                showSettings = true
             }
 
-            Spacer(minLength: 8)
-
-            HStack(spacing: 8) {
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
-                        .background(Color.primary.opacity(0.06), in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(MotifPressStyle(scale: 0.92))
-                .accessibilityLabel("Settings")
-
-                Menu {
+            Menu {
                 Button {
                     showImporter = true
                 } label: {
                     Label("Import audio", systemImage: "square.and.arrow.down")
-                }
-
-                Button {
-                    showNewPlaylist = true
-                } label: {
-                    Label("New playlist", systemImage: "text.badge.plus")
                 }
 
                 Divider()
@@ -278,16 +238,9 @@ struct LibraryView: View {
                 }
                 .disabled(!library.enrichingIDs.isEmpty)
             } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 36, height: 36)
-                    .background(Color.primary.opacity(0.06), in: Circle())
-                    .contentShape(Circle())
+                GlassMenuLabel(systemImage: "plus", size: 36)
             }
-                .accessibilityLabel("Add music or playlist")
-            }
-            .padding(.top, 4)
+            .accessibilityLabel("Add music")
         }
     }
 
@@ -314,29 +267,32 @@ struct LibraryView: View {
                             sectionRaw = option.rawValue
                         }
                     } label: {
-                        Text(option.title)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(
-                                isSelected
-                                    ? Color(uiColor: .systemBackground)
-                                    : Color.primary
-                            )
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 8)
-                            .background {
-                                Capsule()
-                                    .fill(
-                                        isSelected
-                                            ? Color.primary
-                                            : Color.primary.opacity(0.06)
-                                    )
-                            }
+                        sectionChip(option, isSelected: isSelected)
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.95))
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
             .padding(.vertical, 2)
+        }
+    }
+
+    @ViewBuilder
+    private func sectionChip(_ option: LibrarySection, isSelected: Bool) -> some View {
+        let label = Text(option.title)
+            .font(.system(size: 12, weight: .semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 8)
+
+        if isSelected {
+            label
+                .foregroundStyle(Color(uiColor: .systemBackground))
+                .background(Color.primary, in: Capsule())
+        } else {
+            label
+                .foregroundStyle(.primary)
+                .nativeGlass(Capsule(), interactive: true)
         }
     }
 
@@ -411,7 +367,7 @@ struct LibraryView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .nativeGlass(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private var songs: some View {
@@ -436,14 +392,10 @@ struct LibraryView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(sort.title)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 8, weight: .bold))
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 6)
+                    GlassPillMenuLabel(
+                        title: sort.title,
+                        systemImage: "arrow.up.arrow.down"
+                    )
                 }
                 .accessibilityLabel("Sort songs, \(sort.title)")
             }
@@ -558,57 +510,6 @@ struct LibraryView: View {
                             LibraryArtistGridCard(artist: artist)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.95, opacity: 0.92))
-                    }
-                }
-                .padding(.horizontal, 2)
-            }
-        }
-    }
-
-    private var playlistsGrid: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionTitle(title: "Playlists")
-                Spacer()
-
-                Button {
-                    showNewPlaylist = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 28, height: 28)
-                        .background(Color.primary.opacity(0.06), in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(MotifPressStyle(scale: 0.9))
-                .accessibilityLabel("New playlist")
-            }
-
-            if library.playlists.isEmpty {
-                emptyScope("Playlists you create will appear here.")
-            } else {
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: 14),
-                        GridItem(.flexible(), spacing: 14)
-                    ],
-                    alignment: .leading,
-                    spacing: 20
-                ) {
-                    ForEach(library.playlists) { playlist in
-                        NavigationLink {
-                            PlaylistDetailView(
-                                playlistID: playlist.id,
-                                showNowPlaying: $showNowPlaying
-                            )
-                        } label: {
-                            PlaylistTile(
-                                playlist: playlist,
-                                tracks: library.tracks(in: playlist)
-                            )
-                        }
-                        .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
                     }
                 }
                 .padding(.horizontal, 2)

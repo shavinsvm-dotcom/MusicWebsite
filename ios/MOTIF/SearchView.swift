@@ -100,12 +100,17 @@ struct SearchView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
+                    ScreenHeader(
+                        title: "Search",
+                        subtitle: "Songs, artists, albums, playlists"
+                    )
+
+                    searchField
+
                     if trimmedQuery.isEmpty {
                         if !recentSearches.isEmpty {
                             recentSearchesSection
                         }
-
-                        browseHint
 
                         if !library.tracks.isEmpty {
                             resultSection(
@@ -199,37 +204,63 @@ struct SearchView: View {
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
+            .scrollDismissesKeyboard(.immediately)
             .background(AppBackground())
-            .navigationTitle("Search")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .searchable(
-                text: $query,
-                placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Songs, artists, albums, playlists"
-            )
-            .onSubmit(of: .search) {
-                remember(trimmedQuery)
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .task(id: query) {
                 await runSearch()
             }
         }
     }
 
+    private var searchField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            TextField("Songs, artists, albums, playlists", text: $query)
+                .font(.system(size: 16, weight: .regular))
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit {
+                    remember(trimmedQuery)
+                }
+
+            if !query.isEmpty {
+                Button {
+                    query = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 16, weight: .regular))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Circle())
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.9))
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .nativeGlass(
+            RoundedRectangle(cornerRadius: 18, style: .continuous),
+            interactive: true
+        )
+    }
+
     private var recentSearchesSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionTitle(title: "Recent searches")
-
-                Spacer()
-
-                Button("Clear") {
+            SectionHeader(title: "Recent searches") {
+                GlassActionButton(
+                    title: "Clear",
+                    systemImage: "xmark",
+                    accessibilityLabel: "Clear recent searches"
+                ) {
                     recentSearches = []
                     UserDefaults.standard.removeObject(forKey: "motif.recentSearches")
                 }
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
             }
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -244,7 +275,7 @@ struct SearchView: View {
                                 .lineLimit(1)
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 7)
-                                .background(Color.primary.opacity(0.06), in: Capsule())
+                                .nativeGlass(Capsule(), interactive: true)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.95))
                     }
@@ -252,20 +283,6 @@ struct SearchView: View {
                 .padding(.vertical, 2)
             }
         }
-    }
-
-    private var browseHint: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Find anything.")
-                .font(.system(size: 24, weight: .semibold))
-                .tracking(-0.5)
-
-            Text("Search your songs, artists, albums, playlists, downloads and cloud library — or find something new in the iTunes catalog.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var scopePicker: some View {
@@ -307,7 +324,7 @@ struct SearchView: View {
         } else {
             label
                 .foregroundStyle(.primary)
-                .background(Color.primary.opacity(0.06), in: Capsule())
+                .nativeGlass(Capsule(), interactive: true)
         }
     }
 

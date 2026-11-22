@@ -11,35 +11,53 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var importError: String?
 
-    private var cloudTracks: [Track] {
-        library.tracks.filter(\.isCloud)
-    }
-
     var body: some View {
+        let data = HomeSnapshot(library: library)
+
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 30) {
-                    header
+                LazyVStack(alignment: .leading, spacing: 28) {
+                    ScreenHeader(
+                        title: greeting,
+                        subtitle: "Your music, all in one place."
+                    ) {
+                        GlassIconButton(
+                            systemImage: "gearshape",
+                            label: "Settings",
+                            size: 36
+                        ) {
+                            showSettings = true
+                        }
+
+                        GlassIconButton(
+                            systemImage: "plus",
+                            label: "Import music",
+                            size: 36
+                        ) {
+                            showImporter = true
+                        }
+                    }
 
                     if let current = player.current {
                         listeningNow(current)
                     }
 
-                    if let featured = library.tracks.first, player.current == nil {
-                        featuredCard(featured)
-                    }
-
                     if library.tracks.isEmpty {
                         emptyCard
                     } else {
+                        if !data.mixTracks.isEmpty {
+                            dailyMix(data)
+                        }
+
                         if !library.recentTracks.isEmpty {
                             recentlyPlayed
                         }
 
                         recentlyAdded
 
-                        if !cloudTracks.isEmpty {
-                            cloudShelf
+                        if let artist = data.topArtistName,
+                           data.topArtistTracks.count > 1 {
+                            becauseYouLike(artist, tracks: data.topArtistTracks)
                         }
 
                         if !library.favorites.isEmpty {
@@ -57,7 +75,6 @@ struct HomeView: View {
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $showSettings) {
                 SettingsView()
-                    .environmentObject(library)
                     .environmentObject(player)
             }
             .fileImporter(
@@ -92,54 +109,6 @@ struct HomeView: View {
         case 12..<17: return "Good afternoon."
         case 17..<22: return "Good evening."
         default: return "Good night."
-        }
-    }
-
-    private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(greeting)
-                    .font(.system(size: 34, weight: .bold))
-                    .tracking(-1.1)
-                    .foregroundStyle(.primary)
-                    .minimumScaleFactor(0.82)
-                    .lineLimit(1)
-
-                Text("Your music, all in one place.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 8) {
-                Button {
-                    showSettings = true
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
-                        .background(Color.primary.opacity(0.06), in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(MotifPressStyle(scale: 0.92))
-                .accessibilityLabel("Settings")
-
-                Button {
-                    showImporter = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .frame(width: 36, height: 36)
-                        .background(Color.primary.opacity(0.06), in: Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(MotifPressStyle(scale: 0.92))
-                .accessibilityLabel("Import music")
-            }
-            .padding(.top, 4)
         }
     }
 
@@ -187,9 +156,12 @@ struct HomeView: View {
 
                 PlaybackProgressLine(tint: .primary, height: 1.5)
             }
-            .padding(.top, 2)
-            .padding(.bottom, 4)
-            .contentShape(Rectangle())
+            .padding(12)
+            .nativeGlass(
+                RoundedRectangle(cornerRadius: 22, style: .continuous),
+                interactive: true
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(MotifPressStyle(scale: 0.99, opacity: 0.94))
         .accessibilityLabel(
@@ -198,37 +170,48 @@ struct HomeView: View {
         .accessibilityHint("Opens the player")
     }
 
-    private func featuredCard(_ track: Track) -> some View {
+    private func dailyMix(_ data: HomeSnapshot) -> some View {
         Button {
-            player.play(track, queue: library.tracks)
+            guard let first = data.mixTracks.first else { return }
+            player.play(first, queue: data.mixTracks)
             showNowPlaying = true
         } label: {
             ZStack(alignment: .bottomLeading) {
-                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                    .frame(height: 238)
-                    .frame(maxWidth: .infinity)
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 0),
+                        GridItem(.flexible(), spacing: 0)
+                    ],
+                    spacing: 0
+                ) {
+                    ForEach(0..<4, id: \.self) { index in
+                        mixArtwork(index, tracks: data.mixTracks)
+                    }
+                }
+                .frame(height: 244)
 
-                ProgressiveArtworkBlur(url: track.artworkURL)
+                ProgressiveArtworkBlur(url: data.mixTracks.first?.artworkURL, strength: 0.88)
 
                 LinearGradient(
-                    colors: [.clear, .black.opacity(0.72)],
-                    startPoint: .center,
+                    colors: [.clear, .black.opacity(0.20), .black.opacity(0.86)],
+                    startPoint: .top,
                     endPoint: .bottom
                 )
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("START HERE")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MADE FOR YOU")
                         .font(.system(size: 9, weight: .bold))
-                        .tracking(1.7)
-                        .foregroundStyle(.white.opacity(0.64))
+                        .tracking(1.8)
+                        .foregroundStyle(.white.opacity(0.72))
+                        .padding(.bottom, 2)
 
-                    Text(track.title)
-                        .font(.system(size: 26, weight: .bold))
-                        .tracking(-0.6)
+                    Text("Daily Mix 1")
+                        .font(.system(size: 28, weight: .bold))
+                        .tracking(-0.8)
                         .foregroundStyle(.white)
-                        .lineLimit(2)
+                        .lineLimit(1)
 
-                    Text(track.artist)
+                    Text(data.mixSubtitle)
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.72))
                         .lineLimit(1)
@@ -237,10 +220,9 @@ struct HomeView: View {
 
                 Image(systemName: "play.fill")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.primary)
                     .frame(width: 46, height: 46)
-                    .background(Color.white.opacity(0.94), in: Circle())
-                    .shadow(color: .black.opacity(0.18), radius: 9, y: 4)
+                    .nativeGlass(Circle(), interactive: true)
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
@@ -249,38 +231,26 @@ struct HomeView: View {
         .buttonStyle(MotifPressStyle(scale: 0.985))
     }
 
-    private var emptyCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: "waveform")
-                .font(.system(size: 30, weight: .light))
-                .foregroundStyle(.secondary)
-
-            Text("Your library is empty.")
-                .font(.system(size: 23, weight: .semibold))
-                .tracking(-0.4)
-
-            Text("Import audio from Files, or search the catalog for a preview.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            GlassActionButton(
-                title: "Import music",
-                systemImage: "square.and.arrow.down",
-                prominent: true
-            ) {
-                showImporter = true
-            }
-            .padding(.top, 2)
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    private func mixArtwork(_ index: Int, tracks: [Track]) -> some View {
+        let track = tracks[index % max(tracks.count, 1)]
+        return ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+            .frame(maxWidth: .infinity)
+            .frame(height: 122)
+            .clipped()
     }
 
     private var recentlyPlayed: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: "Recently played")
+            SectionHeader(title: "Recently played") {
+                GlassActionButton(
+                    title: "Play",
+                    accessibilityLabel: "Play recently played"
+                ) {
+                    guard let first = library.recentTracks.first else { return }
+                    player.play(first, queue: library.recentTracks)
+                    showNowPlaying = true
+                }
+            }
 
             CarouselScroll {
                 LazyHStack(spacing: 14) {
@@ -329,44 +299,24 @@ struct HomeView: View {
         }
     }
 
-    private func trackTile(_ track: Track) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                .frame(width: 132, height: 132)
-                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-
-            Text(track.title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-
-            Text(track.artist.isEmpty ? "Unknown artist" : track.artist)
-                .font(.system(size: 11, weight: .regular))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-        }
-        .frame(width: 132, alignment: .leading)
-        .contentShape(Rectangle())
-    }
-
-    private var cloudShelf: some View {
+    private func becauseYouLike(_ artist: String, tracks: [Track]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "From the cloud") {
+            SectionHeader(title: "Because you like \(artist)") {
                 GlassActionButton(
                     title: "Play",
-                    accessibilityLabel: "Play cloud tracks"
+                    accessibilityLabel: "Play songs by \(artist)"
                 ) {
-                    guard let first = cloudTracks.first else { return }
-                    player.play(first, queue: cloudTracks)
+                    guard let first = tracks.first else { return }
+                    player.play(first, queue: tracks)
                     showNowPlaying = true
                 }
             }
 
             CarouselScroll {
                 LazyHStack(spacing: 14) {
-                    ForEach(cloudTracks.prefix(10)) { track in
+                    ForEach(tracks) { track in
                         Button {
-                            player.play(track, queue: cloudTracks)
+                            player.play(track, queue: tracks)
                         } label: {
                             trackTile(track)
                         }
@@ -394,12 +344,137 @@ struct HomeView: View {
 
             LazyVStack(spacing: 0) {
                 ForEach(library.favorites) { track in
-                    TrackRow(track: track, queue: library.favorites, showNowPlaying: $showNowPlaying)
+                    TrackRow(
+                        track: track,
+                        queue: library.favorites,
+                        showNowPlaying: $showNowPlaying
+                    )
+
                     if track.id != library.favorites.last?.id {
-                        Divider().opacity(0.4)
+                        Divider().opacity(0.35)
                     }
                 }
             }
+        }
+    }
+
+    private func trackTile(_ track: Track) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .bottomTrailing) {
+                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                    .frame(width: 132, height: 132)
+
+                Image(systemName: "play.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 26, height: 26)
+                    .nativeGlass(Circle(), interactive: false)
+                    .padding(7)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+            Text(track.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Text(track.artist.isEmpty ? "Unknown artist" : track.artist)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 132, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    private var emptyCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: "waveform")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(.secondary)
+
+            Text("Your library is empty.")
+                .font(.system(size: 23, weight: .semibold))
+                .tracking(-0.4)
+
+            Text("Import audio from Files, or search the catalog for a preview.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            GlassActionButton(
+                title: "Import music",
+                systemImage: "square.and.arrow.down",
+                prominent: true
+            ) {
+                showImporter = true
+            }
+            .padding(.top, 2)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .nativeGlass(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+}
+
+private struct HomeSnapshot {
+    let mixTracks: [Track]
+    let mixSubtitle: String
+    let topArtistName: String?
+    let topArtistTracks: [Track]
+
+    @MainActor
+    init(library: LibraryStore) {
+        let all = library.tracks
+
+        guard !all.isEmpty else {
+            mixTracks = []
+            mixSubtitle = ""
+            topArtistName = nil
+            topArtistTracks = []
+            return
+        }
+
+        let count = min(8, all.count)
+        let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        let mix = (0..<count).map { all[(day + $0 * 7) % all.count] }
+        mixTracks = mix
+
+        var seen = Set<String>()
+        let artists = mix.compactMap { track -> String? in
+            let name = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, seen.insert(name).inserted else { return nil }
+            return name
+        }
+        mixSubtitle = artists.isEmpty
+            ? "Songs picked for today"
+            : artists.prefix(3).joined(separator: ", ")
+
+        var counts: [String: Int] = [:]
+        for track in all {
+            let name = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty,
+                  name != "Imported",
+                  name.caseInsensitiveCompare("Unknown artist") != .orderedSame
+            else { continue }
+            counts[name, default: 0] += 1
+        }
+
+        let top = counts
+            .sorted {
+                if $0.value == $1.value {
+                    return $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending
+                }
+                return $0.value > $1.value
+            }
+            .first?
+            .key
+
+        topArtistName = top
+        if let top {
+            topArtistTracks = Array(all.filter { $0.artist == top }.prefix(6))
+        } else {
+            topArtistTracks = []
         }
     }
 }

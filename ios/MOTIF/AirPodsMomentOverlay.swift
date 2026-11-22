@@ -245,37 +245,6 @@ private struct AirPodsRippleEffect: ViewModifier, Animatable {
 /// A small floating control for replaying either moment without changing the
 /// audio route. It is intentionally tiny and out of the way; delete this view
 /// and its two call sites once the motion has been signed off.
-struct AirPodsMomentDebugButton: View {
-    @ObservedObject var monitor: AudioRouteMonitor
-
-    var body: some View {
-        Menu {
-            Button {
-                monitor.playPreview(.connected)
-            } label: {
-                Label("Replay connect", systemImage: "airpodspro")
-            }
-
-            Button {
-                monitor.playPreview(.disconnected)
-            } label: {
-                Label("Play disconnect", systemImage: "airpods")
-            }
-        } label: {
-            Image(systemName: "waveform.badge.magnifyingglass")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
-                .frame(width: 30, height: 30)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay {
-                    Circle()
-                        .strokeBorder(.white.opacity(0.16), lineWidth: 0.7)
-                }
-        }
-        .accessibilityLabel("AirPods animation debug")
-    }
-}
-
 @MainActor
 private enum WindowSnapshot {
     static func capture() -> UIImage? {

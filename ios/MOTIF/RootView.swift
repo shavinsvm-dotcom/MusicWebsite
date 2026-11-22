@@ -2,21 +2,10 @@ import SwiftUI
 import UIKit
 
 enum AppTab: String, Hashable {
-    case forYou
     case home
     case library
     case playlists
     case search
-
-    var title: String {
-        switch self {
-        case .forYou: return "For You"
-        case .home: return "Home"
-        case .library: return "Library"
-        case .playlists: return "Playlists"
-        case .search: return "Search"
-        }
-    }
 }
 
 struct RootView: View {
@@ -24,7 +13,7 @@ struct RootView: View {
     @StateObject private var player = PlayerManager()
     @StateObject private var routeMonitor = AudioRouteMonitor()
     @State private var showNowPlaying = false
-    @State private var selectedTab: AppTab = .forYou
+    @State private var selectedTab: AppTab = .home
     @State private var attemptedLyricsIDs: Set<UUID> = []
     @AppStorage("motif.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @Namespace private var playerTransition
@@ -43,12 +32,6 @@ struct RootView: View {
             .environmentObject(library)
             .environmentObject(player)
             .environmentObject(player.progress)
-            .overlay(alignment: .trailing) {
-                if !showNowPlaying {
-                    AirPodsMomentDebugButton(monitor: routeMonitor)
-                        .padding(.trailing, 6)
-                }
-            }
             .overlay {
                 if !showNowPlaying {
                     AirPodsMomentOverlay(monitor: routeMonitor)
@@ -183,10 +166,6 @@ struct RootView: View {
     private var tabs: some View {
         if #available(iOS 18.0, *) {
             TabView(selection: $selectedTab) {
-                Tab("For You", systemImage: "sparkles", value: AppTab.forYou) {
-                    forYouTab
-                }
-
                 Tab("Home", systemImage: "house", value: AppTab.home) {
                     homeTab
                 }
@@ -210,10 +189,6 @@ struct RootView: View {
             }
         } else {
             TabView(selection: $selectedTab) {
-                forYouTab
-                    .tabItem { Label("For You", systemImage: "sparkles") }
-                    .tag(AppTab.forYou)
-
                 homeTab
                     .tabItem { Label("Home", systemImage: "house") }
                     .tag(AppTab.home)
@@ -245,26 +220,9 @@ struct RootView: View {
         .environmentObject(library)
         .environmentObject(player)
         .environmentObject(player.progress)
-        .overlay(alignment: .trailing) {
-            AirPodsMomentDebugButton(monitor: routeMonitor)
-                .padding(.trailing, 6)
-        }
         .overlay {
             AirPodsMomentOverlay(monitor: routeMonitor)
         }
-    }
-
-    private var forYouTab: some View {
-        ForYouView(
-            showNowPlaying: playerPresented,
-            openSearch: { selectedTab = .search }
-        )
-        .modifier(MiniPlayerInset(
-            showNowPlaying: playerPresented,
-            currentID: player.current?.id,
-            transitionSourceID: "now-playing-\(AppTab.forYou.rawValue)",
-            transitionNamespace: playerTransition
-        ))
     }
 
     private var homeTab: some View {

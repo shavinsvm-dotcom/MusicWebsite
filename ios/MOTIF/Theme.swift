@@ -1,4 +1,3 @@
-import AVFoundation
 import CoreImage
 import ImageIO
 import SwiftUI
@@ -242,22 +241,6 @@ struct PlayerControlPressStyle: ButtonStyle {
                 guard isPressed, let haptic else { return }
                 MotifHaptics.play(haptic)
             }
-    }
-}
-
-private struct GlassSurface: ViewModifier {
-    let radius: CGFloat
-
-    func body(content: Content) -> some View {
-        content.nativeGlass(
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-        )
-    }
-}
-
-extension View {
-    func glassSurface(radius: CGFloat = 24) -> some View {
-        modifier(GlassSurface(radius: radius))
     }
 }
 
@@ -1087,76 +1070,6 @@ final class PlaybackBackdropCache {
     }
 }
 
-@MainActor
-final class SpatialAudioMonitor: ObservableObject {
-    @Published private(set) var badge: String?
-
-    private var observers: [NSObjectProtocol] = []
-
-    init() {
-        refresh()
-
-        let center = NotificationCenter.default
-        observers.append(center.addObserver(
-            forName: AVAudioSession.routeChangeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        })
-
-        if #available(iOS 15.0, *) {
-            observers.append(center.addObserver(
-                forName: AVAudioSession.spatialPlaybackCapabilitiesChangedNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
-            })
-        }
-
-        if #available(iOS 18.0, *) {
-            observers.append(center.addObserver(
-                forName: AVAudioSession.renderingModeChangeNotification,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
-            })
-        }
-    }
-
-    deinit {
-        observers.forEach(NotificationCenter.default.removeObserver)
-    }
-
-    func refresh() {
-        let session = AVAudioSession.sharedInstance()
-        var next: String?
-
-        if #available(iOS 18.0, *) {
-            switch session.renderingMode {
-            case .dolbyAtmos:
-                next = "Dolby Atmos"
-            case .dolbyAudio:
-                next = "Dolby Audio"
-            case .spatialAudio:
-                next = "Spatial Audio"
-            default:
-                break
-            }
-        }
-
-        if next == nil, #available(iOS 15.0, *) {
-            if session.currentRoute.outputs.contains(where: { $0.isSpatialAudioEnabled }) {
-                next = "Spatial Audio"
-            }
-        }
-
-        badge = next
-    }
-}
-
 struct LiltWordmark: View {
     var height: CGFloat = 18
 
@@ -1194,14 +1107,68 @@ struct SectionHeader<Trailing: View>: View {
         HStack(spacing: 10) {
             SectionTitle(title: title)
             Spacer(minLength: 8)
-            trailing()
+            GlassGroup(spacing: 8) {
+                trailing()
+            }
         }
     }
 }
 
+/// The one header used by every primary tab. Same type scale, same spacing,
+/// same glass action cluster, so the app reads as one piece.
+struct ScreenHeader<Trailing: View>: View {
+    let title: String
+    let subtitle: String
+    private let trailing: () -> Trailing
 
-/// Section actions are typographic, not glass. Glass belongs to floating
-/// chrome; a page full of glass capsules reads as noise rather than depth.
+    init(
+        title: String,
+        subtitle: String,
+        @ViewBuilder trailing: @escaping () -> Trailing
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 34, weight: .bold))
+                    .tracking(-1.1)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Text(subtitle)
+                    .font(.system(size: 14, weight: .regular))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            GlassGroup(spacing: 8) {
+                HStack(spacing: 8) {
+                    trailing()
+                }
+                .padding(.top, 2)
+            }
+        }
+    }
+}
+
+extension ScreenHeader where Trailing == EmptyView {
+    init(title: String, subtitle: String) {
+        self.init(title: title, subtitle: subtitle) { EmptyView() }
+    }
+}
+
+
+/// One glass language for every discrete control: capsules carry words,
+/// circles carry icons, and each group is wrapped in a GlassGroup at the call
+/// site when several controls sit together.
 struct GlassActionButton: View {
     let title: String
     var systemImage: String = "play.fill"
@@ -1211,28 +1178,23 @@ struct GlassActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            Group {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: prominent ? 12 : 10, weight: .semibold))
+                Text(title)
+                    .font(.system(size: prominent ? 15 : 12, weight: .semibold))
+            }
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .padding(.horizontal, prominent ? 16 : 11)
+            .padding(.vertical, prominent ? 11 : 7)
+            .background {
                 if prominent {
-                    Label(title, systemImage: systemImage)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(Color(uiColor: .systemBackground))
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 11)
-                        .background(Color.primary, in: Capsule())
-                } else {
-                    HStack(spacing: 5) {
-                        Image(systemName: systemImage)
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(title)
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
+                    Capsule().fill(Color.primary.opacity(0.12))
                 }
             }
-            .lineLimit(1)
+            .nativeGlass(Capsule(), interactive: true)
+            .contentShape(Capsule())
         }
         .buttonStyle(MotifPressStyle(scale: 0.96, opacity: 0.90))
         .accessibilityLabel(accessibilityLabel ?? title)
@@ -1251,7 +1213,7 @@ struct GlassIconButton: View {
                 .font(.system(size: size >= 40 ? 15 : 13, weight: .semibold))
                 .foregroundStyle(.primary)
                 .frame(width: size, height: size)
-                .background(Color.primary.opacity(0.06), in: Circle())
+                .nativeGlass(Circle(), interactive: true)
                 .contentShape(Circle())
         }
         .buttonStyle(MotifPressStyle(scale: 0.92))
@@ -1259,13 +1221,54 @@ struct GlassIconButton: View {
     }
 }
 
+struct GlassMenuLabel: View {
+    var systemImage: String
+    var size: CGFloat = 34
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.system(size: size >= 40 ? 15 : 13, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: size, height: size)
+            .nativeGlass(Circle(), interactive: true)
+            .contentShape(Circle())
+    }
+}
+
+struct GlassPillMenuLabel: View {
+    let title: String
+    var systemImage: String? = nil
+
+    var body: some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+
+            Text(title)
+
+            Image(systemName: "chevron.down")
+                .font(.system(size: 7, weight: .bold))
+                .foregroundStyle(.secondary)
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .nativeGlass(Capsule(), interactive: true)
+        .contentShape(Capsule())
+    }
+}
+
 extension View {
-    /// A quiet grouping for a short row of transport actions.
+    /// Groups a short row of transport buttons inside one glass pill.
     func glassTransport() -> some View {
         foregroundStyle(.primary)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
-            .background(Color.primary.opacity(0.05), in: Capsule())
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .nativeGlass(Capsule(), interactive: true)
     }
 }
 
@@ -1361,10 +1364,19 @@ struct TrackRow: View {
             Button {
                 player.play(track, queue: queue ?? [track])
             } label: {
-                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                    .frame(width: 52, height: 52)
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .contentShape(Rectangle())
+                ZStack(alignment: .bottomTrailing) {
+                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 7, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 18, height: 18)
+                        .nativeGlass(Circle(), interactive: false)
+                        .padding(3)
+                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.9))
             .accessibilityLabel("Play \(track.title)")
@@ -1433,6 +1445,7 @@ struct TrackRow: View {
                     .foregroundStyle(.tertiary)
             }
 
+            HStack(spacing: 2) {
             if track.isCloud {
                 Button {
                     guard !isDownloaded, !isDownloading else { return }
@@ -1446,14 +1459,15 @@ struct TrackRow: View {
                                 .tint(.secondary)
                         } else {
                             Image(systemName: isDownloaded ? "checkmark.circle.fill" : "arrow.down.circle")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.secondary)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.primary)
                                 .motifReplace()
                                 .motifBounce(tick: downloadPulse)
                                 .animation(.spring(response: 0.30, dampingFraction: 0.70), value: isDownloaded)
                         }
                     }
-                    .frame(width: 32, height: 42)
+                    .frame(width: 30, height: 30)
+                    .frame(width: 30, height: 38)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.86))
@@ -1563,11 +1577,15 @@ struct TrackRow: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 32, height: 42)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 30, height: 30)
                     .contentShape(Rectangle())
             }
+            }
+            .padding(.horizontal, 3)
+            .padding(.vertical, 3)
+            .nativeGlass(Capsule(), interactive: true)
         }
         .padding(.vertical, 6)
     }

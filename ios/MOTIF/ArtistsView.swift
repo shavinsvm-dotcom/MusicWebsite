@@ -1,45 +1,6 @@
 import SwiftUI
 import UIKit
 
-struct LibraryArtistsSection: View {
-    @EnvironmentObject private var library: LibraryStore
-    @Binding var showNowPlaying: Bool
-
-    private var artists: [LibraryArtistGroup] {
-        LibraryArtistBuilder.artists(from: library.tracks)
-    }
-
-    var body: some View {
-        if !artists.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                SectionHeader(title: "Artists") {
-                    Text("\(artists.count)")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-
-                CarouselScroll {
-                    LazyHStack(alignment: .top, spacing: 17) {
-                        ForEach(artists) { artist in
-                            NavigationLink {
-                                LibraryArtistDetailView(
-                                    artistName: artist.name,
-                                    showNowPlaying: $showNowPlaying
-                                )
-                            } label: {
-                                LibraryArtistCard(artist: artist)
-                            }
-                            .buttonStyle(MotifPressStyle(scale: 0.96, opacity: 0.92))
-                        }
-                    }
-                    .padding(.horizontal, 2)
-                    .padding(.bottom, 4)
-                }
-            }
-        }
-    }
-}
-
 struct LibraryArtistCard: View {
     let artist: LibraryArtistGroup
 
