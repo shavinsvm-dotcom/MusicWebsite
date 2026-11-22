@@ -110,9 +110,10 @@ struct AirPodsMomentOverlay: View {
                     .id(isConnected)
             }
 
-            AirPodsPairGlyph()
-                .frame(width: 46, height: 34)
-                .scaleEffect(1.35)
+            Image(systemName: "airpods.gen3")
+                .font(.system(size: 46, weight: .regular))
+                .symbolRenderingMode(.monochrome)
+                .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.28), radius: 3, y: 1)
                 .frame(width: 96, height: 96)
                 .nativeGlass(Circle())
@@ -187,58 +188,6 @@ struct AirPodsMomentOverlay: View {
                 ? "\(moment.name) connected"
                 : "\(moment.name) disconnected"
         )
-    }
-}
-
-/// The reference pair: two mirrored buds, each with the angled inner vent and
-/// the slim outer slot cut through the head.
-private struct AirPodsPairGlyph: View {
-    var body: some View {
-        HStack(spacing: 3.5) {
-            AirPodBud()
-                .scaleEffect(x: -1, y: 1)
-
-            AirPodBud()
-        }
-        .frame(width: 46, height: 34)
-    }
-}
-
-private struct AirPodBud: View {
-    var body: some View {
-        ZStack {
-            Capsule(style: .continuous)
-                .fill(.white)
-                .frame(width: 6.6, height: 16)
-                .offset(y: 7.5)
-
-            head
-                .offset(y: -8)
-        }
-        .frame(width: 21, height: 34)
-    }
-
-    private var head: some View {
-        Ellipse()
-            .fill(.white)
-            .frame(width: 21, height: 18)
-            .overlay {
-                ZStack {
-                    Ellipse()
-                        .fill(.black)
-                        .frame(width: 5.6, height: 3.7)
-                        .rotationEffect(.degrees(-28))
-                        .offset(x: -2.6, y: -3.4)
-
-                    Capsule(style: .continuous)
-                        .fill(.black)
-                        .frame(width: 1.8, height: 5.6)
-                        .rotationEffect(.degrees(-6))
-                        .offset(x: 7.2, y: 1.0)
-                }
-                .blendMode(.destinationOut)
-            }
-            .compositingGroup()
     }
 }
 
