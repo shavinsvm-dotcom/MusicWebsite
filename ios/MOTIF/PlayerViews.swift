@@ -22,7 +22,7 @@ struct MiniPlayer: View {
                                 .frame(width: 36, height: 36)
                                 .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
                                 .overlay {
-                                    MiniArtworkProgressRing()
+                                    ArtworkProgressRing()
                                 }
 
                             VStack(alignment: .leading, spacing: 1) {
@@ -139,34 +139,6 @@ struct MiniPlayer: View {
 
 }
 
-private struct MiniArtworkProgressRing: View {
-    @EnvironmentObject private var player: PlayerManager
-    @EnvironmentObject private var progress: PlaybackProgress
-
-    private var fraction: CGFloat {
-        guard player.duration > 0 else { return 0 }
-        return CGFloat(min(max(progress.elapsed / player.duration, 0), 1))
-    }
-
-    var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12.5, style: .continuous)
-                .stroke(Color.white.opacity(0.16), lineWidth: 1.5)
-
-            RoundedRectangle(cornerRadius: 12.5, style: .continuous)
-                .trim(from: 0, to: max(fraction, 0.001))
-                .stroke(
-                    Color.white.opacity(0.94),
-                    style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
-                )
-                .rotationEffect(.degrees(-90))
-        }
-        .frame(width: 38, height: 38)
-        .animation(.linear(duration: 0.12), value: fraction)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
 
 private struct PlayerBackdrop: View {
     let artworkURL: URL?

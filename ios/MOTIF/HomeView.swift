@@ -14,6 +14,10 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 28) {
+                    if let current = player.current {
+                        listeningNow(current)
+                    }
+
                     if let featured = library.tracks.first {
                         featuredCard(featured)
                     } else {
@@ -71,6 +75,55 @@ struct HomeView: View {
                 Text(importError ?? "")
             }
         }
+    }
+
+    private func listeningNow(_ track: Track) -> some View {
+        Button {
+            showNowPlaying = true
+        } label: {
+            HStack(spacing: 12) {
+                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay {
+                        ArtworkProgressRing(
+                            size: 46,
+                            cornerRadius: 14,
+                            tint: Color.primary
+                        )
+                    }
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(player.isPlaying ? "LISTENING NOW" : "PAUSED")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(.secondary)
+
+                    Text(track.title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text(track.artist.isEmpty ? "Unknown artist" : track.artist)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    PlaybackProgressLine()
+                        .padding(.top, 1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.leading, 10)
+            .padding(.trailing, 14)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .nativeGlass(Capsule(), interactive: true)
+        }
+        .buttonStyle(MotifPressStyle(scale: 0.985, opacity: 0.94))
+        .accessibilityLabel(
+            "\(player.isPlaying ? "Listening now" : "Paused"): \(track.title) by \(track.artist.isEmpty ? "Unknown artist" : track.artist). Open player"
+        )
     }
 
     private func featuredCard(_ track: Track) -> some View {

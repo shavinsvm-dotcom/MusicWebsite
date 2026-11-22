@@ -1334,6 +1334,111 @@ extension View {
     }
 }
 
+/// The mini player's progress ring, shared with the Home listening strip.
+struct ArtworkProgressRing: View {
+    var size: CGFloat = 38
+    var cornerRadius: CGFloat = 12.5
+    var tint: Color = .white
+
+    @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var progress: PlaybackProgress
+
+    private var fraction: CGFloat {
+        guard player.duration > 0 else { return 0 }
+        return CGFloat(min(max(progress.elapsed / player.duration, 0), 1))
+    }
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(tint.opacity(0.16), lineWidth: 1.5)
+
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .trim(from: 0, to: max(fraction, 0.001))
+                .stroke(
+                    tint.opacity(0.94),
+                    style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round)
+                )
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: size, height: size)
+        .animation(.linear(duration: 0.12), value: fraction)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A thin monochrome progress line for the Home listening strip.
+struct PlaybackProgressLine: View {
+    var tint: Color = .primary
+    var height: CGFloat = 1.5
+
+    @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var progress: PlaybackProgress
+
+    private var fraction: CGFloat {
+        guard player.duration > 0 else { return 0 }
+        return CGFloat(min(max(progress.elapsed / player.duration, 0), 1))
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(tint.opacity(0.10))
+
+                Capsule()
+                    .fill(tint.opacity(0.75))
+                    .frame(width: max(height, geometry.size.width * fraction))
+            }
+        }
+        .frame(height: height)
+        .animation(.linear(duration: 0.12), value: fraction)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Three small monochrome bars that animate only while audio is playing.
+struct NowPlayingBars: View {
+    var isPlaying: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let pausedHeights: [CGFloat] = [4, 9, 6]
+
+    var body: some View {
+        TimelineView(
+            .animation(
+                minimumInterval: 1.0 / 12.0,
+                paused: !isPlaying || reduceMotion
+            )
+        ) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+
+            HStack(alignment: .bottom, spacing: 2) {
+                ForEach(0..<3, id: \.self) { index in
+                    let height: CGFloat
+
+                    if isPlaying && !reduceMotion {
+                        let phase = time * (2.4 + Double(index) * 0.55) + Double(index) * 1.3
+                        let value = (sin(phase) + 1) / 2
+                        height = 4 + CGFloat(value) * 9
+                    } else {
+                        height = pausedHeights[index]
+                    }
+
+                    Capsule()
+                        .fill(Color.primary.opacity(isPlaying ? 0.9 : 0.42))
+                        .frame(width: 2, height: height)
+                }
+            }
+            .frame(width: 10, height: 14, alignment: .bottom)
+        }
+        .accessibilityLabel(isPlaying ? "Playing" : "Paused")
+    }
+}
+
 struct TrackRow: View {
     let track: Track
     var queue: [Track]? = nil
@@ -1342,6 +1447,12 @@ struct TrackRow: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
     @State private var downloadPulse = 0
+
+    private var isCurrent: Bool {
+        guard let current = player.current else { return false }
+        if current.id == track.id { return true }
+        return current.remoteID != nil && current.remoteID == track.remoteID
+    }
 
     var body: some View {
         let isDownloaded = track.isCloud && library.isDownloaded(track)
@@ -1420,9 +1531,17 @@ struct TrackRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Text(track.durationText)
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.tertiary)
+            ZStack {
+                Text(track.durationText)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+                    .opacity(isCurrent ? 0 : 1)
+                    .accessibilityHidden(isCurrent)
+
+                if isCurrent {
+                    NowPlayingBars(isPlaying: player.isPlaying)
+                }
+            }
 
             if track.isCloud {
                 Button {
