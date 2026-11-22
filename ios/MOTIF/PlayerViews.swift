@@ -20,21 +20,25 @@ struct MiniPlayer: View {
                     } label: {
                         HStack(spacing: 9) {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                                .id(track.id)
                                 .frame(width: 34, height: 34)
                                 .clipShape(RoundedRectangle(cornerRadius: 10.5, style: .continuous))
                                 .overlay {
                                     ArtworkProgressRing(size: 36, cornerRadius: 11.5)
                                 }
+                                .transition(.opacity)
 
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(track.title)
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundStyle(.primary)
                                     .lineLimit(1)
+                                    .contentTransition(.opacity)
                                 Text(track.artist)
                                     .font(.system(size: 10, weight: .regular))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
+                                    .contentTransition(.opacity)
                             }
 
                             Spacer(minLength: 0)
@@ -47,7 +51,7 @@ struct MiniPlayer: View {
                     GlassGroup(spacing: 8) {
                         HStack(spacing: 8) {
                             Button {
-                                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                withAnimation(MotifMotion.control) {
                                     player.previous()
                                 }
                             } label: {
@@ -61,7 +65,7 @@ struct MiniPlayer: View {
                             .accessibilityLabel("Previous")
 
                             Button {
-                                withAnimation(.easeOut(duration: 0.16)) {
+                                withAnimation(MotifMotion.control) {
                                     player.toggle()
                                 }
                             } label: {
@@ -76,7 +80,7 @@ struct MiniPlayer: View {
                             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                             Button {
-                                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                withAnimation(MotifMotion.control) {
                                     player.next()
                                 }
                             } label: {
@@ -91,6 +95,7 @@ struct MiniPlayer: View {
                         }
                     }
                 }
+                .animation(MotifMotion.artwork, value: track.id)
                 .padding(.leading, 8)
                 .padding(.trailing, 8)
                 .frame(height: 46)
@@ -113,29 +118,29 @@ struct MiniPlayer: View {
             .onChange(of: showNowPlaying) { presented in
                 guard !presented else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        simplifySurface = false
-                    }
+                    simplifySurface = false
                 }
             }
         }
     }
 
-    @ViewBuilder
     private var miniPlayerSurface: some View {
-        if simplifySurface {
-            Capsule()
-                .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
-                .overlay {
-                    Capsule()
-                        .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
-                }
-                .transition(.opacity)
-        } else {
-            Color.clear
-                .playerGlass(Capsule())
-                .transition(.opacity)
+        ZStack {
+            if simplifySurface {
+                Capsule()
+                    .fill(Color(uiColor: .secondarySystemBackground).opacity(0.96))
+                    .overlay {
+                        Capsule()
+                            .stroke(Color.primary.opacity(0.07), lineWidth: 0.8)
+                    }
+                    .transition(.opacity)
+            } else {
+                Color.clear
+                    .playerGlass(Capsule())
+                    .transition(.opacity)
+            }
         }
+        .animation(MotifMotion.settle, value: simplifySurface)
     }
 
 }
@@ -176,6 +181,7 @@ private struct PlayerBackdrop: View {
                         .frame(width: screen.width, height: screen.height)
                         .clipped()
                         .opacity(0.78)
+                        .transition(.opacity)
                 }
 
                 // The backdrop already mirrors the bottom's blurred
@@ -201,6 +207,8 @@ private struct PlayerBackdrop: View {
             // stretches the player's root ZStack and clips its chrome.
             .frame(width: screen.width, height: screen.height)
             .clipped()
+            .animation(MotifMotion.artwork, value: artworkURL)
+            .animation(MotifMotion.settle, value: displayImage != nil)
         }
         .ignoresSafeArea()
         .task(id: artworkURL) {
@@ -277,7 +285,9 @@ struct NowPlayingView: View {
         .environment(\.colorScheme, .dark)
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                effectsReady = true
+                withAnimation(MotifMotion.overlay) {
+                    effectsReady = true
+                }
             }
         }
         .sheet(isPresented: $showQueue) {
@@ -361,14 +371,12 @@ struct NowPlayingView: View {
 
                     if effectsReady {
                         HeroEdgeBlurOverlay(url: track.artworkURL, intensity: 1)
+                            .transition(.opacity)
                     }
                 }
                 .compositingGroup()
                 .id(track.id)
-                .transition(.asymmetric(
-                    insertion: .opacity.combined(with: .scale(scale: 1.035)),
-                    removal: .opacity
-                ))
+                .transition(.opacity)
                 .frame(width: artSide, height: artSide)
                 .mask(
                     LinearGradient(
@@ -388,10 +396,7 @@ struct NowPlayingView: View {
                     x: geometry.size.width / 2,
                     y: geometry.size.height * 0.38
                 )
-                .animation(
-                    .spring(response: 0.52, dampingFraction: 0.88),
-                    value: track.id
-                )
+                .animation(MotifMotion.artwork, value: track.id)
 
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
@@ -411,6 +416,7 @@ struct NowPlayingView: View {
                             .minimumScaleFactor(0.55)
                             .allowsTightening(true)
                             .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
 
                         Text(track.artist)
                             .font(
@@ -422,6 +428,7 @@ struct NowPlayingView: View {
                             .foregroundStyle(.white.opacity(0.60))
                             .lineLimit(1)
                             .truncationMode(.tail)
+                            .contentTransition(.opacity)
 
                         HStack(spacing: 7) {
                             Image(systemName: "opticaldisc")
@@ -438,6 +445,7 @@ struct NowPlayingView: View {
                         )
                         .foregroundStyle(.white.opacity(0.48))
                         .padding(.top, 1)
+                        .contentTransition(.opacity)
 
                         Menu {
                             lyricsOptions(track)
@@ -457,6 +465,7 @@ struct NowPlayingView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
+                    .animation(MotifMotion.artwork, value: track.id)
 
                     NowPlayingScrubber()
                         .padding(.horizontal, 24)
@@ -575,9 +584,7 @@ struct NowPlayingView: View {
                     Section("Playback") {
                         Button {
                             MotifHaptics.play(.light)
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.72)) {
-                                player.setAutomix(!player.automixEnabled)
-                            }
+                            player.setAutomix(!player.automixEnabled)
                         } label: {
                             Label(
                                 player.automixEnabled ? "Automix · On" : "Automix",
@@ -674,14 +681,14 @@ struct NowPlayingView: View {
                 icon: library.isFavorite(track) ? "heart.fill" : "heart",
                 active: library.isFavorite(track)
             ) {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
+                withAnimation(MotifMotion.control) {
                     library.toggleFavorite(track)
                 }
             }
             .accessibilityLabel(library.isFavorite(track) ? "Remove favorite" : "Favorite")
 
             circularButton(icon: "shuffle", active: player.isShuffled) {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
+                withAnimation(MotifMotion.control) {
                     player.toggleShuffle()
                 }
             }
@@ -692,7 +699,7 @@ struct NowPlayingView: View {
             Spacer(minLength: 2)
 
             Button {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                withAnimation(MotifMotion.control) {
                     player.previous()
                 }
             } label: {
@@ -706,7 +713,7 @@ struct NowPlayingView: View {
             .accessibilityLabel("Previous")
 
             Button {
-                withAnimation(.easeOut(duration: 0.16)) {
+                withAnimation(MotifMotion.control) {
                     player.toggle()
                 }
             } label: {
@@ -721,7 +728,7 @@ struct NowPlayingView: View {
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                withAnimation(MotifMotion.control) {
                     player.next()
                 }
             } label: {
@@ -748,7 +755,6 @@ struct NowPlayingView: View {
                 .foregroundStyle(active ? Color.white : Color.white.opacity(0.62))
                 .frame(width: 42, height: 42)
                 .motifReplace()
-                .motifBounce(active)
                 .playerGlass(Circle())
         }
         .buttonStyle(PlayerControlPressStyle())
@@ -756,25 +762,22 @@ struct NowPlayingView: View {
 
     private var repeatButton: some View {
         Button {
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.46)) {
-                player.cycleRepeat()
-            }
+            player.cycleRepeat()
         } label: {
             ZStack(alignment: .bottom) {
                 Image(systemName: "repeat")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(player.repeatMode == .off ? Color.white.opacity(0.62) : Color.white)
-                    .motifBounce(player.repeatMode != .off)
 
                 if player.repeatMode != .off {
                     Circle()
                         .fill(Color.white)
                         .frame(width: 3.5, height: 3.5)
                         .offset(y: 2)
-                        .transition(.scale.combined(with: .opacity))
+                        .transition(.opacity)
                 }
             }
-            .animation(.spring(response: 0.36, dampingFraction: 0.50), value: player.repeatMode)
+            .animation(MotifMotion.control, value: player.repeatMode)
             .frame(width: 42, height: 42)
             .playerGlass(Circle())
         }
@@ -877,7 +880,13 @@ private struct NowPlayingScrubber: View {
             sliderValue = clamped(progress.elapsed)
         }
         .onChange(of: player.current?.id) { _ in
-            sliderValue = 0
+            // A new track starts at zero; never animate the old position
+            // rewinding across the slider.
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                sliderValue = 0
+            }
             lastSeekAt = Date()
         }
         .onChange(of: progress.elapsed) { elapsed in
@@ -915,9 +924,7 @@ private struct MiniPlayerTransitionSource: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
             content.matchedTransitionSource(id: sourceID, in: namespace) { source in
-                source.clipShape(
-                    RoundedRectangle(cornerRadius: 25, style: .continuous)
-                )
+                source.clipShape(Capsule())
             }
         } else {
             content

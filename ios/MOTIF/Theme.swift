@@ -237,6 +237,39 @@ private struct ScreenEntrance: ViewModifier {
     }
 }
 
+/// Motion tokens shared by the player and controls. Apple's spring presets
+/// settle predictably without the visible overshoot that makes a control feel
+/// jerky; the hand-tuned springs are only a fallback for iOS 16.
+enum MotifMotion {
+    static var control: Animation {
+        if #available(iOS 17.0, *) {
+            return .snappy(duration: 0.24, extraBounce: 0)
+        } else {
+            return .spring(response: 0.28, dampingFraction: 0.88)
+        }
+    }
+
+    static var settle: Animation {
+        if #available(iOS 17.0, *) {
+            return .smooth(duration: 0.32)
+        } else {
+            return .easeInOut(duration: 0.28)
+        }
+    }
+
+    static var artwork: Animation {
+        if #available(iOS 17.0, *) {
+            return .smooth(duration: 0.34)
+        } else {
+            return .easeInOut(duration: 0.30)
+        }
+    }
+
+    static var overlay: Animation {
+        .easeOut(duration: 0.28)
+    }
+}
+
 /// The app-wide press treatment. Touch-down is a short, damped compression;
 /// release is one smooth spring back to rest. Only scale and a whisper of
 /// dimming move, so a tap never looks like the button is shaking or flashing.
@@ -278,7 +311,7 @@ struct PlayerControlPressStyle: ButtonStyle {
         let pressed = configuration.isPressed
         let animation: Animation = pressed
             ? .easeOut(duration: 0.09)
-            : .spring(response: 0.24, dampingFraction: 0.88)
+            : MotifMotion.control
 
         return configuration.label
             .scaleEffect(pressed ? scale : 1)
@@ -1280,7 +1313,7 @@ struct ArtworkProgressRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: size, height: size)
-        .animation(.linear(duration: 0.12), value: fraction)
+        .animation(.linear(duration: 0.24), value: fraction)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }

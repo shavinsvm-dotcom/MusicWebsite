@@ -296,10 +296,7 @@ private struct MiniPlayerInset: ViewModifier {
                 transitionNamespace: transitionNamespace
             )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
-                .animation(
-                    .spring(response: 0.28, dampingFraction: 0.84),
-                    value: currentID
-                )
+                .animation(MotifMotion.control, value: currentID)
         }
     }
 }

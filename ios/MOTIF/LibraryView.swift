@@ -45,7 +45,6 @@ struct LibraryView: View {
 
     @AppStorage("motif.library.section") private var sectionRaw = LibrarySection.songs.rawValue
     @AppStorage("motif.library.sort") private var sortRaw = SongSort.recentlyAdded.rawValue
-    @Namespace private var sectionPill
 
     @State private var showImporter = false
     @State private var showDownloads = false
@@ -221,11 +220,28 @@ struct LibraryView: View {
     }
 
     private var sectionBar: some View {
-        HStack(spacing: 0) {
-            ForEach(LibrarySection.allCases) { option in
-                sectionTab(option)
+        GeometryReader { proxy in
+            let count = max(LibrarySection.allCases.count, 1)
+            let segment = proxy.size.width / CGFloat(count)
+            let index = CGFloat(LibrarySection.allCases.firstIndex(of: section) ?? 0)
+
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary)
+                    .frame(width: max(segment - 4, 0), height: 32)
+                    .offset(x: index * segment + 2)
+                    .animation(MotifMotion.control, value: section)
+                    .allowsHitTesting(false)
+
+                HStack(spacing: 0) {
+                    ForEach(LibrarySection.allCases) { option in
+                        sectionTab(option)
+                    }
+                }
             }
+            .frame(width: proxy.size.width, height: 32)
         }
+        .frame(height: 32)
         .padding(4)
         .nativeGlass(Capsule(), interactive: true)
         .padding(.bottom, 2)
@@ -237,7 +253,7 @@ struct LibraryView: View {
         return Button {
             guard !isSelected else { return }
             MotifHaptics.play(.light)
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+            withAnimation(MotifMotion.settle) {
                 sectionRaw = option.rawValue
             }
         } label: {
@@ -245,16 +261,8 @@ struct LibraryView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : Color.secondary)
                 .lineLimit(1)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background {
-                    if isSelected {
-                        Capsule()
-                            .fill(Color.primary)
-                            .matchedGeometryEffect(id: "library-section-pill", in: sectionPill)
-                    }
-                }
-                .contentShape(Capsule())
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
