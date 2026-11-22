@@ -1418,24 +1418,25 @@ struct NowPlayingBars: View {
 
             HStack(alignment: .bottom, spacing: 2) {
                 ForEach(0..<3, id: \.self) { index in
-                    let height: CGFloat
-
-                    if isPlaying && !reduceMotion {
-                        let phase = time * (2.4 + Double(index) * 0.55) + Double(index) * 1.3
-                        let value = (sin(phase) + 1) / 2
-                        height = 4 + CGFloat(value) * 9
-                    } else {
-                        height = pausedHeights[index]
-                    }
-
                     Capsule()
                         .fill(Color.primary.opacity(isPlaying ? 0.9 : 0.42))
-                        .frame(width: 2, height: height)
+                        .frame(width: 2, height: barHeight(index: index, time: time))
                 }
             }
             .frame(width: 10, height: 14, alignment: .bottom)
         }
         .accessibilityLabel(isPlaying ? "Playing" : "Paused")
+    }
+
+    private func barHeight(index: Int, time: TimeInterval) -> CGFloat {
+        guard isPlaying, !reduceMotion else {
+            return pausedHeights[index]
+        }
+
+        let speed: Double = 2.4 + Double(index) * 0.55
+        let phase: Double = time * speed + Double(index) * 1.3
+        let wave: Double = (sin(phase) + 1) * 0.5
+        return 4 + CGFloat(wave) * 9
     }
 }
 
