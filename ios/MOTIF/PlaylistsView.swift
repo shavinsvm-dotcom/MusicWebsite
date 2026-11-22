@@ -12,6 +12,7 @@ struct PlaylistsView: View {
     @Binding var showNowPlaying: Bool
 
     @State private var showCreatePlaylist = false
+    @State private var showSmartPlaylist = false
 
     var body: some View {
         NavigationStack {
@@ -30,7 +31,14 @@ struct PlaylistsView: View {
             .navigationBarTitleDisplayMode(.large)
             .nativeScrollHeader()
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showSmartPlaylist = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                    }
+                    .accessibilityLabel("Smart playlist")
+
                     Button {
                         showCreatePlaylist = true
                     } label: {
@@ -47,6 +55,10 @@ struct PlaylistsView: View {
             }
             .sheet(isPresented: $showCreatePlaylist) {
                 PlaylistEditorView()
+            }
+            .sheet(isPresented: $showSmartPlaylist) {
+                SmartPlaylistView()
+                    .environmentObject(library)
             }
         }
     }
