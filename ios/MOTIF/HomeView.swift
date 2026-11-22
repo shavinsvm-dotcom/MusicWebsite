@@ -106,9 +106,9 @@ struct HomeView: View {
 
                 Image(systemName: "play.fill")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.primary)
                     .frame(width: 46, height: 46)
-                    .background(.white, in: Circle())
+                    .nativeGlass(Circle(), interactive: true)
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
@@ -156,7 +156,19 @@ struct HomeView: View {
 
     private var recentlyAdded: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionTitle(title: "Recently added")
+            HStack(spacing: 10) {
+                SectionTitle(title: "Recently added")
+                Spacer()
+                Button {
+                    guard let first = library.tracks.first else { return }
+                    player.play(first, queue: Array(library.tracks.prefix(10)))
+                    showNowPlaying = true
+                } label: {
+                    GlassActionLabel(title: "Play")
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.92))
+                .accessibilityLabel("Play recently added")
+            }
 
             CarouselScroll {
                 LazyHStack(spacing: 14) {
@@ -194,8 +206,20 @@ struct HomeView: View {
     }
 
     private var favorites: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(title: "Favorites")
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                SectionTitle(title: "Favorites")
+                Spacer()
+                Button {
+                    guard let first = library.favorites.first else { return }
+                    player.play(first, queue: library.favorites)
+                    showNowPlaying = true
+                } label: {
+                    GlassActionLabel(title: "Play")
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.92))
+                .accessibilityLabel("Play favorites")
+            }
 
             LazyVStack(spacing: 0) {
                 ForEach(library.favorites) { track in

@@ -3,10 +3,18 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
-    private enum LibraryFilter: Hashable {
+    private enum LibraryFilter: CaseIterable, Hashable {
         case all
         case downloads
         case cloud
+
+        var title: String {
+            switch self {
+            case .all: return "Songs"
+            case .downloads: return "Downloads"
+            case .cloud: return "Cloud"
+            }
+        }
     }
 
     @EnvironmentObject private var library: LibraryStore
@@ -30,17 +38,12 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 26) {
-                    cloudStatus
-
+                LazyVStack(alignment: .leading, spacing: 22) {
                     if !library.tracks.isEmpty {
-                        Picker("Library filter", selection: $filter) {
-                            Text("Songs").tag(LibraryFilter.all)
-                            Text("Downloads").tag(LibraryFilter.downloads)
-                            Text("Cloud").tag(LibraryFilter.cloud)
-                        }
-                        .pickerStyle(.segmented)
+                        filterBar
                     }
+
+                    cloudStatus
 
                     if library.tracks.isEmpty {
                         emptyState
@@ -190,7 +193,7 @@ struct LibraryView: View {
                 Image(systemName: "arrow.clockwise")
                     .font(.caption.weight(.semibold))
                     .frame(width: 30, height: 30)
-                    .contentShape(Rectangle())
+                    .nativeGlass(Circle(), interactive: true)
             }
             .buttonStyle(MotifPressStyle(scale: 0.9))
             .foregroundStyle(.secondary)
@@ -198,6 +201,34 @@ struct LibraryView: View {
             .accessibilityLabel("Refresh Tigris library")
         }
         .padding(.vertical, 2)
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 2) {
+            ForEach(LibraryFilter.allCases, id: \.self) { option in
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        filter = option
+                    }
+                } label: {
+                    Text(option.title)
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(filter == option ? .primary : .secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background {
+                            if filter == option {
+                                Capsule()
+                                    .fill(Color.primary.opacity(0.10))
+                            }
+                        }
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.96))
+                .accessibilityAddTraits(filter == option ? .isSelected : [])
+            }
+        }
+        .padding(4)
+        .nativeGlass(Capsule(), interactive: true)
     }
 
     private var emptyState: some View {
@@ -237,32 +268,42 @@ struct LibraryView: View {
         let pendingDownloads = library.tracks.filter { $0.isCloud && !library.isDownloaded($0) }
 
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
+            HStack(spacing: 10) {
                 SectionTitle(title: "Songs")
                 Spacer()
 
-                if !pendingDownloads.isEmpty {
-                    Button {
-                        Task { await library.downloadAll(pendingDownloads) }
-                    } label: {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.body.weight(.semibold))
-                    }
-                    .buttonStyle(MotifPressStyle(scale: 0.9))
-                    .foregroundStyle(.secondary)
-                    .accessibilityLabel("Download all songs")
-                }
+                HStack(spacing: 2) {
+                    if !pendingDownloads.isEmpty {
+                        Button {
+                            Task { await library.downloadAll(pendingDownloads) }
+                        } label: {
+                            Image(systemName: "arrow.down.circle")
+                                .font(.system(size: 13, weight: .semibold))
+                                .frame(width: 30, height: 30)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.9))
+                        .accessibilityLabel("Download all songs")
 
-                Button {
-                    guard let first = library.tracks.first else { return }
-                    player.play(first, queue: library.tracks)
-                    showNowPlaying = true
-                } label: {
-                    Label("Play all", systemImage: "play.fill")
-                        .font(.caption.weight(.semibold))
+                        Divider().frame(height: 16)
+                    }
+
+                    Button {
+                        guard let first = library.tracks.first else { return }
+                        player.play(first, queue: library.tracks)
+                        showNowPlaying = true
+                    } label: {
+                        Label("Play", systemImage: "play.fill")
+                            .font(.caption.weight(.semibold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 7)
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.92))
+                    .accessibilityLabel("Play all songs")
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.92))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .nativeGlass(Capsule(), interactive: true)
             }
 
             LazyVStack(spacing: 0) {
@@ -280,7 +321,7 @@ struct LibraryView: View {
         let tracks = downloadedTracks
 
         return VStack(alignment: .leading, spacing: 12) {
-            HStack {
+            HStack(spacing: 10) {
                 SectionTitle(title: "Downloaded")
                 Spacer()
                 if !tracks.isEmpty {
@@ -289,11 +330,10 @@ struct LibraryView: View {
                         player.play(first, queue: tracks)
                         showNowPlaying = true
                     } label: {
-                        Label("Play", systemImage: "play.fill")
-                            .font(.caption.weight(.semibold))
+                        GlassActionLabel(title: "Play")
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.92))
-                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Play downloaded songs")
 
                     Text("\(tracks.count)")
                         .font(.caption.weight(.medium))
@@ -408,41 +448,53 @@ struct LibraryView: View {
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    HStack(spacing: 16) {
+                    HStack {
                         Spacer(minLength: 0)
 
-                        Button {
-                            showDownloads = true
-                        } label: {
-                            Image(systemName: "list.bullet")
-                                .font(.body.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(MotifPressStyle(scale: 0.9))
-                        .accessibilityLabel("Open download manager")
-
-                        if !pendingDownloads.isEmpty {
+                        HStack(spacing: 2) {
                             Button {
-                                Task { await library.downloadAll(pendingDownloads) }
+                                showDownloads = true
                             } label: {
-                                Image(systemName: "arrow.down.circle")
-                                    .font(.body.weight(.semibold))
-                                    .foregroundStyle(.secondary)
+                                Image(systemName: "list.bullet")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .frame(width: 30, height: 30)
                             }
                             .buttonStyle(MotifPressStyle(scale: 0.9))
-                            .accessibilityLabel("Download all cloud tracks")
-                        }
+                            .accessibilityLabel("Open download manager")
 
-                        Button {
-                            guard let first = tracks.first else { return }
-                            player.play(first, queue: tracks)
-                            showNowPlaying = true
-                        } label: {
-                            Label("Play", systemImage: "play.fill")
-                                .font(.caption.weight(.semibold))
+                            Divider().frame(height: 16)
+
+                            if !pendingDownloads.isEmpty {
+                                Button {
+                                    Task { await library.downloadAll(pendingDownloads) }
+                                } label: {
+                                    Image(systemName: "arrow.down.circle")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .frame(width: 30, height: 30)
+                                }
+                                .buttonStyle(MotifPressStyle(scale: 0.9))
+                                .accessibilityLabel("Download all cloud tracks")
+
+                                Divider().frame(height: 16)
+                            }
+
+                            Button {
+                                guard let first = tracks.first else { return }
+                                player.play(first, queue: tracks)
+                                showNowPlaying = true
+                            } label: {
+                                Label("Play", systemImage: "play.fill")
+                                    .font(.caption.weight(.semibold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 7)
+                            }
+                            .buttonStyle(MotifPressStyle(scale: 0.92))
+                            .accessibilityLabel("Play cloud tracks")
                         }
-                        .buttonStyle(MotifPressStyle(scale: 0.92))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .nativeGlass(Capsule(), interactive: true)
                     }
                 }
 
@@ -468,10 +520,10 @@ struct LibraryView: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.caption.weight(.semibold))
-                        .frame(width: 28, height: 28)
+                        .frame(width: 30, height: 30)
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.9))
-                .glassSurface(radius: 14)
+                .nativeGlass(Circle(), interactive: true)
                 .accessibilityLabel("New playlist")
             }
 

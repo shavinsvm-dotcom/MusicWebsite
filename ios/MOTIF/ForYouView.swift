@@ -93,9 +93,9 @@ struct ForYouView: View {
 
                 Image(systemName: "play.fill")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(.primary)
                     .frame(width: 46, height: 46)
-                    .background(.white, in: Circle())
+                    .nativeGlass(Circle(), interactive: true)
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
@@ -152,8 +152,8 @@ struct ForYouView: View {
     }
 
     private func onRepeat(_ data: ForYouSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
                 SectionTitle(title: "On repeat")
                 Spacer()
                 Button {
@@ -161,11 +161,10 @@ struct ForYouView: View {
                     player.play(first, queue: data.repeatTracks)
                     showNowPlaying = true
                 } label: {
-                    Label("Play all", systemImage: "play.fill")
-                        .font(.caption.weight(.semibold))
+                    GlassActionLabel(title: "Play all")
                 }
                 .buttonStyle(MotifPressStyle(scale: 0.92))
-                .foregroundStyle(.secondary)
+                .accessibilityLabel("Play all songs on repeat")
             }
 
             LazyVStack(spacing: 0) {

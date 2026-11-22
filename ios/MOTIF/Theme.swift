@@ -1235,6 +1235,22 @@ struct SectionTitle: View {
     }
 }
 
+/// The compact glass capsule used for section-level actions such as
+/// "Play all". It matches the transport groups elsewhere in the app.
+struct GlassActionLabel: View {
+    let title: String
+    var systemImage: String = "play.fill"
+
+    var body: some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .nativeGlass(Capsule(), interactive: true)
+    }
+}
+
 struct TrackRow: View {
     let track: Track
     var queue: [Track]? = nil
