@@ -52,7 +52,8 @@ struct EqualizerView: View {
             .background(AppBackground())
             .tint(.primary)
             .navigationTitle("Equalizer")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {

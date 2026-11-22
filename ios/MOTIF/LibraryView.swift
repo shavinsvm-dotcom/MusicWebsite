@@ -7,7 +7,6 @@ struct LibraryView: View {
         case songs
         case albums
         case artists
-        case playlists
 
         var id: String { rawValue }
 
@@ -16,7 +15,6 @@ struct LibraryView: View {
             case .songs: return "Songs"
             case .albums: return "Albums"
             case .artists: return "Artists"
-            case .playlists: return "Playlists"
             }
         }
     }
@@ -47,11 +45,11 @@ struct LibraryView: View {
 
     @AppStorage("motif.library.section") private var sectionRaw = LibrarySection.songs.rawValue
     @AppStorage("motif.library.sort") private var sortRaw = SongSort.recentlyAdded.rawValue
+    @Namespace private var sectionPill
 
     @State private var showImporter = false
     @State private var showDownloads = false
     @State private var showSettings = false
-    @State private var showNewPlaylist = false
     @State private var importError: String?
 
     private var section: LibrarySection {
@@ -63,7 +61,7 @@ struct LibraryView: View {
     }
 
     private var hasContent: Bool {
-        !library.tracks.isEmpty || !library.playlists.isEmpty
+        !library.tracks.isEmpty
     }
 
     private var sortedTracks: [Track] {
@@ -110,42 +108,36 @@ struct LibraryView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                if hasContent {
-                    sectionBar
-                        .padding(.top, 2)
-                        .padding(.bottom, 8)
-                }
-
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        activityRow
-
-                        if hasContent {
-                            Group {
-                                switch section {
-                                case .songs:
-                                    songs
-                                case .albums:
-                                    albumsGrid
-                                case .artists:
-                                    artistsGrid
-                                case .playlists:
-                                    playlistsGrid
-                                }
-                            }
-                            .id(section)
-                            .transition(.opacity)
-                        } else {
-                            emptyState
-                        }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    if hasContent {
+                        sectionBar
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 6)
-                    .padding(.bottom, 120)
+
+                    activityRow
+
+                    if hasContent {
+                        Group {
+                            switch section {
+                            case .songs:
+                                songs
+                            case .albums:
+                                albumsGrid
+                            case .artists:
+                                artistsGrid
+                            }
+                        }
+                        .id(section)
+                        .transition(.opacity)
+                    } else {
+                        emptyState
+                    }
                 }
-                .scrollIndicators(.hidden)
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 120)
             }
+            .scrollIndicators(.hidden)
             .background(AppBackground())
             .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.large)
@@ -164,12 +156,6 @@ struct LibraryView: View {
                             showImporter = true
                         } label: {
                             Label("Import audio", systemImage: "square.and.arrow.down")
-                        }
-
-                        Button {
-                            showNewPlaylist = true
-                        } label: {
-                            Label("New playlist", systemImage: "text.badge.plus")
                         }
 
                         Divider()
@@ -212,9 +198,6 @@ struct LibraryView: View {
                 SettingsView()
                     .environmentObject(player)
             }
-            .sheet(isPresented: $showNewPlaylist) {
-                PlaylistEditorView()
-            }
             .alert(
                 "Couldn’t add music",
                 isPresented: Binding(
@@ -238,23 +221,14 @@ struct LibraryView: View {
     }
 
     private var sectionBar: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 24) {
-                    ForEach(LibrarySection.allCases) { option in
-                        sectionTab(option)
-                            .id(option)
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 4)
-            }
-            .onChange(of: section) { newSection in
-                withAnimation(.easeOut(duration: 0.20)) {
-                    proxy.scrollTo(newSection, anchor: .center)
-                }
+        HStack(spacing: 0) {
+            ForEach(LibrarySection.allCases) { option in
+                sectionTab(option)
             }
         }
+        .padding(4)
+        .nativeGlass(Capsule(), interactive: true)
+        .padding(.bottom, 2)
     }
 
     private func sectionTab(_ option: LibrarySection) -> some View {
@@ -263,22 +237,24 @@ struct LibraryView: View {
         return Button {
             guard !isSelected else { return }
             MotifHaptics.play(.light)
-            withAnimation(.easeOut(duration: 0.20)) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                 sectionRaw = option.rawValue
             }
         } label: {
-            VStack(spacing: 7) {
-                Text(option.title)
-                    .font(.system(size: 15, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? .primary : .secondary)
-                    .lineLimit(1)
-
-                Capsule()
-                    .fill(isSelected ? Color.primary : Color.clear)
-                    .frame(height: 2)
-            }
-            .fixedSize()
-            .contentShape(Rectangle())
+            Text(option.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(isSelected ? Color(uiColor: .systemBackground) : Color.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .background {
+                    if isSelected {
+                        Capsule()
+                            .fill(Color.primary)
+                            .matchedGeometryEffect(id: "library-section-pill", in: sectionPill)
+                    }
+                }
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -471,61 +447,6 @@ struct LibraryView: View {
                             LibraryArtistGridCard(artist: artist)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.95, opacity: 0.92))
-                    }
-                }
-                .padding(.horizontal, 2)
-            }
-        }
-    }
-
-    private var playlistsGrid: some View {
-        Group {
-            if library.playlists.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Image(systemName: "music.note.list")
-                        .font(.system(size: 26, weight: .light))
-                        .foregroundStyle(.tertiary)
-
-                    Text("No playlists yet")
-                        .font(.subheadline.weight(.semibold))
-
-                    Text("Create a playlist and it will live here, ready to play.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    GlassActionButton(
-                        title: "New playlist",
-                        systemImage: "plus",
-                        prominent: true
-                    ) {
-                        showNewPlaylist = true
-                    }
-                    .padding(.top, 2)
-                }
-                .padding(.vertical, 12)
-            } else {
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: 14),
-                        GridItem(.flexible(), spacing: 14)
-                    ],
-                    alignment: .leading,
-                    spacing: 20
-                ) {
-                    ForEach(library.playlists) { playlist in
-                        NavigationLink {
-                            PlaylistDetailView(
-                                playlistID: playlist.id,
-                                showNowPlaying: $showNowPlaying
-                            )
-                        } label: {
-                            PlaylistTile(
-                                playlist: playlist,
-                                tracks: library.tracks(in: playlist)
-                            )
-                        }
-                        .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
                     }
                 }
                 .padding(.horizontal, 2)

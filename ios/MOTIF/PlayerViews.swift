@@ -20,10 +20,10 @@ struct MiniPlayer: View {
                     } label: {
                         HStack(spacing: 9) {
                             ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                                .frame(width: 36, height: 36)
-                                .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+                                .frame(width: 34, height: 34)
+                                .clipShape(RoundedRectangle(cornerRadius: 10.5, style: .continuous))
                                 .overlay {
-                                    ArtworkProgressRing()
+                                    ArtworkProgressRing(size: 36, cornerRadius: 11.5)
                                 }
 
                             VStack(alignment: .leading, spacing: 1) {
@@ -52,8 +52,8 @@ struct MiniPlayer: View {
                                 }
                             } label: {
                                 Image(systemName: "backward.fill")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .frame(width: 32, height: 32)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .frame(width: 30, height: 30)
                                     .contentShape(Circle())
                                     .playerGlass(Circle())
                             }
@@ -66,8 +66,8 @@ struct MiniPlayer: View {
                                 }
                             } label: {
                                 Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .frame(width: 36, height: 36)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .frame(width: 34, height: 34)
                                     .contentShape(Circle())
                                     .motifReplace()
                                     .playerGlass(Circle())
@@ -81,8 +81,8 @@ struct MiniPlayer: View {
                                 }
                             } label: {
                                 Image(systemName: "forward.fill")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .frame(width: 32, height: 32)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .frame(width: 30, height: 30)
                                     .contentShape(Circle())
                                     .playerGlass(Circle())
                             }
@@ -93,7 +93,7 @@ struct MiniPlayer: View {
                 }
                 .padding(.leading, 8)
                 .padding(.trailing, 8)
-                .frame(height: 50)
+                .frame(height: 46)
             }
             .background(miniPlayerSurface)
             .contentShape(Capsule())
@@ -105,7 +105,7 @@ struct MiniPlayer: View {
                 )
             )
             .padding(.horizontal, 20)
-            .padding(.bottom, 8)
+            .padding(.bottom, 6)
             .transition(
                 .move(edge: .bottom)
                     .combined(with: .opacity)
@@ -975,7 +975,8 @@ struct UpNextView: View {
                 }
             }
             .navigationTitle("Up Next")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     EditButton()

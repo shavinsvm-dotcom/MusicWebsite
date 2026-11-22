@@ -266,7 +266,8 @@ struct LyricsView: View {
                 }
             }
             .navigationTitle("Lyrics")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {

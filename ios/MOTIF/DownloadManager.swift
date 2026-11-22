@@ -60,7 +60,8 @@ struct DownloadManagerView: View {
             }
             .background(AppBackground())
             .navigationTitle("Downloads")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     if library.downloadJobs.contains(where: { $0.state == .completed || $0.state == .cancelled }) {

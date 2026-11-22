@@ -487,9 +487,9 @@ struct PlaylistDetailView: View {
             DetailBackdrop(artworkURL: playlistArtworkURL)
         }
         .navigationTitle(playlist?.name ?? "Playlist")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
+        .nativeScrollHeader()
         .toolbar(.visible, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
@@ -812,7 +812,8 @@ struct PlaylistTracksEditor: View {
             }
             .environment(\.editMode, .constant(.active))
             .navigationTitle("Edit Tracks")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
@@ -914,7 +915,8 @@ struct PlaylistEditorView: View {
                 }
             }
             .navigationTitle(playlist == nil ? "New Playlist" : "Edit Playlist")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }

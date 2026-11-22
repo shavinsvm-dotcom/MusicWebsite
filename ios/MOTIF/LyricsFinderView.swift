@@ -83,7 +83,8 @@ struct LyricsFinderView: View {
             }
             .background(finderBackdrop)
             .navigationTitle("Find Lyrics")
-            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
@@ -336,7 +337,8 @@ private struct LyricsMatchView: View {
         }
         .background(AppBackground())
         .navigationTitle("Lyrics Match")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
+        .nativeScrollHeader()
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(saved ? "Saved" : "Use Lyrics") {

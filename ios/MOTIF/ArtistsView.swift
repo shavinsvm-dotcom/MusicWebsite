@@ -132,9 +132,9 @@ struct LibraryArtistDetailView: View {
             .background(Color.clear)
         }
         .navigationTitle(artistName)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
+        .nativeScrollHeader()
         .toolbar(.visible, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var header: some View {
@@ -148,24 +148,11 @@ struct LibraryArtistDetailView: View {
                 }
                 .shadow(color: .black.opacity(0.28), radius: 28, y: 14)
 
-            VStack(spacing: 6) {
-                Text("ARTIST")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.4)
-                    .foregroundStyle(.secondary)
-
-                Text(artistName)
-                    .font(.system(size: 34, weight: .bold))
-                    .tracking(-1.0)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-
-                Text(metadataText)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 16)
+            Text(metadataText)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
 
             if !tracks.isEmpty {
                 HStack(spacing: 10) {
@@ -447,9 +434,9 @@ struct LibraryAlbumDetailView: View {
             .background(Color.clear)
         }
         .navigationTitle(album.title)
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
+        .nativeScrollHeader()
         .toolbar(.visible, for: .navigationBar)
-        .toolbarBackground(.hidden, for: .navigationBar)
     }
 
     private var header: some View {
@@ -466,23 +453,11 @@ struct LibraryAlbumDetailView: View {
                 }
                 .shadow(color: .black.opacity(0.24), radius: 24, y: 12)
 
-            VStack(spacing: 6) {
-                Text("ALBUM")
-                    .font(.system(size: 10, weight: .semibold))
-                    .tracking(1.4)
-                    .foregroundStyle(.secondary)
-
-                Text(album.title)
-                    .font(.system(size: 31, weight: .bold))
-                    .tracking(-0.9)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-
-                Text(albumSubtitle)
-                    .font(.system(size: 12, weight: .regular))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 16)
+            Text(albumSubtitle)
+                .font(.system(size: 12, weight: .regular))
+                .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
 
             if !tracks.isEmpty {
                 GlassActionButton(
