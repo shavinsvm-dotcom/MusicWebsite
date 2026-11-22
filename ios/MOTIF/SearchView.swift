@@ -27,9 +27,6 @@ struct SearchView: View {
     @Binding var showNowPlaying: Bool
 
     @State private var query = ""
-    @State private var results: [Track] = []
-    @State private var isLoading = false
-    @State private var errorMessage: String?
     @State private var scope: SearchScope = .all
     @State private var recentSearches: [String] = UserDefaults.standard.stringArray(forKey: "motif.recentSearches") ?? []
 
@@ -139,35 +136,7 @@ struct SearchView: View {
                         .id(scope)
                         .transition(.opacity)
 
-                        if isLoading {
-                            HStack(spacing: 10) {
-                                ProgressView()
-                                Text("Searching the catalog…")
-                                    .font(.footnote)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.vertical, 6)
-                        }
-
-                        if let errorMessage {
-                            Text(errorMessage)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .padding(.vertical, 4)
-                        }
-
-                        if (scope == .all || scope == .songs), !results.isEmpty {
-                            resultSection(
-                                title: "Catalog",
-                                subtitle: "Apple Music previews · 30 seconds",
-                                tracks: results
-                            )
-                        }
-
-                        if !isLoading,
-                           !hasAnyLocalMatch,
-                           results.isEmpty,
-                           errorMessage == nil {
+                        if !hasAnyLocalMatch {
                             emptyResults
                         }
                     }
@@ -196,9 +165,6 @@ struct SearchView: View {
             }
             .onSubmit(of: .search) {
                 remember(trimmedQuery)
-            }
-            .task(id: query) {
-                await runSearch()
             }
         }
     }
@@ -376,7 +342,7 @@ struct SearchView: View {
                 .font(.system(size: 24, weight: .semibold))
                 .tracking(-0.5)
 
-            Text("Search your library, or find something new in the iTunes catalog.")
+            Text("Search your songs, albums, artists, and playlists.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -415,31 +381,4 @@ struct SearchView: View {
         UserDefaults.standard.set(recentSearches, forKey: "motif.recentSearches")
     }
 
-    @MainActor
-    private func runSearch() async {
-        let term = trimmedQuery
-        guard term.count >= 2 else {
-            results = []
-            errorMessage = nil
-            isLoading = false
-            return
-        }
-
-        isLoading = true
-        errorMessage = nil
-
-        try? await Task.sleep(nanoseconds: 350_000_000)
-        guard !Task.isCancelled else { return }
-
-        do {
-            results = try await MusicAPI.search(term)
-        } catch {
-            if !Task.isCancelled {
-                results = []
-                errorMessage = error.localizedDescription
-            }
-        }
-
-        isLoading = false
-    }
 }

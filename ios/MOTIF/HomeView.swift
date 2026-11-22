@@ -336,7 +336,7 @@ struct HomeView: View {
                 .font(.system(size: 23, weight: .semibold))
                 .tracking(-0.4)
 
-            Text("Import audio from Files, or search the catalog for a preview.")
+            Text("Import audio from Files to start listening.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

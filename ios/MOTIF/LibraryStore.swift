@@ -1144,6 +1144,14 @@ final class LibraryStore: ObservableObject {
         tracks = snapshot.tracks.compactMap { stored in
             var track = stored
 
+            // The iTunes preview catalog is gone. Drop any preview rows that
+            // were saved by older builds while leaving local and cloud tracks
+            // untouched.
+            if track.source == .preview {
+                migrated = true
+                return nil
+            }
+
             // iOS can change the app container path between installs. An
             // absolute file URL saved in library.json then points at the old
             // container even though the file moved with the app. Recover it

@@ -9,6 +9,8 @@ enum LyricsSource: String, Codable, Hashable {
 struct Track: Identifiable, Codable, Hashable {
     enum Source: String, Codable {
         case local
+        /// Legacy iTunes preview row. New previews are no longer created, and
+        /// saved rows are dropped when the library loads.
         case preview
         case cloud
     }
@@ -34,7 +36,6 @@ struct Track: Identifiable, Codable, Hashable {
     /// "tags", "filename", or "ai". Optional so older library.json files decode.
     var metadataSource: String? = nil
 
-    var isPreview: Bool { source == .preview }
     var isCloud: Bool { source == .cloud }
     var isOffline: Bool { mediaURL.isFileURL }
     var isUploadedToCloud: Bool { source == .local && remoteID != nil }
