@@ -11,7 +11,9 @@ permissions:
   contents: write
 
 concurrency:
-  group: ios-ipa-${{ github.ref }}
+  # Only supersede another attempt for the same commit. A newer commit must
+  # not cancel the build that verifies the previous one.
+  group: ios-ipa-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
