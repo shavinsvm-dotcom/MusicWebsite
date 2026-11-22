@@ -262,7 +262,7 @@ struct SearchView: View {
         } else {
             label
                 .foregroundStyle(.primary)
-                .nativeGlass(Capsule(), interactive: true)
+                .background(Color.primary.opacity(0.06), in: Capsule())
         }
     }
 

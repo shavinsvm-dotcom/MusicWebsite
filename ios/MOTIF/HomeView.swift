@@ -13,23 +13,29 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 28) {
+                LazyVStack(alignment: .leading, spacing: 30) {
+                    header
+
                     if let current = player.current {
                         listeningNow(current)
                     }
 
-                    if let featured = library.tracks.first {
+                    if let featured = library.tracks.first, player.current == nil {
                         featuredCard(featured)
-                    } else {
+                    }
+
+                    if library.tracks.isEmpty {
                         emptyCard
-                    }
+                    } else {
+                        if !library.recentTracks.isEmpty {
+                            recentlyPlayed
+                        }
 
-                    if !library.tracks.isEmpty {
                         recentlyAdded
-                    }
 
-                    if !library.favorites.isEmpty {
-                        favorites
+                        if !library.favorites.isEmpty {
+                            favorites
+                        }
                     }
                 }
                 .screenEntrance()
@@ -39,18 +45,7 @@ struct HomeView: View {
             }
             .scrollIndicators(.hidden)
             .background(AppBackground())
-            .navigationTitle("Home")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showImporter = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .accessibilityLabel("Import music")
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .fileImporter(
                 isPresented: $showImporter,
                 allowedContentTypes: [.audio],
@@ -77,53 +72,101 @@ struct HomeView: View {
         }
     }
 
+    private var greeting: String {
+        switch Calendar.current.component(.hour, from: Date()) {
+        case 5..<12: return "Good morning."
+        case 12..<17: return "Good afternoon."
+        case 17..<22: return "Good evening."
+        default: return "Good night."
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(greeting)
+                    .font(.system(size: 34, weight: .bold))
+                    .tracking(-1.1)
+                    .foregroundStyle(.primary)
+                    .minimumScaleFactor(0.82)
+                    .lineLimit(1)
+
+                Text("Your music, all in one place.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                showImporter = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Color.primary.opacity(0.06), in: Circle())
+                    .contentShape(Circle())
+            }
+            .buttonStyle(MotifPressStyle(scale: 0.92))
+            .accessibilityLabel("Import music")
+            .padding(.top, 4)
+        }
+    }
+
     private func listeningNow(_ track: Track) -> some View {
         Button {
             showNowPlaying = true
         } label: {
-            HStack(spacing: 12) {
-                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                    .frame(width: 44, height: 44)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay {
-                        ArtworkProgressRing(
-                            size: 46,
-                            cornerRadius: 14,
-                            tint: Color.primary
-                        )
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                        .frame(width: 48, height: 48)
+                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+                        .overlay {
+                            ArtworkProgressRing(
+                                size: 52,
+                                cornerRadius: 15.5,
+                                tint: Color.primary
+                            )
+                        }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            PlayingWaveform(isPlaying: player.isPlaying)
+                                .frame(width: 12, height: 9)
+
+                            Text(player.isPlaying ? "LISTENING NOW" : "PAUSED")
+                                .font(.system(size: 9, weight: .bold))
+                                .tracking(1.6)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(track.title)
+                            .font(.system(size: 16, weight: .semibold))
+                            .tracking(-0.2)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+
+                        Text(track.artist.isEmpty ? "Unknown artist" : track.artist)
+                            .font(.system(size: 12, weight: .regular))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(player.isPlaying ? "LISTENING NOW" : "PAUSED")
-                        .font(.system(size: 9, weight: .bold))
-                        .tracking(1.6)
-                        .foregroundStyle(.secondary)
-
-                    Text(track.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Text(track.artist.isEmpty ? "Unknown artist" : track.artist)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-
-                    PlaybackProgressLine()
-                        .padding(.top, 1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+
+                PlaybackProgressLine(tint: .primary, height: 1.5)
             }
-            .padding(.leading, 10)
-            .padding(.trailing, 14)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .nativeGlass(Capsule(), interactive: true)
+            .padding(.top, 2)
+            .padding(.bottom, 4)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(MotifPressStyle(scale: 0.985, opacity: 0.94))
+        .buttonStyle(MotifPressStyle(scale: 0.99, opacity: 0.94))
         .accessibilityLabel(
             "\(player.isPlaying ? "Listening now" : "Paused"): \(track.title) by \(track.artist.isEmpty ? "Unknown artist" : track.artist). Open player"
         )
+        .accessibilityHint("Opens the player")
     }
 
     private func featuredCard(_ track: Track) -> some View {
@@ -144,12 +187,18 @@ struct HomeView: View {
                     endPoint: .bottom
                 )
 
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("START HERE")
+                        .font(.system(size: 9, weight: .bold))
+                        .tracking(1.7)
+                        .foregroundStyle(.white.opacity(0.64))
+
                     Text(track.title)
                         .font(.system(size: 26, weight: .bold))
                         .tracking(-0.6)
                         .foregroundStyle(.white)
                         .lineLimit(2)
+
                     Text(track.artist)
                         .font(.subheadline)
                         .foregroundStyle(.white.opacity(0.72))
@@ -159,17 +208,14 @@ struct HomeView: View {
 
                 Image(systemName: "play.fill")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.black)
                     .frame(width: 46, height: 46)
-                    .nativeGlass(Circle(), interactive: true)
+                    .background(Color.white.opacity(0.94), in: Circle())
+                    .shadow(color: .black.opacity(0.18), radius: 9, y: 4)
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.13), lineWidth: 1)
-            }
+            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(MotifPressStyle(scale: 0.985))
     }
@@ -203,6 +249,27 @@ struct HomeView: View {
         .glassSurface(radius: 26)
     }
 
+    private var recentlyPlayed: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionTitle(title: "Recently played")
+
+            CarouselScroll {
+                LazyHStack(spacing: 14) {
+                    ForEach(library.recentTracks.prefix(10)) { track in
+                        Button {
+                            player.play(track, queue: library.recentTracks)
+                        } label: {
+                            trackTile(track)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.96))
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.bottom, 4)
+            }
+        }
+    }
+
     private var recentlyAdded: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionHeader(title: "Recently added") {
@@ -222,33 +289,35 @@ struct HomeView: View {
                         Button {
                             player.play(track, queue: library.tracks)
                         } label: {
-                            VStack(alignment: .leading, spacing: 9) {
-                                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                                    .frame(width: 146, height: 146)
-                                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                                    .overlay {
-                                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                            .strokeBorder(Color.white.opacity(0.16), lineWidth: 1)
-                                    }
-
-                                Text(track.title)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                Text(track.artist)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            .frame(width: 146, alignment: .leading)
+                            trackTile(track)
                         }
-                        .buttonStyle(MotifPressStyle(scale: 0.94))
+                        .buttonStyle(MotifPressStyle(scale: 0.96))
                     }
                 }
                 .padding(.horizontal, 2)
                 .padding(.bottom, 4)
             }
         }
+    }
+
+    private func trackTile(_ track: Track) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                .frame(width: 132, height: 132)
+                .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+
+            Text(track.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Text(track.artist.isEmpty ? "Unknown artist" : track.artist)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(width: 132, alignment: .leading)
+        .contentShape(Rectangle())
     }
 
     private var favorites: some View {

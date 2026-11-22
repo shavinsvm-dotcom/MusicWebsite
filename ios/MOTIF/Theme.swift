@@ -12,128 +12,47 @@ struct AppBackground: View {
     }
 }
 
-/// Warm paper in light, a graphite gradient in dark, a fine static grain,
-/// and a soft bottom scrim. No cover tint and no color wash.
+/// A quiet warm canvas in light, graphite in dark. No visible texture: the
+/// artwork should be the only thing in the app with detail.
 private struct PaperBackground: View {
     @Environment(\.colorScheme) private var colorScheme
-
-    private var paper: Color {
-        Color(red: 0.9569, green: 0.9451, blue: 0.9098) // #F4F1E8
-    }
-
-    private var scrim: Color {
-        colorScheme == .dark
-            ? Color.black.opacity(0.55)
-            : Color.black.opacity(0.045)
-    }
-
-    /// A top-lit graphite field with a soft vignette. It keeps artwork the
-    /// only saturated thing on screen while giving dark mode some depth.
-    private var darkBase: some View {
-        ZStack {
-            Color(red: 0.031, green: 0.031, blue: 0.039) // #08080A
-
-            LinearGradient(
-                stops: [
-                    .init(color: Color(red: 0.102, green: 0.102, blue: 0.118), location: 0),
-                    .init(color: Color(red: 0.055, green: 0.055, blue: 0.067), location: 0.48),
-                    .init(color: .clear, location: 0.85)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            RadialGradient(
-                colors: [.clear, Color.black.opacity(0.24)],
-                center: .center,
-                startRadius: 210,
-                endRadius: 620
-            )
-        }
-    }
 
     var body: some View {
         ZStack {
             if colorScheme == .dark {
-                darkBase
+                Color(red: 0.035, green: 0.035, blue: 0.043)
+
+                LinearGradient(
+                    stops: [
+                        .init(color: Color(red: 0.105, green: 0.105, blue: 0.122), location: 0),
+                        .init(color: Color(red: 0.045, green: 0.045, blue: 0.055), location: 0.52),
+                        .init(color: .clear, location: 0.90)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             } else {
-                paper
+                Color(red: 0.972, green: 0.965, blue: 0.945)
+
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.white.opacity(0.42), location: 0),
+                        .init(color: .clear, location: 0.45)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             }
-
-            // A stretched low-resolution field makes the paper mottle; the
-            // tiled texture adds the fine grain on top of it.
-            Image(uiImage: PaperGrain.mottle(for: colorScheme))
-                .resizable(resizingMode: .stretch)
-                .interpolation(.high)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .opacity(colorScheme == .dark ? 0.040 : 0.028)
-
-            Image(uiImage: PaperGrain.texture(for: colorScheme))
-                .resizable(resizingMode: .tile)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .opacity(colorScheme == .dark ? 0.055 : 0.035)
 
             LinearGradient(
                 stops: [
-                    .init(color: .clear, location: 0.76),
-                    .init(color: scrim, location: 1)
+                    .init(color: .clear, location: 0.82),
+                    .init(color: .black.opacity(colorScheme == .dark ? 0.26 : 0.025), location: 1)
                 ],
                 startPoint: .top,
                 endPoint: .bottom
             )
         }
-    }
-}
-
-/// One screen-scale tile of transparent noise, generated once per appearance.
-/// Tiling a real pixel-scale texture keeps the grain fine on 2x and 3x screens
-/// without shipping an asset.
-private enum PaperGrain {
-    static func texture(for scheme: ColorScheme) -> UIImage {
-        scheme == .dark ? whiteTexture : blackTexture
-    }
-
-    static func mottle(for scheme: ColorScheme) -> UIImage {
-        scheme == .dark ? whiteMottle : blackMottle
-    }
-
-    private static let whiteTexture = make(white: true, side: 160, scale: UIScreen.main.scale)
-    private static let blackTexture = make(white: false, side: 160, scale: UIScreen.main.scale)
-    private static let whiteMottle = make(white: true, side: 32, scale: 1)
-    private static let blackMottle = make(white: false, side: 32, scale: 1)
-
-    private static func make(white: Bool, side: Int, scale: CGFloat) -> UIImage {
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
-        var generator = SystemRandomNumberGenerator()
-
-        for index in stride(from: 0, to: pixels.count, by: 4) {
-            let alpha = UInt8.random(in: 0...255, using: &generator)
-            pixels[index] = white ? alpha : 0
-            pixels[index + 1] = white ? alpha : 0
-            pixels[index + 2] = white ? alpha : 0
-            pixels[index + 3] = alpha
-        }
-
-        let data = Data(pixels)
-        guard let provider = CGDataProvider(data: data as CFData),
-              let image = CGImage(
-                width: side,
-                height: side,
-                bitsPerComponent: 8,
-                bitsPerPixel: 32,
-                bytesPerRow: side * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-                provider: provider,
-                decode: nil,
-                shouldInterpolate: false,
-                intent: .defaultIntent
-              )
-        else {
-            return UIImage()
-        }
-
-        return UIImage(cgImage: image, scale: scale, orientation: .up)
     }
 }
 
@@ -1281,8 +1200,8 @@ struct SectionHeader<Trailing: View>: View {
 }
 
 
-/// A compact glass capsule for section actions such as "Play" and
-/// "Play all". Shared so call sites stay a single view.
+/// Section actions are typographic, not glass. Glass belongs to floating
+/// chrome; a page full of glass capsules reads as noise rather than depth.
 struct GlassActionButton: View {
     let title: String
     var systemImage: String = "play.fill"
@@ -1292,15 +1211,28 @@ struct GlassActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(prominent ? .subheadline.weight(.semibold) : .caption.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .padding(.horizontal, prominent ? 18 : 11)
-                .padding(.vertical, prominent ? 12 : 7)
-                .nativeGlass(Capsule(), interactive: true)
+            Group {
+                if prominent {
+                    Label(title, systemImage: systemImage)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color(uiColor: .systemBackground))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 11)
+                        .background(Color.primary, in: Capsule())
+                } else {
+                    HStack(spacing: 5) {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(title)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(.primary)
+                    .padding(.vertical, 4)
+                }
+            }
+            .lineLimit(1)
         }
-        .buttonStyle(MotifPressStyle(scale: 0.92))
+        .buttonStyle(MotifPressStyle(scale: 0.96, opacity: 0.90))
         .accessibilityLabel(accessibilityLabel ?? title)
     }
 }
@@ -1317,20 +1249,21 @@ struct GlassIconButton: View {
                 .font(.system(size: size >= 40 ? 15 : 13, weight: .semibold))
                 .foregroundStyle(.primary)
                 .frame(width: size, height: size)
-                .nativeGlass(Circle(), interactive: true)
+                .background(Color.primary.opacity(0.06), in: Circle())
+                .contentShape(Circle())
         }
-        .buttonStyle(MotifPressStyle(scale: 0.9))
+        .buttonStyle(MotifPressStyle(scale: 0.92))
         .accessibilityLabel(label)
     }
 }
 
 extension View {
-    /// The shared chrome for a row of transport buttons in one glass pill.
+    /// A quiet grouping for a short row of transport actions.
     func glassTransport() -> some View {
         foregroundStyle(.primary)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 2)
-            .nativeGlass(Capsule(), interactive: true)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Color.primary.opacity(0.05), in: Capsule())
     }
 }
 
@@ -1396,47 +1329,6 @@ struct PlaybackProgressLine: View {
         .animation(.linear(duration: 0.12), value: fraction)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
-    }
-}
-
-/// Three small monochrome bars that animate only while audio is playing.
-struct NowPlayingBars: View {
-    var isPlaying: Bool
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private let pausedHeights: [CGFloat] = [4, 9, 6]
-
-    var body: some View {
-        TimelineView(
-            .animation(
-                minimumInterval: 1.0 / 12.0,
-                paused: !isPlaying || reduceMotion
-            )
-        ) { context in
-            let time = context.date.timeIntervalSinceReferenceDate
-
-            HStack(alignment: .bottom, spacing: 2) {
-                ForEach(0..<3, id: \.self) { index in
-                    Capsule()
-                        .fill(Color.primary.opacity(isPlaying ? 0.9 : 0.42))
-                        .frame(width: 2, height: barHeight(index: index, time: time))
-                }
-            }
-            .frame(width: 10, height: 14, alignment: .bottom)
-        }
-        .accessibilityLabel(isPlaying ? "Playing" : "Paused")
-    }
-
-    private func barHeight(index: Int, time: TimeInterval) -> CGFloat {
-        guard isPlaying, !reduceMotion else {
-            return pausedHeights[index]
-        }
-
-        let speed: Double = 2.4 + Double(index) * 0.55
-        let phase: Double = time * speed + Double(index) * 1.3
-        let wave: Double = (sin(phase) + 1) * 0.5
-        return 4 + CGFloat(wave) * 9
     }
 }
 
@@ -1526,22 +1418,17 @@ struct TrackRow: View {
                 ProgressView()
                     .controlSize(.small)
                     .tint(.secondary)
-            } else if isUploaded {
-                Image(systemName: "cloud.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
-            ZStack {
+            HStack(spacing: 6) {
+                if isCurrent {
+                    PlayingWaveform(isPlaying: player.isPlaying)
+                        .frame(width: 14, height: 12)
+                }
+
                 Text(track.durationText)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.tertiary)
-                    .opacity(isCurrent ? 0 : 1)
-                    .accessibilityHidden(isCurrent)
-
-                if isCurrent {
-                    NowPlayingBars(isPlaying: player.isPlaying)
-                }
             }
 
             if track.isCloud {

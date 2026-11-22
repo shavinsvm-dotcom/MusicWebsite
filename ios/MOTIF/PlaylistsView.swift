@@ -820,12 +820,10 @@ private struct PlaylistTrackRow: View {
                             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                         if isCurrent {
-                            PlayingWaveform(color: .white)
-                                .frame(width: 22, height: 22)
-                                .background(.black.opacity(0.36), in: Circle())
+                            PlayingWaveform(isPlaying: player.isPlaying, color: .white)
+                                .frame(width: 20, height: 20)
+                                .background(.black.opacity(0.52), in: Circle())
                                 .padding(3)
-                                .nativeGlass(Circle())
-                                .padding(2)
                         }
                     }
                     .overlay {
