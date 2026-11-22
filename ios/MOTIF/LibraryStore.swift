@@ -958,14 +958,26 @@ final class LibraryStore: ObservableObject {
     }
 
     func add(_ track: Track, to playlistID: UUID) {
-        if !contains(track) { add([track]) }
-        guard let existing = canonicalTrack(for: track),
-              let index = playlists.firstIndex(where: { $0.id == playlistID }) else {
-            return
+        add([track], to: playlistID)
+    }
+
+    func add(_ incoming: [Track], to playlistID: UUID) {
+        guard let index = playlists.firstIndex(where: { $0.id == playlistID }) else { return }
+
+        let missing = incoming.filter { !contains($0) }
+        if !missing.isEmpty { add(missing) }
+
+        var known = Set(playlists[index].trackIDs)
+        var changed = false
+
+        for track in incoming {
+            guard let existing = canonicalTrack(for: track),
+                  known.insert(existing.id).inserted else { continue }
+            playlists[index].trackIDs.append(existing.id)
+            changed = true
         }
-        guard !playlists[index].trackIDs.contains(existing.id) else { return }
-        playlists[index].trackIDs.append(existing.id)
-        save()
+
+        if changed { save() }
     }
 
     func remove(_ track: Track, from playlistID: UUID) {

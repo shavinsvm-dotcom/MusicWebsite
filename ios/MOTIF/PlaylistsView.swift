@@ -305,6 +305,7 @@ struct PlaylistDetailView: View {
 
     @State private var showEditDetails = false
     @State private var showEditTracks = false
+    @State private var showAddSongs = false
 
     private var playlist: Playlist? {
         library.playlists.first(where: { $0.id == playlistID })
@@ -407,6 +408,18 @@ struct PlaylistDetailView: View {
                                 .buttonStyle(MotifPressStyle(scale: 0.90, opacity: 0.9))
                                 .accessibilityLabel("Shuffle playlist")
 
+                                Button {
+                                    showAddSongs = true
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 13, weight: .semibold))
+                                        .foregroundStyle(.primary)
+                                        .frame(width: 36, height: 36)
+                                        .nativeGlass(Circle(), interactive: true)
+                                }
+                                .buttonStyle(MotifPressStyle(scale: 0.90, opacity: 0.9))
+                                .accessibilityLabel("Add songs")
+
                                 if tracks.contains(where: { $0.isCloud }) {
                                     Button {
                                         Task { await library.downloadAll(downloadable) }
@@ -444,12 +457,33 @@ struct PlaylistDetailView: View {
 
             if tracks.isEmpty {
                 Section {
-                    Text("No songs yet. Add songs from any song’s menu and they will appear here.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 6)
-                        .listRowBackground(Color.clear)
+                    VStack(spacing: 12) {
+                        Image(systemName: "music.note.list")
+                            .font(.system(size: 26, weight: .light))
+                            .foregroundStyle(.tertiary)
+
+                        Text("No songs yet")
+                            .font(.headline)
+
+                        Text("Search your library and add songs to this playlist.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        GlassActionButton(
+                            title: "Add Songs",
+                            systemImage: "plus",
+                            prominent: true
+                        ) {
+                            showAddSongs = true
+                        }
+                        .padding(.top, 2)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             } else {
                 Section {
@@ -506,6 +540,12 @@ struct PlaylistDetailView: View {
 
                         Section {
                             Button {
+                                showAddSongs = true
+                            } label: {
+                                Label("Add songs", systemImage: "plus")
+                            }
+
+                            Button {
                                 showEditDetails = true
                             } label: {
                                 Label("Edit details", systemImage: "pencil")
@@ -553,6 +593,10 @@ struct PlaylistDetailView: View {
         .sheet(isPresented: $showEditTracks) {
             PlaylistTracksEditor(playlistID: playlistID)
         }
+        .sheet(isPresented: $showAddSongs) {
+            AddSongsView(playlistID: playlistID)
+                .environmentObject(library)
+        }
     }
 
     private var subtitle: String {
@@ -589,6 +633,225 @@ struct PlaylistDetailView: View {
         }
         player.play(first, queue: tracks)
         showNowPlaying = true
+    }
+}
+
+private struct AddSongsView: View {
+    @EnvironmentObject private var library: LibraryStore
+    @Environment(\.dismiss) private var dismiss
+
+    let playlistID: UUID
+
+    @State private var query = ""
+    @State private var selectedIDs: Set<UUID> = []
+
+    private var trimmedQuery: String {
+        query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var playlist: Playlist? {
+        library.playlists.first(where: { $0.id == playlistID })
+    }
+
+    private var existingIDs: Set<UUID> {
+        Set(playlist?.trackIDs ?? [])
+    }
+
+    private var availableTracks: [Track] {
+        library.tracks.filter { !existingIDs.contains($0.id) }
+    }
+
+    private var matchingTracks: [Track] {
+        guard !trimmedQuery.isEmpty else { return availableTracks }
+        return availableTracks
+            .filter {
+                LibrarySearch.matches(
+                    trimmedQuery,
+                    in: [$0.title, $0.artist, $0.album]
+                )
+            }
+            .sorted { lhs, rhs in
+                let leftRank = LibrarySearch.rank(title: lhs.title, query: trimmedQuery)
+                let rightRank = LibrarySearch.rank(title: rhs.title, query: trimmedQuery)
+                if leftRank != rightRank { return leftRank < rightRank }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+            }
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if matchingTracks.isEmpty {
+                    emptyState
+                } else {
+                    Section {
+                        ForEach(matchingTracks) { track in
+                            Button {
+                                toggle(track)
+                            } label: {
+                                AddSongRow(
+                                    track: track,
+                                    isSelected: selectedIDs.contains(track.id)
+                                )
+                            }
+                            .buttonStyle(.plain)
+                            .contentShape(Rectangle())
+                            .listRowBackground(
+                                selectedIDs.contains(track.id)
+                                    ? Color.primary.opacity(0.06)
+                                    : Color.clear
+                            )
+                            .accessibilityLabel("\(track.title), \(track.artist)")
+                            .accessibilityValue(
+                                Text(selectedIDs.contains(track.id) ? "Selected" : "Not selected")
+                            )
+                            .accessibilityHint(
+                                selectedIDs.contains(track.id)
+                                    ? "Removes from selection"
+                                    : "Adds to selection"
+                            )
+                        }
+                    } header: {
+                        Text(trimmedQuery.isEmpty ? "Songs" : "Results")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(nil)
+                            .padding(.leading, 4)
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(AppBackground())
+            .navigationTitle("Add Songs")
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
+            .searchable(
+                text: $query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: "Search songs, artists, albums"
+            )
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        addSelected()
+                    } label: {
+                        Text(addTitle)
+                    }
+                    .fontWeight(.semibold)
+                    .disabled(selectedIDs.isEmpty)
+                }
+            }
+        }
+    }
+
+    private var addTitle: String {
+        selectedIDs.isEmpty ? "Add" : "Add \(selectedIDs.count)"
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Image(systemName: emptySymbol)
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(.tertiary)
+
+            Text(emptyTitle)
+                .font(.headline)
+
+            Text(emptyMessage)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 40)
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+
+    private var emptySymbol: String {
+        if library.tracks.isEmpty { return "music.note" }
+        if availableTracks.isEmpty { return "checkmark.circle" }
+        return "magnifyingglass"
+    }
+
+    private var emptyTitle: String {
+        if library.tracks.isEmpty { return "Your library is empty" }
+        if availableTracks.isEmpty { return "Everything is already here" }
+        return "No songs match"
+    }
+
+    private var emptyMessage: String {
+        if library.tracks.isEmpty {
+            return "Import songs first, then come back to build this playlist."
+        }
+        if availableTracks.isEmpty {
+            return "Every song in your library is already in this playlist."
+        }
+        return "Try a shorter title, artist, or album name."
+    }
+
+    private func toggle(_ track: Track) {
+        if selectedIDs.contains(track.id) {
+            selectedIDs.remove(track.id)
+        } else {
+            selectedIDs.insert(track.id)
+        }
+        MotifHaptics.play(.selection)
+    }
+
+    private func addSelected() {
+        let chosen = library.tracks.filter { selectedIDs.contains($0.id) }
+        guard !chosen.isEmpty else { return }
+        library.add(chosen, to: playlistID)
+        MotifHaptics.play(.success)
+        dismiss()
+    }
+}
+
+private struct AddSongRow: View {
+    let track: Track
+    let isSelected: Bool
+
+    private var subtitle: String {
+        let artist = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+        let album = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+        if artist.isEmpty { return album.isEmpty ? "Unknown artist" : album }
+        if album.isEmpty { return artist }
+        return "\(artist) · \(album)"
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 20, weight: .regular))
+                .foregroundStyle(isSelected ? Color.primary : Color.secondary.opacity(0.55))
+                .accessibilityHidden(true)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
     }
 }
 

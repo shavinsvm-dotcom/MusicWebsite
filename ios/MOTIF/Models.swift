@@ -144,3 +144,37 @@ struct LibrarySnapshot: Codable {
         playCounts = try container.decodeIfPresent([UUID: Int].self, forKey: .playCounts) ?? [:]
     }
 }
+
+enum LibrarySearch {
+    static func tokens(in query: String) -> [String] {
+        query
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+    }
+
+    /// Every token has to match at least one field, so "bad ed" finds
+    /// "Bad Habits" by Ed Sheeran instead of requiring the exact phrase.
+    static func matches(_ query: String, in fields: [String]) -> Bool {
+        let tokens = tokens(in: query)
+        guard !tokens.isEmpty else { return false }
+        return tokens.allSatisfy { token in
+            fields.contains { $0.localizedStandardContains(token) }
+        }
+    }
+
+    /// Exact title matches come first, then title prefixes, then title
+    /// substrings. Everything else falls back to the caller's ordering.
+    static func rank(title: String, query: String) -> Int {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return 0 }
+        let options: String.CompareOptions = [
+            .caseInsensitive,
+            .diacriticInsensitive,
+            .widthInsensitive
+        ]
+        if title.compare(trimmed, options: options) == .orderedSame { return 0 }
+        if title.range(of: trimmed, options: options.union(.anchored)) != nil { return 1 }
+        if title.range(of: trimmed, options: options) != nil { return 2 }
+        return 3
+    }
+}

@@ -34,44 +34,70 @@ struct SearchView: View {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var needle: String {
-        trimmedQuery.lowercased()
-    }
-
     private var matchingTracks: [Track] {
         guard !trimmedQuery.isEmpty else { return [] }
         return library.tracks
             .filter {
-                $0.title.lowercased().contains(needle)
-                    || $0.artist.lowercased().contains(needle)
-                    || $0.album.lowercased().contains(needle)
+                LibrarySearch.matches(
+                    trimmedQuery,
+                    in: [$0.title, $0.artist, $0.album]
+                )
             }
-            .sorted {
-                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            .sorted { lhs, rhs in
+                let leftRank = trackRank(lhs)
+                let rightRank = trackRank(rhs)
+                if leftRank != rightRank { return leftRank < rightRank }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
             }
+    }
+
+    private func trackRank(_ track: Track) -> Int {
+        let titleRank = LibrarySearch.rank(title: track.title, query: trimmedQuery)
+        if titleRank < 3 { return titleRank }
+        if track.artist.localizedStandardContains(trimmedQuery) { return 3 }
+        if track.album.localizedStandardContains(trimmedQuery) { return 4 }
+        return 5
     }
 
     private var matchingArtists: [LibraryArtistGroup] {
         guard !trimmedQuery.isEmpty else { return [] }
         return LibraryArtistBuilder.artists(from: library.tracks)
-            .filter { $0.name.lowercased().contains(needle) }
+            .filter { LibrarySearch.matches(trimmedQuery, in: [$0.name]) }
+            .sorted { lhs, rhs in
+                let leftRank = LibrarySearch.rank(title: lhs.name, query: trimmedQuery)
+                let rightRank = LibrarySearch.rank(title: rhs.name, query: trimmedQuery)
+                if leftRank != rightRank { return leftRank < rightRank }
+                if lhs.count != rhs.count { return lhs.count > rhs.count }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
     }
 
     private var matchingAlbums: [LibraryAlbumGroup] {
         guard !trimmedQuery.isEmpty else { return [] }
         return LibraryAlbumBuilder.albums(from: library.tracks)
             .filter {
-                $0.title.lowercased().contains(needle)
-                    || $0.artist.lowercased().contains(needle)
+                LibrarySearch.matches(trimmedQuery, in: [$0.title, $0.artist])
+            }
+            .sorted { lhs, rhs in
+                let leftRank = LibrarySearch.rank(title: lhs.title, query: trimmedQuery)
+                let rightRank = LibrarySearch.rank(title: rhs.title, query: trimmedQuery)
+                if leftRank != rightRank { return leftRank < rightRank }
+                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
             }
     }
 
     private var matchingPlaylists: [Playlist] {
         guard !trimmedQuery.isEmpty else { return [] }
-        return library.playlists.filter {
-            $0.name.lowercased().contains(needle)
-                || $0.description.lowercased().contains(needle)
-        }
+        return library.playlists
+            .filter {
+                LibrarySearch.matches(trimmedQuery, in: [$0.name, $0.description])
+            }
+            .sorted { lhs, rhs in
+                let leftRank = LibrarySearch.rank(title: lhs.name, query: trimmedQuery)
+                let rightRank = LibrarySearch.rank(title: rhs.name, query: trimmedQuery)
+                if leftRank != rightRank { return leftRank < rightRank }
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+            }
     }
 
     private var hasAnyLocalMatch: Bool {
