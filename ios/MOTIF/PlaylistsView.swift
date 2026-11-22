@@ -62,24 +62,35 @@ struct PlaylistsView: View {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                 )
         } else {
-            playlistPanel
+            playlistGrid
         }
     }
 
-    @ViewBuilder
-    private func playlistRow(_ playlist: Playlist) -> some View {
+    private var playlistGrid: some View {
+        LazyVGrid(
+            columns: [
+                GridItem(.flexible(), spacing: 14),
+                GridItem(.flexible(), spacing: 14)
+            ],
+            alignment: .leading,
+            spacing: 22
+        ) {
+            ForEach(library.playlists) { playlist in
+                playlistTile(playlist)
+            }
+
+            newPlaylistTile
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private func playlistTile(_ playlist: Playlist) -> some View {
         let tracks = library.tracks(in: playlist)
 
-        NavigationLink(value: PlaylistRoute(id: playlist.id)) {
-            PlaylistRow(playlist: playlist, tracks: tracks)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        return NavigationLink(value: PlaylistRoute(id: playlist.id)) {
+            PlaylistTile(playlist: playlist, tracks: tracks)
         }
-        .nativeGlass(
-            RoundedRectangle(cornerRadius: 18, style: .continuous),
-            interactive: true
-        )
+        .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
         .contextMenu {
             Button {
                 play(playlist)
@@ -107,12 +118,38 @@ struct PlaylistsView: View {
         }
     }
 
-    private var playlistPanel: some View {
-        VStack(spacing: 8) {
-            ForEach(library.playlists) { playlist in
-                playlistRow(playlist)
+    private var newPlaylistTile: some View {
+        Button {
+            showCreatePlaylist = true
+        } label: {
+            VStack(alignment: .leading, spacing: 6) {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color.primary.opacity(0.055))
+                    .aspectRatio(1, contentMode: .fit)
+                    .overlay {
+                        Image(systemName: "plus")
+                            .font(.system(size: 22, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                    }
+
+                Text("New playlist")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text("Start a collection")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
+        .accessibilityLabel("New playlist")
     }
 
     private var emptyState: some View {
@@ -147,53 +184,6 @@ struct PlaylistsView: View {
         guard let first = tracks.first else { return }
         player.play(first, queue: tracks)
         showNowPlaying = true
-    }
-}
-
-private struct PlaylistRow: View {
-    let playlist: Playlist
-    let tracks: [Track]
-
-    private var metadata: String {
-        let countText = tracks.count == 1 ? "1 song" : "\(tracks.count) songs"
-        let total = Int(tracks.reduce(0) { $0 + $1.duration }.rounded())
-        guard total > 0 else { return countText }
-        if total < 60 { return "\(countText) · <1 min" }
-
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        if hours > 0 {
-            return "\(countText) · \(hours) hr \(minutes) min"
-        }
-        return "\(countText) · \(minutes) min"
-    }
-
-    var body: some View {
-        HStack(spacing: 14) {
-            PlaylistArtwork(playlist: playlist, tracks: tracks)
-                .frame(width: 64, height: 64)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(playlist.name)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                Text(metadata)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.vertical, 3)
     }
 }
 
