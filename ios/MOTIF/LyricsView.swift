@@ -671,24 +671,37 @@ private struct LyricsPlayhead: View {
     }
 }
 
+private struct LyricsDocumentKey: Hashable {
+    let id: UUID
+    let fileLength: Int
+    let textLength: Int
+    let source: String
+    let fileStart: String
+    let fileEnd: String
+    let textStart: String
+    let textEnd: String
+
+    init(track: Track) {
+        let file = track.lyricsFile ?? ""
+        let text = track.lyrics ?? ""
+        id = track.id
+        fileLength = file.utf8.count
+        textLength = text.utf8.count
+        source = track.lyricsSource?.rawValue ?? "-"
+        fileStart = String(file.prefix(24))
+        fileEnd = String(file.suffix(24))
+        textStart = String(text.prefix(24))
+        textEnd = String(text.suffix(24))
+    }
+}
+
 @MainActor
 private enum LyricsDocumentCache {
-    private static var documents: [String: LyricsDocument] = [:]
-    private static var keys: [String] = []
+    private static var documents: [LyricsDocumentKey: LyricsDocument] = [:]
+    private static var keys: [LyricsDocumentKey] = []
 
     static func document(for track: Track) -> LyricsDocument {
-        let lyricsFile = track.lyricsFile ?? ""
-        let lyrics = track.lyrics ?? ""
-        let key = [
-            track.id.uuidString,
-            String(lyricsFile.utf8.count),
-            String(lyrics.utf8.count),
-            track.lyricsSource?.rawValue ?? "-",
-            String(lyricsFile.prefix(24)),
-            String(lyricsFile.suffix(24)),
-            String(lyrics.prefix(24)),
-            String(lyrics.suffix(24))
-        ].joined(separator: "|")
+        let key = LyricsDocumentKey(track: track)
 
         if let cached = documents[key] { return cached }
 
