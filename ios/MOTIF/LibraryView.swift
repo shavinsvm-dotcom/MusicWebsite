@@ -50,11 +50,21 @@ struct LibraryView: View {
     @State private var showDownloads = false
     @State private var showSettings = false
     @State private var importError: String?
-    @State private var dragOffset: CGFloat?
-    @State private var dragGrabOffset: CGFloat?
 
     private var section: LibrarySection {
         LibrarySection(rawValue: sectionRaw) ?? .songs
+    }
+
+    private var sectionBinding: Binding<LibrarySection> {
+        Binding(
+            get: { section },
+            set: { next in
+                guard next != section else { return }
+                withAnimation(MotifMotion.control) {
+                    sectionRaw = next.rawValue
+                }
+            }
+        )
     }
 
     private var sort: SongSort {
@@ -111,6 +121,16 @@ struct LibraryView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
+                    if hasContent {
+                        Picker("Library section", selection: sectionBinding) {
+                            ForEach(LibrarySection.allCases) { option in
+                                Text(option.title).tag(option)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .accessibilityLabel("Library section")
+                    }
+
                     activityRow
 
                     if hasContent {
@@ -135,15 +155,6 @@ struct LibraryView: View {
                 .padding(.bottom, 120)
             }
             .scrollIndicators(.hidden)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if hasContent {
-                    sectionBar
-                        .padding(.horizontal, 20)
-                        .padding(.top, 6)
-                        .padding(.bottom, 8)
-                        .background(.ultraThinMaterial)
-                }
-            }
             .background(AppBackground())
             .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.large)
@@ -224,123 +235,6 @@ struct LibraryView: View {
                 Text(importError ?? library.errorMessage ?? "")
             }
         }
-    }
-
-    private var sectionBar: some View {
-        GeometryReader { proxy in
-            let sections = LibrarySection.allCases
-            let count = max(sections.count, 1)
-            let segment = proxy.size.width / CGFloat(count)
-            let selectedIndex = CGFloat(sections.firstIndex(of: section) ?? 0)
-            let restingX = selectedIndex * segment + 2
-            let pillX = dragOffset ?? restingX
-            let liveIndex = dragOffset.map { offset in
-                clampSectionIndex(
-                    Int(((offset - 2) / max(segment, 1)).rounded()),
-                    count: count
-                )
-            } ?? Int(selectedIndex)
-            let liveSection = sections[liveIndex]
-
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.primary)
-                    .frame(width: max(segment - 4, 0), height: 32)
-                    .offset(x: pillX)
-                    .allowsHitTesting(false)
-
-                HStack(spacing: 0) {
-                    ForEach(sections) { option in
-                        sectionTab(option, highlighted: option == liveSection)
-                    }
-                }
-            }
-            .frame(width: proxy.size.width, height: 32)
-            .contentShape(Rectangle())
-            .simultaneousGesture(
-                pillDrag(segment: segment, width: proxy.size.width, count: count)
-            )
-            .onChange(of: liveIndex) { _ in
-                guard dragOffset != nil else { return }
-                MotifHaptics.play(.selection)
-            }
-        }
-        .frame(height: 32)
-        .padding(4)
-        .nativeGlass(Capsule(), interactive: true)
-        .padding(.bottom, 2)
-    }
-
-    private func sectionTab(_ option: LibrarySection, highlighted: Bool) -> some View {
-        let isSelected = section == option
-
-        return Button {
-            guard !isSelected else { return }
-            MotifHaptics.play(.selection)
-            withAnimation(MotifMotion.control) {
-                sectionRaw = option.rawValue
-            }
-        } label: {
-            Text(option.title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(highlighted ? Color(uiColor: .systemBackground) : Color.secondary)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    private func pillDrag(segment: CGFloat, width: CGFloat, count: Int) -> some Gesture {
-        DragGesture(minimumDistance: 4)
-            .onChanged { value in
-                guard abs(value.translation.width) >= abs(value.translation.height) else { return }
-
-                let pillWidth = max(segment - 4, 0)
-                let maximumX = max(width - pillWidth - 2, 2)
-
-                if dragGrabOffset == nil {
-                    let pillLeft = CGFloat(LibrarySection.allCases.firstIndex(of: section) ?? 0) * segment + 2
-                    let pillRight = pillLeft + pillWidth
-                    dragGrabOffset = value.startLocation.x >= pillLeft
-                        && value.startLocation.x <= pillRight
-                        ? value.startLocation.x - pillLeft
-                        : segment / 2
-                }
-
-                let grab = dragGrabOffset ?? segment / 2
-                dragOffset = min(max(value.location.x - grab, 2), maximumX)
-            }
-            .onEnded { value in
-                guard dragOffset != nil else { return }
-
-                let pillWidth = max(segment - 4, 0)
-                let maximumX = max(width - pillWidth - 2, 2)
-                let finalX = min(max(value.location.x - segment / 2, 2), maximumX)
-                let index = clampSectionIndex(
-                    Int(((finalX - 2) / max(segment, 1)).rounded()),
-                    count: count
-                )
-                let target = LibrarySection.allCases[index]
-                let changed = target != section
-
-                withAnimation(MotifMotion.control) {
-                    dragOffset = nil
-                    dragGrabOffset = nil
-                    if changed {
-                        sectionRaw = target.rawValue
-                    }
-                }
-
-                if changed {
-                    MotifHaptics.play(.selection)
-                }
-            }
-    }
-
-    private func clampSectionIndex(_ index: Int, count: Int) -> Int {
-        min(max(index, 0), max(count - 1, 0))
     }
 
     @ViewBuilder
