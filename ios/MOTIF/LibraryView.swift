@@ -187,18 +187,13 @@ struct LibraryView: View {
 
             Spacer(minLength: 4)
 
-            Button {
+            GlassIconButton(
+                systemImage: "arrow.clockwise",
+                label: "Refresh Tigris library"
+            ) {
                 Task { await library.refreshCloud() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-                    .font(.caption.weight(.semibold))
-                    .frame(width: 30, height: 30)
-                    .nativeGlass(Circle(), interactive: true)
             }
-            .buttonStyle(MotifPressStyle(scale: 0.9))
-            .foregroundStyle(.secondary)
             .disabled(library.isRefreshingCloud)
-            .accessibilityLabel("Refresh Tigris library")
         }
         .padding(.vertical, 2)
     }
@@ -213,13 +208,15 @@ struct LibraryView: View {
                 } label: {
                     Text(option.title)
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(filter == option ? .primary : .secondary)
+                        .foregroundStyle(filter == option
+                            ? Color(uiColor: .systemBackground)
+                            : Color.primary.opacity(0.65))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                         .background {
                             if filter == option {
                                 Capsule()
-                                    .fill(Color.primary.opacity(0.10))
+                                    .fill(Color.primary)
                             }
                         }
                 }
@@ -229,6 +226,7 @@ struct LibraryView: View {
         }
         .padding(4)
         .nativeGlass(Capsule(), interactive: true)
+        .glassOutline(Capsule())
     }
 
     private var emptyState: some View {
@@ -268,10 +266,7 @@ struct LibraryView: View {
         let pendingDownloads = library.tracks.filter { $0.isCloud && !library.isDownloaded($0) }
 
         return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                SectionTitle(title: "Songs")
-                Spacer()
-
+            SectionHeader(title: "Songs") {
                 HStack(spacing: 2) {
                     if !pendingDownloads.isEmpty {
                         Button {
@@ -300,10 +295,7 @@ struct LibraryView: View {
                     .buttonStyle(MotifPressStyle(scale: 0.92))
                     .accessibilityLabel("Play all songs")
                 }
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .nativeGlass(Capsule(), interactive: true)
+                .glassTransport()
             }
 
             LazyVStack(spacing: 0) {
@@ -321,23 +313,20 @@ struct LibraryView: View {
         let tracks = downloadedTracks
 
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                SectionTitle(title: "Downloaded")
-                Spacer()
+            SectionHeader(title: "Downloaded") {
                 if !tracks.isEmpty {
-                    Button {
-                        guard let first = tracks.first else { return }
-                        player.play(first, queue: tracks)
-                        showNowPlaying = true
-                    } label: {
-                        GlassActionLabel(title: "Play")
-                    }
-                    .buttonStyle(MotifPressStyle(scale: 0.92))
-                    .accessibilityLabel("Play downloaded songs")
-
                     Text("\(tracks.count)")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
+
+                    GlassActionButton(
+                        title: "Play",
+                        accessibilityLabel: "Play downloaded songs"
+                    ) {
+                        guard let first = tracks.first else { return }
+                        player.play(first, queue: tracks)
+                        showNowPlaying = true
+                    }
                 }
             }
 
@@ -356,11 +345,9 @@ struct LibraryView: View {
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Button("Browse songs") {
+                    GlassActionButton(title: "Browse songs", systemImage: "square.stack") {
                         filter = .all
                     }
-                    .font(.footnote.weight(.semibold))
-                    .padding(.top, 2)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 30)
@@ -383,7 +370,17 @@ struct LibraryView: View {
 
     private var favorites: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SectionTitle(title: "Favorites")
+            SectionHeader(title: "Favorites") {
+                GlassActionButton(
+                    title: "Play",
+                    accessibilityLabel: "Play favorite songs"
+                ) {
+                    guard let first = library.favorites.first else { return }
+                    player.play(first, queue: library.favorites)
+                    showNowPlaying = true
+                }
+            }
+
             LazyVStack(spacing: 0) {
                 ForEach(library.favorites) { track in
                     TrackRow(track: track, queue: library.favorites, showNowPlaying: $showNowPlaying)
@@ -400,9 +397,7 @@ struct LibraryView: View {
         let pendingDownloads = tracks.filter { !library.isDownloaded($0) }
 
         return VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionTitle(title: "Cloud tracks")
-                Spacer()
+            SectionHeader(title: "Cloud tracks") {
                 Text("\(tracks.count)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -491,10 +486,7 @@ struct LibraryView: View {
                             .buttonStyle(MotifPressStyle(scale: 0.92))
                             .accessibilityLabel("Play cloud tracks")
                         }
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .nativeGlass(Capsule(), interactive: true)
+                        .glassTransport()
                     }
                 }
 
@@ -512,19 +504,10 @@ struct LibraryView: View {
 
     private var playlists: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                SectionTitle(title: "Playlists")
-                Spacer()
-                Button {
+            SectionHeader(title: "Playlists") {
+                GlassIconButton(systemImage: "plus", label: "New playlist") {
                     showNewPlaylist = true
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.caption.weight(.semibold))
-                        .frame(width: 30, height: 30)
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.9))
-                .nativeGlass(Circle(), interactive: true)
-                .accessibilityLabel("New playlist")
             }
 
             if library.playlists.isEmpty {

@@ -1235,19 +1235,88 @@ struct SectionTitle: View {
     }
 }
 
-/// The compact glass capsule used for section-level actions such as
-/// "Play all". It matches the transport groups elsewhere in the app.
-struct GlassActionLabel: View {
+struct SectionHeader<Trailing: View>: View {
     let title: String
-    var systemImage: String = "play.fill"
+    private let trailing: () -> Trailing
+
+    init(title: String, @ViewBuilder trailing: @escaping () -> Trailing) {
+        self.title = title
+        self.trailing = trailing
+    }
 
     var body: some View {
-        Label(title, systemImage: systemImage)
-            .font(.caption.weight(.semibold))
-            .lineLimit(1)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
+        HStack(spacing: 10) {
+            SectionTitle(title: title)
+            Spacer(minLength: 8)
+            trailing()
+        }
+    }
+}
+
+extension View {
+    /// A hairline edge keeps glass controls readable on light paper.
+    func glassOutline<S: InsettableShape>(_ shape: S) -> some View {
+        overlay {
+            shape
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+/// A compact glass capsule for section actions such as "Play" and
+/// "Play all". Shared so call sites stay a single view.
+struct GlassActionButton: View {
+    let title: String
+    var systemImage: String = "play.fill"
+    var prominent = false
+    var accessibilityLabel: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(prominent ? .subheadline.weight(.semibold) : .caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .padding(.horizontal, prominent ? 18 : 11)
+                .padding(.vertical, prominent ? 12 : 7)
+                .nativeGlass(Capsule(), interactive: true)
+                .glassOutline(Capsule())
+        }
+        .buttonStyle(MotifPressStyle(scale: 0.92))
+        .accessibilityLabel(accessibilityLabel ?? title)
+    }
+}
+
+struct GlassIconButton: View {
+    let systemImage: String
+    let label: String
+    var size: CGFloat = 30
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: size >= 40 ? 15 : 13, weight: .semibold))
+                .foregroundStyle(.primary)
+                .frame(width: size, height: size)
+                .nativeGlass(Circle(), interactive: true)
+                .glassOutline(Circle())
+        }
+        .buttonStyle(MotifPressStyle(scale: 0.9))
+        .accessibilityLabel(label)
+    }
+}
+
+extension View {
+    /// The shared chrome for a row of transport buttons in one glass pill.
+    func glassTransport() -> some View {
+        foregroundStyle(.primary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
             .nativeGlass(Capsule(), interactive: true)
+            .glassOutline(Capsule())
     }
 }
 

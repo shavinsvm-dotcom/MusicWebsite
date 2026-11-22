@@ -12,9 +12,7 @@ struct LibraryArtistsSection: View {
     var body: some View {
         if !artists.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    SectionTitle(title: "Artists")
-                    Spacer()
+                SectionHeader(title: "Artists") {
                     Text("\(artists.count)")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
@@ -182,30 +180,21 @@ struct LibraryArtistDetailView: View {
 
             if !tracks.isEmpty {
                 HStack(spacing: 10) {
-                    Button {
+                    GlassActionButton(
+                        title: "Play",
+                        prominent: true,
+                        accessibilityLabel: "Play artist"
+                    ) {
                         play(shuffled: false)
-                    } label: {
-                        Label("Play", systemImage: "play.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .padding(.horizontal, 22)
-                            .frame(height: 42)
-                            .background(Color.primary, in: Capsule())
-                            .foregroundStyle(Color(uiColor: .systemBackground))
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.94))
 
-                    Button {
+                    GlassIconButton(
+                        systemImage: "shuffle",
+                        label: "Shuffle artist",
+                        size: 42
+                    ) {
                         play(shuffled: true)
-                    } label: {
-                        Image(systemName: "shuffle")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 42, height: 42)
-                            .contentShape(Circle())
-                            .nativeGlass(Circle(), interactive: true)
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.9))
-                    .accessibilityLabel("Shuffle artist")
                 }
             }
         }
@@ -478,18 +467,12 @@ struct LibraryAlbumDetailView: View {
             .padding(.horizontal, 16)
 
             if !tracks.isEmpty {
-                HStack(spacing: 10) {
-                    Button {
-                        play(shuffled: false)
-                    } label: {
-                        Label("Play", systemImage: "play.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .padding(.horizontal, 22)
-                            .frame(height: 42)
-                            .background(Color.primary, in: Capsule())
-                            .foregroundStyle(Color(uiColor: .systemBackground))
-                    }
-                    .buttonStyle(MotifPressStyle(scale: 0.94))
+                GlassActionButton(
+                    title: "Play",
+                    prominent: true,
+                    accessibilityLabel: "Play album"
+                ) {
+                    play(shuffled: false)
                 }
             }
         }

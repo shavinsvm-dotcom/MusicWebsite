@@ -96,6 +96,7 @@ struct ForYouView: View {
                     .foregroundStyle(.primary)
                     .frame(width: 46, height: 46)
                     .nativeGlass(Circle(), interactive: true)
+                    .glassOutline(Circle())
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
@@ -153,18 +154,15 @@ struct ForYouView: View {
 
     private func onRepeat(_ data: ForYouSnapshot) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                SectionTitle(title: "On repeat")
-                Spacer()
-                Button {
+            SectionHeader(title: "On repeat") {
+                GlassActionButton(
+                    title: "Play all",
+                    accessibilityLabel: "Play all songs on repeat"
+                ) {
                     guard let first = data.repeatTracks.first else { return }
                     player.play(first, queue: data.repeatTracks)
                     showNowPlaying = true
-                } label: {
-                    GlassActionLabel(title: "Play all")
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.92))
-                .accessibilityLabel("Play all songs on repeat")
             }
 
             LazyVStack(spacing: 0) {
@@ -337,19 +335,15 @@ struct ArtistTracksView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Button {
+                GlassActionButton(
+                    title: "Play all",
+                    prominent: true,
+                    accessibilityLabel: "Play all songs by \(artistName)"
+                ) {
                     guard let first = tracks.first else { return }
                     player.play(first, queue: tracks)
                     showNowPlaying = true
-                } label: {
-                    Label("Play all", systemImage: "play.fill")
-                        .font(.subheadline.weight(.semibold))
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 12)
-                        .background(Color.primary, in: Capsule())
-                        .foregroundStyle(Color(uiColor: .systemBackground))
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.94))
 
                 LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in

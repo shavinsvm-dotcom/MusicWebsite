@@ -227,36 +227,49 @@ struct SearchView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(SearchScope.allCases) { option in
-                    Button {
-                        withAnimation(.easeOut(duration: 0.16)) {
-                            scope = option
-                        }
-                    } label: {
-                        Text(option.title)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(scope == option ? Color(uiColor: .systemBackground) : .secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
-                            .background {
-                                if scope == option {
-                                    Capsule().fill(Color.primary)
-                                } else {
-                                    Capsule().fill(.ultraThinMaterial)
-                                    Capsule().strokeBorder(Color.white.opacity(0.11), lineWidth: 0.6)
-                                }
-                            }
-                    }
-                    .buttonStyle(MotifPressStyle(scale: 0.94))
+                    scopeChip(option)
                 }
             }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func scopeChip(_ option: SearchScope) -> some View {
+        let isSelected = scope == option
+
+        return Button {
+            withAnimation(.easeOut(duration: 0.16)) {
+                scope = option
+            }
+        } label: {
+            scopeLabel(option, isSelected: isSelected)
+        }
+        .buttonStyle(MotifPressStyle(scale: 0.94))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func scopeLabel(_ option: SearchScope, isSelected: Bool) -> some View {
+        let label = Text(option.title)
+            .font(.system(size: 12, weight: .semibold))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+
+        if isSelected {
+            label
+                .foregroundStyle(Color(uiColor: .systemBackground))
+                .background(Color.primary, in: Capsule())
+        } else {
+            label
+                .foregroundStyle(.primary)
+                .nativeGlass(Capsule(), interactive: true)
+                .glassOutline(Capsule())
         }
     }
 
     private var artistSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionTitle(title: "Artists")
-                Spacer()
+            SectionHeader(title: "Artists") {
                 Text("\(matchingArtists.count)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -287,9 +300,7 @@ struct SearchView: View {
 
     private var albumSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionTitle(title: "Albums")
-                Spacer()
+            SectionHeader(title: "Albums") {
                 Text("\(matchingAlbums.count)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
@@ -320,9 +331,7 @@ struct SearchView: View {
 
     private var playlistSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                SectionTitle(title: "Playlists")
-                Spacer()
+            SectionHeader(title: "Playlists") {
                 Text("\(matchingPlaylists.count)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)

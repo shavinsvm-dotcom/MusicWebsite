@@ -109,6 +109,7 @@ struct HomeView: View {
                     .foregroundStyle(.primary)
                     .frame(width: 46, height: 46)
                     .nativeGlass(Circle(), interactive: true)
+                    .glassOutline(Circle())
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
@@ -156,18 +157,15 @@ struct HomeView: View {
 
     private var recentlyAdded: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                SectionTitle(title: "Recently added")
-                Spacer()
-                Button {
+            SectionHeader(title: "Recently added") {
+                GlassActionButton(
+                    title: "Play",
+                    accessibilityLabel: "Play recently added"
+                ) {
                     guard let first = library.tracks.first else { return }
                     player.play(first, queue: Array(library.tracks.prefix(10)))
                     showNowPlaying = true
-                } label: {
-                    GlassActionLabel(title: "Play")
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.92))
-                .accessibilityLabel("Play recently added")
             }
 
             CarouselScroll {
@@ -207,18 +205,15 @@ struct HomeView: View {
 
     private var favorites: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                SectionTitle(title: "Favorites")
-                Spacer()
-                Button {
+            SectionHeader(title: "Favorites") {
+                GlassActionButton(
+                    title: "Play",
+                    accessibilityLabel: "Play favorites"
+                ) {
                     guard let first = library.favorites.first else { return }
                     player.play(first, queue: library.favorites)
                     showNowPlaying = true
-                } label: {
-                    GlassActionLabel(title: "Play")
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.92))
-                .accessibilityLabel("Play favorites")
             }
 
             LazyVStack(spacing: 0) {

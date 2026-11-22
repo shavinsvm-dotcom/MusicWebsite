@@ -627,6 +627,7 @@ struct PlaylistDetailView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .nativeGlass(Capsule(), interactive: true)
+                        .glassOutline(Capsule())
                         .padding(.top, 2)
                     }
                 }
@@ -1330,6 +1331,7 @@ struct SmartPlaylistDetailView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .nativeGlass(Capsule(), interactive: true)
+                        .glassOutline(Capsule())
                         .padding(.top, 2)
                     }
                 }
