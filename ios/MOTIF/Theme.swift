@@ -6,39 +6,94 @@ import UIKit
 
 struct AppBackground: View {
     var body: some View {
-        RefractionBackground()
+        PaperBackground()
             .ignoresSafeArea()
             .allowsHitTesting(false)
     }
 }
 
-/// Flat black or white, with only a barely-there neutral bloom. No cover
-/// tint, no color wash, no lines.
-private struct RefractionBackground: View {
+/// Warm paper in light, near-black ink in dark, a fine static grain, and a
+/// soft bottom scrim. No cover tint, no color wash, no hotspot.
+private struct PaperBackground: View {
     @Environment(\.colorScheme) private var colorScheme
+
+    private var base: Color {
+        colorScheme == .dark
+            ? Color(red: 0.0196, green: 0.0196, blue: 0.0235) // #050506
+            : Color(red: 0.9804, green: 0.9765, blue: 0.9647) // #FAF9F6
+    }
+
+    private var scrim: Color {
+        colorScheme == .dark
+            ? Color.black.opacity(0.50)
+            : Color.black.opacity(0.035)
+    }
 
     var body: some View {
         ZStack {
-            if colorScheme == .dark {
-                Color.black
+            base
 
-                RadialGradient(
-                    colors: [Color.white.opacity(0.060), .clear],
-                    center: .top,
-                    startRadius: 0,
-                    endRadius: 540
-                )
-            } else {
-                Color.white
+            Image(uiImage: PaperGrain.texture(for: colorScheme))
+                .resizable(resizingMode: .tile)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(colorScheme == .dark ? 0.030 : 0.022)
 
-                RadialGradient(
-                    colors: [Color.black.opacity(0.040), .clear],
-                    center: .bottom,
-                    startRadius: 0,
-                    endRadius: 520
-                )
-            }
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.76),
+                    .init(color: scrim, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
+    }
+}
+
+/// One screen-scale tile of transparent noise, generated once per appearance.
+/// Tiling a real pixel-scale texture keeps the grain fine on 2x and 3x screens
+/// without shipping an asset.
+private enum PaperGrain {
+    static func texture(for scheme: ColorScheme) -> UIImage {
+        scheme == .dark ? whiteTexture : blackTexture
+    }
+
+    private static let whiteTexture = make(white: true)
+    private static let blackTexture = make(white: false)
+
+    private static func make(white: Bool) -> UIImage {
+        let side = 160
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        var generator = SystemRandomNumberGenerator()
+
+        for index in stride(from: 0, to: pixels.count, by: 4) {
+            let alpha = UInt8.random(in: 0...255, using: &generator)
+            pixels[index] = white ? alpha : 0
+            pixels[index + 1] = white ? alpha : 0
+            pixels[index + 2] = white ? alpha : 0
+            pixels[index + 3] = alpha
+        }
+
+        let data = Data(pixels)
+        guard let provider = CGDataProvider(data: data as CFData),
+              let image = CGImage(
+                width: side,
+                height: side,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: side * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                provider: provider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+              )
+        else {
+            return UIImage()
+        }
+
+        return UIImage(cgImage: image, scale: UIScreen.main.scale, orientation: .up)
     }
 }
 
