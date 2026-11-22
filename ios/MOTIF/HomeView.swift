@@ -116,7 +116,7 @@ struct HomeView: View {
                 Button {
                     showSettings = true
                 } label: {
-                    Image(systemName: "slider.horizontal.3")
+                    Image(systemName: "gearshape")
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.primary)
                         .frame(width: 36, height: 36)

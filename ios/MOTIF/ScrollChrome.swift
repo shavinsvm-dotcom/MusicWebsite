@@ -80,7 +80,7 @@ struct PlayingWaveform: View {
             }
         }
         .frame(width: 14, height: 12)
-        .onAppear { active = true }
+        .onAppear { active = isPlaying }
         .onDisappear { active = false }
         .onChange(of: isPlaying) { playing in
             active = playing

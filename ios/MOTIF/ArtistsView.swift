@@ -172,6 +172,7 @@ struct LibraryArtistDetailView: View {
         }
         .navigationTitle(artistName)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 
@@ -485,6 +486,7 @@ struct LibraryAlbumDetailView: View {
         }
         .navigationTitle(album.title)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
     }
 

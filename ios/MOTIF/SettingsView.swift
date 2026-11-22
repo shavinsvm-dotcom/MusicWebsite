@@ -209,5 +209,6 @@ struct SettingsView: View {
                     .environmentObject(library)
             }
         }
+        .preferredColorScheme(AppAppearance.resolved(appearanceRaw))
     }
 }
