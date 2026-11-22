@@ -3,16 +3,42 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
-    private enum LibraryFilter: CaseIterable, Hashable {
-        case all
+    private enum LibrarySection: String, CaseIterable, Identifiable {
+        case songs
+        case albums
+        case artists
+        case playlists
         case downloads
-        case cloud
+
+        var id: String { rawValue }
 
         var title: String {
             switch self {
-            case .all: return "Songs"
+            case .songs: return "Songs"
+            case .albums: return "Albums"
+            case .artists: return "Artists"
+            case .playlists: return "Playlists"
             case .downloads: return "Downloads"
-            case .cloud: return "Cloud"
+            }
+        }
+    }
+
+    private enum SongSort: String, CaseIterable, Identifiable {
+        case recentlyAdded
+        case title
+        case artist
+        case album
+        case mostPlayed
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .recentlyAdded: return "Recently added"
+            case .title: return "Title"
+            case .artist: return "Artist"
+            case .album: return "Album"
+            case .mostPlayed: return "Most played"
             }
         }
     }
@@ -21,47 +47,100 @@ struct LibraryView: View {
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
 
+    @AppStorage("motif.library.section") private var sectionRaw = LibrarySection.songs.rawValue
+    @AppStorage("motif.library.sort") private var sortRaw = SongSort.recentlyAdded.rawValue
+
     @State private var showImporter = false
     @State private var showNewPlaylist = false
     @State private var showDownloads = false
     @State private var importError: String?
-    @State private var filter: LibraryFilter = .all
+
+    private var section: LibrarySection {
+        LibrarySection(rawValue: sectionRaw) ?? .songs
+    }
+
+    private var sort: SongSort {
+        SongSort(rawValue: sortRaw) ?? .recentlyAdded
+    }
+
+    private var sortedTracks: [Track] {
+        switch sort {
+        case .recentlyAdded:
+            return library.tracks.sorted { $0.addedAt > $1.addedAt }
+        case .title:
+            return library.tracks.sorted {
+                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+        case .artist:
+            return library.tracks.sorted {
+                let artist = $0.artist.localizedCaseInsensitiveCompare($1.artist)
+                if artist == .orderedSame {
+                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                }
+                return artist == .orderedAscending
+            }
+        case .album:
+            return library.tracks.sorted {
+                let album = $0.album.localizedCaseInsensitiveCompare($1.album)
+                if album == .orderedSame {
+                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                }
+                return album == .orderedAscending
+            }
+        case .mostPlayed:
+            return library.tracks.sorted {
+                let left = library.playCounts[$0.id] ?? 0
+                let right = library.playCounts[$1.id] ?? 0
+                if left != right { return left > right }
+                return $0.addedAt > $1.addedAt
+            }
+        }
+    }
 
     private var downloadedTracks: [Track] {
         library.tracks.filter { library.isDownloaded($0) }
     }
 
-    private var cloudTracks: [Track] {
-        library.tracks.filter { $0.isCloud }
+    private var albums: [LibraryAlbumGroup] {
+        LibraryAlbumBuilder.albums(from: library.tracks)
+    }
+
+    private var artists: [LibraryArtistGroup] {
+        LibraryArtistBuilder.artists(from: library.tracks)
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
+                    header
+
                     if !library.tracks.isEmpty {
-                        filterBar
+                        sectionPicker
                     }
 
-                    cloudStatus
+                    activityRow
 
                     if library.tracks.isEmpty {
                         emptyState
-                    } else if filter == .downloads {
-                        downloads
-                    } else if filter == .cloud {
-                        cloudLibrary
+
+                        if !library.playlists.isEmpty {
+                            playlistsGrid
+                        }
                     } else {
-                        LibraryArtistsSection(showNowPlaying: $showNowPlaying)
-
-                        songs
-
-                        if !library.favorites.isEmpty {
-                            favorites
+                        switch section {
+                        case .songs:
+                            songs
+                        case .albums:
+                            albumsGrid
+                        case .artists:
+                            artistsGrid
+                        case .playlists:
+                            playlistsGrid
+                        case .downloads:
+                            downloads
                         }
                     }
-
-                    playlists
                 }
                 .screenEntrance()
                 .padding(.horizontal, 20)
@@ -70,55 +149,7 @@ struct LibraryView: View {
             }
             .scrollIndicators(.hidden)
             .background(AppBackground())
-            .navigationTitle("Library")
-            .toolbarBackground(.hidden, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button {
-                            showImporter = true
-                        } label: {
-                            Label("Import audio", systemImage: "square.and.arrow.down")
-                        }
-
-                        Button {
-                            showNewPlaylist = true
-                        } label: {
-                            Label("New playlist", systemImage: "text.badge.plus")
-                        }
-
-                        Button {
-                            Task { await library.refreshCloud() }
-                        } label: {
-                            Label("Refresh Tigris library", systemImage: "arrow.clockwise")
-                        }
-
-                        Button {
-                            showDownloads = true
-                        } label: {
-                            Label("Download manager", systemImage: "arrow.down.circle")
-                        }
-
-                        Button {
-                            Task { await library.uploadAllLocal() }
-                        } label: {
-                            Label("Upload local songs", systemImage: "icloud.and.arrow.up")
-                        }
-                        .disabled(!library.uploadingIDs.isEmpty)
-
-                        Button {
-                            Task { await library.repairMissingCovers() }
-                        } label: {
-                            Label("Find missing covers", systemImage: "photo.badge.magnifyingglass")
-                        }
-                        .disabled(!library.enrichingIDs.isEmpty)
-                    } label: {
-                        Image(systemName: "plus.circle")
-                            .font(.title3)
-                    }
-                    .accessibilityLabel("Add music or playlist")
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .fileImporter(
                 isPresented: $showImporter,
                 allowedContentTypes: [.audio],
@@ -160,72 +191,169 @@ struct LibraryView: View {
         }
     }
 
-    private var cloudStatus: some View {
-        HStack(spacing: 10) {
-            if library.isRefreshingCloud {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(.secondary)
-            } else {
-                Image(systemName: "cloud")
-                    .font(.system(size: 15, weight: .medium))
+    private var header: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Your Library")
+                    .font(.system(size: 34, weight: .bold))
+                    .tracking(-1.1)
+                    .foregroundStyle(.primary)
+                    .minimumScaleFactor(0.82)
+                    .lineLimit(1)
+
+                Text(summaryLine)
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
 
-            Text(
-                library.isRefreshingCloud
-                    ? "Syncing the Tigris library…"
-                    : (!library.enrichingIDs.isEmpty
-                        ? (library.enrichmentMessage ?? "Updating song details…")
-                        : (!library.uploadingIDs.isEmpty
-                            ? "Uploading \(library.uploadingIDs.count) \(library.uploadingIDs.count == 1 ? "song" : "songs")…"
-                            : (library.cloudMessage ?? "Tigris library")))
-            )
-            .font(.footnote)
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
+            Spacer(minLength: 8)
 
-            Spacer(minLength: 4)
+            Menu {
+                Button {
+                    showImporter = true
+                } label: {
+                    Label("Import audio", systemImage: "square.and.arrow.down")
+                }
 
-            GlassIconButton(
-                systemImage: "arrow.clockwise",
-                label: "Refresh Tigris library"
-            ) {
-                Task { await library.refreshCloud() }
+                Button {
+                    showNewPlaylist = true
+                } label: {
+                    Label("New playlist", systemImage: "text.badge.plus")
+                }
+
+                Divider()
+
+                Button {
+                    Task { await library.refreshCloud() }
+                } label: {
+                    Label("Sync cloud library", systemImage: "arrow.clockwise")
+                }
+                .disabled(library.isRefreshingCloud)
+
+                Button {
+                    showDownloads = true
+                } label: {
+                    Label("Download manager", systemImage: "arrow.down.circle")
+                }
+
+                Button {
+                    Task { await library.uploadAllLocal() }
+                } label: {
+                    Label("Upload local songs", systemImage: "icloud.and.arrow.up")
+                }
+                .disabled(!library.uploadingIDs.isEmpty)
+
+                Button {
+                    Task { await library.repairMissingCovers() }
+                } label: {
+                    Label("Find missing covers", systemImage: "photo.badge.magnifyingglass")
+                }
+                .disabled(!library.enrichingIDs.isEmpty)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 36, height: 36)
+                    .background(Color.primary.opacity(0.06), in: Circle())
+                    .contentShape(Circle())
             }
-            .disabled(library.isRefreshingCloud)
+            .accessibilityLabel("Add music or playlist")
+            .padding(.top, 4)
         }
-        .padding(.vertical, 2)
     }
 
-    private var filterBar: some View {
-        HStack(spacing: 2) {
-            ForEach(LibraryFilter.allCases, id: \.self) { option in
-                Button {
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        filter = option
-                    }
-                } label: {
-                    Text(option.title)
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(filter == option
-                            ? Color(uiColor: .systemBackground)
-                            : Color.primary.opacity(0.65))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background {
-                            if filter == option {
-                                Capsule()
-                                    .fill(Color.primary)
-                            }
+    private var summaryLine: String {
+        let songCount = library.tracks.count
+        guard songCount > 0 else { return "Nothing saved yet" }
+
+        let songText = songCount == 1 ? "1 song" : "\(songCount) songs"
+        let albumCount = albums.count
+        guard albumCount > 0 else { return songText }
+        let albumText = albumCount == 1 ? "1 album" : "\(albumCount) albums"
+        return "\(songText) · \(albumText)"
+    }
+
+    private var sectionPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(LibrarySection.allCases) { option in
+                    let isSelected = section == option
+
+                    Button {
+                        MotifHaptics.play(.light)
+                        withAnimation(.easeOut(duration: 0.18)) {
+                            sectionRaw = option.rawValue
                         }
+                    } label: {
+                        Text(option.title)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(
+                                isSelected
+                                    ? Color(uiColor: .systemBackground)
+                                    : Color.primary
+                            )
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 8)
+                            .background {
+                                Capsule()
+                                    .fill(
+                                        isSelected
+                                            ? Color.primary
+                                            : Color.primary.opacity(0.06)
+                                    )
+                            }
+                    }
+                    .buttonStyle(MotifPressStyle(scale: 0.95))
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
-                .buttonStyle(MotifPressStyle(scale: 0.96))
-                .accessibilityAddTraits(filter == option ? .isSelected : [])
             }
+            .padding(.vertical, 2)
         }
-        .padding(4)
-        .nativeGlass(Capsule(), interactive: true)
+    }
+
+    @ViewBuilder
+    private var activityRow: some View {
+        if let message = activityMessage {
+            HStack(spacing: 8) {
+                if isWorking {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.secondary)
+                } else {
+                    Image(systemName: "checkmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private var isWorking: Bool {
+        library.isRefreshingCloud
+            || !library.uploadingIDs.isEmpty
+            || !library.enrichingIDs.isEmpty
+    }
+
+    private var activityMessage: String? {
+        if library.isRefreshingCloud {
+            return "Syncing your cloud library…"
+        }
+        if !library.uploadingIDs.isEmpty {
+            let count = library.uploadingIDs.count
+            return "Uploading \(count) \(count == 1 ? "song" : "songs")…"
+        }
+        if !library.enrichingIDs.isEmpty {
+            return library.enrichmentMessage ?? "Updating song details…"
+        }
+        return library.cloudMessage
     }
 
     private var emptyState: some View {
@@ -254,132 +382,76 @@ struct LibraryView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(radius: 26)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private var songs: some View {
-        let pendingDownloads = library.tracks.filter { $0.isCloud && !library.isDownloaded($0) }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                SectionTitle(title: "Songs")
 
-        return VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "Songs") {
-                HStack(spacing: 2) {
-                    if !pendingDownloads.isEmpty {
+                Spacer(minLength: 8)
+
+                Menu {
+                    ForEach(SongSort.allCases) { option in
                         Button {
-                            Task { await library.downloadAll(pendingDownloads) }
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                sortRaw = option.rawValue
+                            }
                         } label: {
-                            Image(systemName: "arrow.down.circle")
-                                .font(.system(size: 13, weight: .semibold))
-                                .frame(width: 30, height: 30)
+                            if sort == option {
+                                Label(option.title, systemImage: "checkmark")
+                            } else {
+                                Text(option.title)
+                            }
                         }
-                        .buttonStyle(MotifPressStyle(scale: 0.9))
-                        .accessibilityLabel("Download all songs")
-
-                        Divider().frame(height: 16)
                     }
-
-                    Button {
-                        guard let first = library.tracks.first else { return }
-                        player.play(first, queue: library.tracks)
-                        showNowPlaying = true
-                    } label: {
-                        Label("Play", systemImage: "play.fill")
-                            .font(.caption.weight(.semibold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 7)
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(sort.title)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 8, weight: .bold))
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.92))
-                    .accessibilityLabel("Play all songs")
-                }
-                .glassTransport()
-            }
-
-            LazyVStack(spacing: 0) {
-                ForEach(library.tracks) { track in
-                    TrackRow(track: track, queue: library.tracks, showNowPlaying: $showNowPlaying)
-                    if track.id != library.tracks.last?.id {
-                        Divider().opacity(0.35)
-                    }
-                }
-            }
-        }
-    }
-
-    private var downloads: some View {
-        let tracks = downloadedTracks
-
-        return VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Downloaded") {
-                if !tracks.isEmpty {
-                    Text("\(tracks.count)")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-
-                    GlassActionButton(
-                        title: "Play",
-                        accessibilityLabel: "Play downloaded songs"
-                    ) {
-                        guard let first = tracks.first else { return }
-                        player.play(first, queue: tracks)
-                        showNowPlaying = true
-                    }
-                }
-            }
-
-            if tracks.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "arrow.down.circle")
-                        .font(.system(size: 28, weight: .light))
-                        .foregroundStyle(.tertiary)
-
-                    Text("No downloads yet")
-                        .font(.subheadline.weight(.semibold))
-
-                    Text("Download a cloud song and it will stay on this iPhone, ready without a connection.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    GlassActionButton(title: "Browse songs", systemImage: "square.stack") {
-                        filter = .all
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 30)
-            } else {
-                Text("Available without a connection")
-                    .font(.footnote)
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
-
-                LazyVStack(spacing: 0) {
-                    ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
-                        if track.id != tracks.last?.id {
-                            Divider().opacity(0.35)
-                        }
-                    }
+                    .padding(.vertical, 6)
                 }
+                .accessibilityLabel("Sort songs, \(sort.title)")
             }
-        }
-    }
 
-    private var favorites: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SectionHeader(title: "Favorites") {
+            HStack(spacing: 10) {
                 GlassActionButton(
                     title: "Play",
-                    accessibilityLabel: "Play favorite songs"
+                    prominent: true,
+                    accessibilityLabel: "Play all songs"
                 ) {
-                    guard let first = library.favorites.first else { return }
-                    player.play(first, queue: library.favorites)
-                    showNowPlaying = true
+                    play(sortedTracks)
                 }
+
+                GlassActionButton(
+                    title: "Shuffle",
+                    systemImage: "shuffle",
+                    accessibilityLabel: "Shuffle all songs"
+                ) {
+                    play(sortedTracks, shuffled: true)
+                }
+
+                Spacer(minLength: 8)
+
+                Text("\(sortedTracks.count)")
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.tertiary)
             }
 
             LazyVStack(spacing: 0) {
-                ForEach(library.favorites) { track in
-                    TrackRow(track: track, queue: library.favorites, showNowPlaying: $showNowPlaying)
-                    if track.id != library.favorites.last?.id {
+                ForEach(sortedTracks) { track in
+                    TrackRow(
+                        track: track,
+                        queue: sortedTracks,
+                        showNowPlaying: $showNowPlaying
+                    )
+
+                    if track.id != sortedTracks.last?.id {
                         Divider().opacity(0.35)
                     }
                 }
@@ -387,132 +459,113 @@ struct LibraryView: View {
         }
     }
 
-    private var cloudLibrary: some View {
-        let tracks = cloudTracks
-        let pendingDownloads = tracks.filter { !library.isDownloaded($0) }
-
-        return VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Cloud tracks") {
-                Text("\(tracks.count)")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+    private var albumsGrid: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Albums")
+                Spacer()
+                Text("\(albums.count)")
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.tertiary)
             }
 
-            if tracks.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Image(systemName: "cloud")
-                        .font(.system(size: 28, weight: .light))
-                        .foregroundStyle(.tertiary)
-
-                    Text("No cloud tracks yet")
-                        .font(.system(size: 21, weight: .semibold))
-                        .tracking(-0.3)
-
-                    Text("Sync your Tigris library to bring your cloud songs into Lilt.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    GlassActionButton(
-                        title: "Sync cloud tracks",
-                        systemImage: "arrow.clockwise",
-                        prominent: true
-                    ) {
-                        Task { await library.refreshCloud() }
-                    }
-                    .disabled(library.isRefreshingCloud)
-                    .padding(.top, 2)
-                }
-                .padding(24)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .glassSurface(radius: 26)
-            } else {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Stream from your Tigris library, or download songs for offline listening.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    HStack {
-                        Spacer(minLength: 0)
-
-                        HStack(spacing: 2) {
-                            Button {
-                                showDownloads = true
-                            } label: {
-                                Image(systemName: "list.bullet")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .frame(width: 30, height: 30)
-                            }
-                            .buttonStyle(MotifPressStyle(scale: 0.9))
-                            .accessibilityLabel("Open download manager")
-
-                            Divider().frame(height: 16)
-
-                            if !pendingDownloads.isEmpty {
-                                Button {
-                                    Task { await library.downloadAll(pendingDownloads) }
-                                } label: {
-                                    Image(systemName: "arrow.down.circle")
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .frame(width: 30, height: 30)
-                                }
-                                .buttonStyle(MotifPressStyle(scale: 0.9))
-                                .accessibilityLabel("Download all cloud tracks")
-
-                                Divider().frame(height: 16)
-                            }
-
-                            Button {
-                                guard let first = tracks.first else { return }
-                                player.play(first, queue: tracks)
-                                showNowPlaying = true
-                            } label: {
-                                Label("Play", systemImage: "play.fill")
-                                    .font(.caption.weight(.semibold))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 7)
-                            }
-                            .buttonStyle(MotifPressStyle(scale: 0.92))
-                            .accessibilityLabel("Play cloud tracks")
-                        }
-                        .glassTransport()
-                    }
-                }
-
-                LazyVStack(spacing: 0) {
-                    ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
-                        if track.id != tracks.last?.id {
-                            Divider().opacity(0.35)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var playlists: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHeader(title: "Playlists") {
-                GlassIconButton(systemImage: "plus", label: "New playlist") {
-                    showNewPlaylist = true
-                }
-            }
-
-            if library.playlists.isEmpty {
-                Text("Playlists you create will appear here.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+            if albums.isEmpty {
+                emptyScope("Albums will appear here once your songs have album details.")
             } else {
                 LazyVGrid(
                     columns: [
-                        GridItem(.flexible(), spacing: 12),
-                        GridItem(.flexible(), spacing: 12)
+                        GridItem(.flexible(), spacing: 14),
+                        GridItem(.flexible(), spacing: 14)
                     ],
                     alignment: .leading,
-                    spacing: 18
+                    spacing: 22
+                ) {
+                    ForEach(albums) { album in
+                        NavigationLink {
+                            LibraryAlbumDetailView(
+                                album: album,
+                                showNowPlaying: $showNowPlaying
+                            )
+                        } label: {
+                            LibraryAlbumGridCard(album: album)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    private var artistsGrid: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Artists")
+                Spacer()
+                Text("\(artists.count)")
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.tertiary)
+            }
+
+            if artists.isEmpty {
+                emptyScope("Artists will appear here once your songs have artist details.")
+            } else {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 16),
+                        GridItem(.flexible(), spacing: 16),
+                        GridItem(.flexible(), spacing: 16)
+                    ],
+                    alignment: .leading,
+                    spacing: 22
+                ) {
+                    ForEach(artists) { artist in
+                        NavigationLink {
+                            LibraryArtistDetailView(
+                                artistName: artist.name,
+                                showNowPlaying: $showNowPlaying
+                            )
+                        } label: {
+                            LibraryArtistGridCard(artist: artist)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.95, opacity: 0.92))
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    private var playlistsGrid: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Playlists")
+                Spacer()
+
+                Button {
+                    showNewPlaylist = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 28, height: 28)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.9))
+                .accessibilityLabel("New playlist")
+            }
+
+            if library.playlists.isEmpty {
+                emptyScope("Playlists you create will appear here.")
+            } else {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 14),
+                        GridItem(.flexible(), spacing: 14)
+                    ],
+                    alignment: .leading,
+                    spacing: 20
                 ) {
                     ForEach(library.playlists) { playlist in
                         NavigationLink {
@@ -532,5 +585,95 @@ struct LibraryView: View {
                 .padding(.horizontal, 2)
             }
         }
+    }
+
+    private var downloads: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 12) {
+                SectionTitle(title: "Downloads")
+
+                Spacer(minLength: 8)
+
+                GlassActionButton(
+                    title: "Manage",
+                    systemImage: "arrow.down.circle",
+                    accessibilityLabel: "Open download manager"
+                ) {
+                    showDownloads = true
+                }
+            }
+
+            if downloadedTracks.isEmpty {
+                VStack(alignment: .leading, spacing: 9) {
+                    Image(systemName: "arrow.down.circle")
+                        .font(.system(size: 26, weight: .light))
+                        .foregroundStyle(.tertiary)
+
+                    Text("No downloads yet")
+                        .font(.subheadline.weight(.semibold))
+
+                    Text("Download a cloud song and it will stay on this iPhone, ready without a connection.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.vertical, 18)
+            } else {
+                HStack(spacing: 10) {
+                    GlassActionButton(
+                        title: "Play",
+                        prominent: true,
+                        accessibilityLabel: "Play downloaded songs"
+                    ) {
+                        play(downloadedTracks)
+                    }
+
+                    Text("Available without a connection")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                }
+
+                LazyVStack(spacing: 0) {
+                    ForEach(downloadedTracks) { track in
+                        TrackRow(
+                            track: track,
+                            queue: downloadedTracks,
+                            showNowPlaying: $showNowPlaying
+                        )
+
+                        if track.id != downloadedTracks.last?.id {
+                            Divider().opacity(0.35)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func emptyScope(_ message: String) -> some View {
+        Text(message)
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .padding(.vertical, 6)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func play(_ tracks: [Track], shuffled: Bool = false) {
+        guard !tracks.isEmpty else { return }
+
+        if player.isShuffled != shuffled {
+            player.toggleShuffle()
+        }
+
+        var queue = tracks
+        if shuffled {
+            queue.shuffle()
+        }
+
+        guard let first = queue.first else { return }
+        player.play(first, queue: queue)
+        showNowPlaying = true
     }
 }

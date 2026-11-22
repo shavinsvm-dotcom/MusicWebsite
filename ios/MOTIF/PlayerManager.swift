@@ -167,6 +167,32 @@ final class PlayerManager: ObservableObject {
         prepareNextTrack()
     }
 
+    /// Plays a song that is already in the queue without disturbing the rest
+    /// of the upcoming order.
+    func jumpTo(_ track: Track) {
+        guard let index = queue.firstIndex(where: { $0.id == track.id }),
+              index != currentIndex
+        else { return }
+
+        navigationHistory.removeAll()
+        currentIndex = index
+        playbackError = nil
+        load(track)
+    }
+
+    func clearUpNext() {
+        guard let current,
+              queue.contains(where: { $0.id == current.id })
+        else { return }
+
+        queue = [current]
+        currentIndex = 0
+        navigationHistory.removeAll()
+        automixNextIndex = nil
+        prepareAutomixAnalysis()
+        prepareNextTrack()
+    }
+
     func moveUpNext(from source: IndexSet, to destination: Int) {
         guard let current,
               let currentIndex = queue.firstIndex(where: { $0.id == current.id }),

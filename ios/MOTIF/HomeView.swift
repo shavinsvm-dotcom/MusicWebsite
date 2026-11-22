@@ -8,6 +8,7 @@ struct HomeView: View {
     @Binding var showNowPlaying: Bool
 
     @State private var showImporter = false
+    @State private var showSettings = false
     @State private var importError: String?
 
     var body: some View {
@@ -46,6 +47,11 @@ struct HomeView: View {
             .scrollIndicators(.hidden)
             .background(AppBackground())
             .toolbar(.hidden, for: .navigationBar)
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+                    .environmentObject(library)
+                    .environmentObject(player)
+            }
             .fileImporter(
                 isPresented: $showImporter,
                 allowedContentTypes: [.audio],
@@ -98,18 +104,33 @@ struct HomeView: View {
 
             Spacer(minLength: 8)
 
-            Button {
-                showImporter = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 36, height: 36)
-                    .background(Color.primary.opacity(0.06), in: Circle())
-                    .contentShape(Circle())
+            HStack(spacing: 8) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.92))
+                .accessibilityLabel("Settings")
+
+                Button {
+                    showImporter = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.92))
+                .accessibilityLabel("Import music")
             }
-            .buttonStyle(MotifPressStyle(scale: 0.92))
-            .accessibilityLabel("Import music")
             .padding(.top, 4)
         }
     }

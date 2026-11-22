@@ -35,6 +35,7 @@ struct SearchView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var scope: SearchScope = .all
+    @State private var recentSearches: [String] = UserDefaults.standard.stringArray(forKey: "motif.recentSearches") ?? []
 
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -100,6 +101,10 @@ struct SearchView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     if trimmedQuery.isEmpty {
+                        if !recentSearches.isEmpty {
+                            recentSearchesSection
+                        }
+
                         browseHint
 
                         if !library.tracks.isEmpty {
@@ -203,8 +208,48 @@ struct SearchView: View {
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Songs, artists, albums, playlists"
             )
+            .onSubmit(of: .search) {
+                remember(trimmedQuery)
+            }
             .task(id: query) {
                 await runSearch()
+            }
+        }
+    }
+
+    private var recentSearchesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Recent searches")
+
+                Spacer()
+
+                Button("Clear") {
+                    recentSearches = []
+                    UserDefaults.standard.removeObject(forKey: "motif.recentSearches")
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(recentSearches, id: \.self) { term in
+                        Button {
+                            query = term
+                        } label: {
+                            Text(term)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(Color.primary.opacity(0.06), in: Capsule())
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.95))
+                    }
+                }
+                .padding(.vertical, 2)
             }
         }
     }
@@ -411,6 +456,18 @@ struct SearchView: View {
             .font(.footnote)
             .foregroundStyle(.secondary)
             .padding(.vertical, 6)
+    }
+
+    private func remember(_ term: String) {
+        let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2 else { return }
+
+        var next = recentSearches.filter {
+            $0.caseInsensitiveCompare(trimmed) != .orderedSame
+        }
+        next.insert(trimmed, at: 0)
+        recentSearches = Array(next.prefix(8))
+        UserDefaults.standard.set(recentSearches, forKey: "motif.recentSearches")
     }
 
     @MainActor

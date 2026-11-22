@@ -70,6 +70,33 @@ struct LibraryArtistCard: View {
     }
 }
 
+struct LibraryArtistGridCard: View {
+    let artist: LibraryArtistGroup
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    ArtworkView(url: artist.artworkURL, seed: artist.name)
+                }
+                .clipShape(Circle())
+
+            Text(artist.name)
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(-0.1)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Text(artist.count == 1 ? "1 song" : "\(artist.count) songs")
+                .font(.system(size: 10, weight: .regular))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .contentShape(Rectangle())
+    }
+}
+
 struct LibraryArtistDetailView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
@@ -394,6 +421,33 @@ struct LibraryAlbumCard: View {
             return "\(year) · \(trackText)"
         }
         return trackText
+    }
+}
+
+struct LibraryAlbumGridCard: View {
+    let album: LibraryAlbumGroup
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Color.clear
+                .aspectRatio(1, contentMode: .fit)
+                .overlay {
+                    ArtworkView(url: album.artworkURL, seed: album.title + album.artist)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            Text(album.title)
+                .font(.system(size: 13, weight: .semibold))
+                .tracking(-0.1)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            Text(album.artist)
+                .font(.system(size: 11, weight: .regular))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .contentShape(Rectangle())
     }
 }
 

@@ -196,8 +196,8 @@ private struct ScreenEntrance: ViewModifier {
 /// release is one smooth spring back to rest. Only scale and a whisper of
 /// dimming move, so a tap never looks like the button is shaking or flashing.
 struct MotifPressStyle: ButtonStyle {
-    var scale: CGFloat = 0.96
-    var opacity: Double = 0.94
+    var scale: CGFloat = 0.975
+    var opacity: Double = 0.90
     var haptic: MotifHaptics.Event? = .light
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -205,8 +205,8 @@ struct MotifPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
         let animation: Animation = pressed
-            ? .easeOut(duration: 0.12)
-            : .spring(response: 0.32, dampingFraction: 0.76)
+            ? .easeOut(duration: 0.10)
+            : .spring(response: 0.30, dampingFraction: 0.86)
 
         return configuration.label
             .scaleEffect(pressed ? scale : 1)
@@ -224,7 +224,7 @@ struct MotifPressStyle: ButtonStyle {
 /// Nothing inside the button animates separately, which is what made the old
 /// transport taps look jittery.
 struct PlayerControlPressStyle: ButtonStyle {
-    var scale: CGFloat = 0.95
+    var scale: CGFloat = 0.96
     var haptic: MotifHaptics.Event? = .light
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -233,7 +233,7 @@ struct PlayerControlPressStyle: ButtonStyle {
         let pressed = configuration.isPressed
         let animation: Animation = pressed
             ? .easeOut(duration: 0.09)
-            : .spring(response: 0.26, dampingFraction: 0.80)
+            : .spring(response: 0.24, dampingFraction: 0.88)
 
         return configuration.label
             .scaleEffect(pressed ? scale : 1)

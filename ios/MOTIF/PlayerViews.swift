@@ -1,3 +1,4 @@
+import AVKit
 import Foundation
 import SwiftUI
 import UIKit
@@ -493,6 +494,10 @@ struct NowPlayingView: View {
                 Spacer()
 
                 HStack(spacing: 6) {
+                    AirPlayRoutePicker()
+                        .frame(width: 40, height: 40)
+                        .playerGlass(Circle())
+
                     Menu {
                     if !library.playlists.isEmpty {
                         Section("Add to playlist") {
@@ -926,7 +931,11 @@ struct UpNextView: View {
             List {
                 if let current = player.current {
                     Section("Now Playing") {
-                        QueueRow(track: current, isCurrent: true)
+                        QueueRow(
+                            track: current,
+                            isCurrent: true,
+                            isPlaying: player.isPlaying
+                        )
                     }
                 }
 
@@ -937,14 +946,21 @@ struct UpNextView: View {
                             .foregroundStyle(.secondary)
                     } else {
                         ForEach(Array(player.upNextTracks.enumerated()), id: \.element.id) { index, track in
-                            QueueRow(track: track, isCurrent: false)
-                                .swipeActions {
-                                    Button(role: .destructive) {
-                                        player.removeFromUpNext(at: IndexSet(integer: index))
-                                    } label: {
-                                        Label("Remove", systemImage: "trash")
-                                    }
+                            Button {
+                                player.jumpTo(track)
+                                dismiss()
+                            } label: {
+                                QueueRow(track: track, isCurrent: false)
+                            }
+                            .buttonStyle(.plain)
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    player.removeFromUpNext(at: IndexSet(integer: index))
+                                } label: {
+                                    Label("Remove", systemImage: "trash")
                                 }
+                            }
+                            .accessibilityHint("Plays this song now")
                         }
                         .onMove { source, destination in
                             player.moveUpNext(from: source, to: destination)
@@ -962,7 +978,15 @@ struct UpNextView: View {
                     EditButton()
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    HStack(spacing: 14) {
+                        if !player.upNextTracks.isEmpty {
+                            Button("Clear") {
+                                player.clearUpNext()
+                            }
+                        }
+
+                        Button("Done") { dismiss() }
+                    }
                 }
             }
         }
@@ -971,9 +995,23 @@ struct UpNextView: View {
     }
 }
 
+private struct AirPlayRoutePicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let picker = AVRoutePickerView()
+        picker.tintColor = .white
+        picker.activeTintColor = .white
+        picker.prioritizesVideoDevices = false
+        picker.backgroundColor = .clear
+        return picker
+    }
+
+    func updateUIView(_ picker: AVRoutePickerView, context: Context) {}
+}
+
 private struct QueueRow: View {
     let track: Track
     let isCurrent: Bool
+    var isPlaying = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -994,9 +1032,8 @@ private struct QueueRow: View {
             Spacer(minLength: 8)
 
             if isCurrent {
-                Image(systemName: "waveform")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                PlayingWaveform(isPlaying: isPlaying)
+                    .frame(width: 14, height: 12)
             }
 
             Text(track.durationText)

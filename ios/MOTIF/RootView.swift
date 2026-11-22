@@ -26,6 +26,7 @@ struct RootView: View {
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .forYou
     @State private var attemptedLyricsIDs: Set<UUID> = []
+    @AppStorage("motif.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @Namespace private var playerTransition
 
     private var playerPresented: Binding<Bool> {
@@ -38,6 +39,7 @@ struct RootView: View {
     var body: some View {
         tabs
             .tint(.primary)
+            .preferredColorScheme(AppAppearance.resolved(appearanceRaw))
             .environmentObject(library)
             .environmentObject(player)
             .environmentObject(player.progress)
