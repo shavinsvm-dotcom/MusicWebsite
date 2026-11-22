@@ -24,7 +24,7 @@ struct AirPodsMomentOverlay: View {
                         backdrop(size: size)
 
                         VStack(spacing: 0) {
-                            statusTile
+                            statusTile(isConnected: isConnected)
                                 .padding(.bottom, 22)
 
                             VStack(spacing: 0) {
@@ -114,20 +114,26 @@ struct AirPodsMomentOverlay: View {
         .opacity(revealed ? 1 : 0)
     }
 
-    private var statusTile: some View {
+    private func statusTile(isConnected: Bool) -> some View {
         ZStack {
             if !reduceMotion {
-                Circle()
-                    .strokeBorder(.white, lineWidth: 0.8)
-                    .frame(width: 96, height: 96)
-                    .scaleEffect(1 + ripple * 1.65)
-                    .opacity(Double(sin(Double(ripple) * .pi)) * 0.22)
+                if isConnected {
+                    NameDropRipple()
+                } else {
+                    let scale = 1 + ripple * 2.8
+
+                    Circle()
+                        .strokeBorder(.white, lineWidth: 0.8 / scale)
+                        .frame(width: 96, height: 96)
+                        .scaleEffect(scale)
+                        .opacity(Double(sin(Double(ripple) * .pi)) * 0.30)
+                }
             }
 
             SingleAirPodGlyph()
-                .frame(width: 28, height: 42)
-                .scaleEffect(1.30)
-                .shadow(color: .black.opacity(0.30), radius: 4, y: 1)
+                .frame(width: 30, height: 46)
+                .scaleEffect(1.28)
+                .shadow(color: .black.opacity(0.28), radius: 3, y: 1)
                 .frame(width: 96, height: 96)
                 .nativeGlass(Circle())
                 .overlay {
@@ -172,12 +178,9 @@ struct AirPodsMomentOverlay: View {
         }
         MotifHaptics.play(.soft)
 
-        if moment.kind == .connected {
-            withAnimation(.easeOut(duration: 1.35)) {
-                ripple = 1
-            }
-        } else {
-            // Collapse the ring inward for the negative beat.
+        if moment.kind == .disconnected {
+            // Collapse the ring inward for the negative beat; connect gets
+            // the NameDrop ripple, which drives itself from the tile centre.
             ripple = 1
             withAnimation(.easeOut(duration: 1.10)) {
                 ripple = 0
@@ -219,41 +222,81 @@ struct AirPodsMomentOverlay: View {
 /// The status glyph: one white AirPod with a speaker slot and vent cut out,
 /// traced from the flat single-pod reference.
 private struct SingleAirPodGlyph: View {
+    /// Lightweight, geometrically built bud: a broad head, the ear tip folded
+    /// in at the lower left, and a stem tucked under the back of the head.
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 3.4, style: .continuous)
+            Capsule(style: .continuous)
                 .fill(.white)
-                .frame(width: 9, height: 24)
-                .offset(x: 2, y: 11)
+                .frame(width: 8.6, height: 24.5)
+                .rotationEffect(.degrees(3))
+                .offset(x: 5.2, y: 10.8)
+
+            Capsule(style: .continuous)
+                .fill(.white)
+                .frame(width: 8.2, height: 7.0)
+                .rotationEffect(.degrees(-44))
+                .offset(x: -8.9, y: -2.2)
 
             head
-                .offset(y: -8)
+                .offset(y: -8.6)
         }
-        .frame(width: 28, height: 42)
+        .frame(width: 30, height: 46)
     }
 
     private var head: some View {
         Ellipse()
             .fill(.white)
-            .frame(width: 27, height: 22)
+            .frame(width: 26, height: 20)
             .overlay {
                 ZStack {
-                    Capsule()
+                    Capsule(style: .continuous)
                         .fill(.black)
-                        .frame(width: 6, height: 4.5)
-                        .rotationEffect(.degrees(-20))
-                        .offset(x: -4, y: 1)
+                        .frame(width: 8.2, height: 2.0)
+                        .offset(x: -3.2, y: -1.4)
 
-                    Capsule()
+                    Circle()
                         .fill(.black)
-                        .frame(width: 3.5, height: 3)
-                        .rotationEffect(.degrees(-20))
-                        .offset(x: 5, y: -2)
+                        .frame(width: 2.1, height: 2.1)
+                        .offset(x: 8.2, y: -4.1)
                 }
                 .blendMode(.destinationOut)
             }
             .compositingGroup()
-            .rotationEffect(.degrees(-16))
+            .rotationEffect(.degrees(-14))
+    }
+}
+
+/// Three hairlines leaving the glass tile on a slow loop, the way NameDrop
+/// pushes a pulse out from the devices it is connecting.
+private struct NameDropRipple: View {
+    @State private var start = Date()
+
+    private let cycle: Double = 2.6
+    private let ringCount = 3
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let elapsed = timeline.date.timeIntervalSince(start)
+            let phase = elapsed.truncatingRemainder(dividingBy: cycle) / cycle
+
+            ZStack {
+                ForEach(0..<ringCount, id: \.self) { index in
+                    let p = (phase + Double(index) / Double(ringCount))
+                        .truncatingRemainder(dividingBy: 1)
+
+                    let scale = 1 + CGFloat(p) * 4.2
+
+                    Circle()
+                        .strokeBorder(.white, lineWidth: 0.8 / scale)
+                        .scaleEffect(scale)
+                        .opacity(sin(p * .pi) * 0.30)
+                }
+            }
+        }
+        .frame(width: 96, height: 96)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
 
