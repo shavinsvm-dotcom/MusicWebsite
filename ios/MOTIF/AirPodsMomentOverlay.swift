@@ -9,7 +9,6 @@ struct AirPodsMomentOverlay: View {
     @State private var snapshot: UIImage?
     @State private var revealed = false
     @State private var settled = false
-    @State private var ripple: CGFloat = 0
     @State private var dismissing = false
     @State private var announced = false
 
@@ -53,21 +52,12 @@ struct AirPodsMomentOverlay: View {
                         .position(x: size.width / 2, y: size.height * 0.47)
                     }
                     .frame(width: size.width, height: size.height)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        monitor.dismiss()
-                    }
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(
                         isConnected
                             ? "\(moment.name) connected"
                             : "\(moment.name) disconnected"
                     )
-                    .accessibilityHint("Double tap to dismiss")
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction {
-                        monitor.dismiss()
-                    }
                 }
                 .ignoresSafeArea()
                 .environment(\.colorScheme, .dark)
@@ -89,7 +79,6 @@ struct AirPodsMomentOverlay: View {
         snapshot = nil
         revealed = false
         settled = false
-        ripple = 0
         dismissing = false
         announced = false
     }
@@ -117,22 +106,13 @@ struct AirPodsMomentOverlay: View {
     private func statusTile(isConnected: Bool) -> some View {
         ZStack {
             if !reduceMotion {
-                if isConnected {
-                    NameDropRipple()
-                } else {
-                    let scale = 1 + ripple * 2.8
-
-                    Circle()
-                        .strokeBorder(.white, lineWidth: 0.8 / scale)
-                        .frame(width: 96, height: 96)
-                        .scaleEffect(scale)
-                        .opacity(Double(sin(Double(ripple) * .pi)) * 0.30)
-                }
+                AirDropRadar(clockwise: isConnected)
+                    .id(isConnected)
             }
 
-            SingleAirPodGlyph()
-                .frame(width: 30, height: 46)
-                .scaleEffect(1.28)
+            AirPodsPairGlyph()
+                .frame(width: 46, height: 34)
+                .scaleEffect(1.35)
                 .shadow(color: .black.opacity(0.28), radius: 3, y: 1)
                 .frame(width: 96, height: 96)
                 .nativeGlass(Circle())
@@ -178,15 +158,6 @@ struct AirPodsMomentOverlay: View {
         }
         MotifHaptics.play(.soft)
 
-        if moment.kind == .disconnected {
-            // Collapse the ring inward for the negative beat; connect gets
-            // the NameDrop ripple, which drives itself from the tile centre.
-            ripple = 1
-            withAnimation(.easeOut(duration: 1.10)) {
-                ripple = 0
-            }
-        }
-
         try? await Task.sleep(nanoseconds: 180_000_000)
         guard !Task.isCancelled else { return }
         withAnimation(.easeOut(duration: 0.30)) {
@@ -219,82 +190,100 @@ struct AirPodsMomentOverlay: View {
     }
 }
 
-/// The status glyph: one white AirPod with a speaker slot and vent cut out,
-/// traced from the flat single-pod reference.
-private struct SingleAirPodGlyph: View {
-    /// Lightweight, geometrically built bud: a broad head, the ear tip folded
-    /// in at the lower left, and a stem tucked under the back of the head.
+/// The reference pair: two mirrored buds, each with the angled inner vent and
+/// the slim outer slot cut through the head.
+private struct AirPodsPairGlyph: View {
+    var body: some View {
+        HStack(spacing: 3.5) {
+            AirPodBud()
+                .scaleEffect(x: -1, y: 1)
+
+            AirPodBud()
+        }
+        .frame(width: 46, height: 34)
+    }
+}
+
+private struct AirPodBud: View {
     var body: some View {
         ZStack {
             Capsule(style: .continuous)
                 .fill(.white)
-                .frame(width: 8.6, height: 24.5)
-                .rotationEffect(.degrees(3))
-                .offset(x: 5.2, y: 10.8)
-
-            Capsule(style: .continuous)
-                .fill(.white)
-                .frame(width: 8.2, height: 7.0)
-                .rotationEffect(.degrees(-44))
-                .offset(x: -8.9, y: -2.2)
+                .frame(width: 6.6, height: 16)
+                .offset(y: 7.5)
 
             head
-                .offset(y: -8.6)
+                .offset(y: -8)
         }
-        .frame(width: 30, height: 46)
+        .frame(width: 21, height: 34)
     }
 
     private var head: some View {
         Ellipse()
             .fill(.white)
-            .frame(width: 26, height: 20)
+            .frame(width: 21, height: 18)
             .overlay {
                 ZStack {
+                    Ellipse()
+                        .fill(.black)
+                        .frame(width: 5.6, height: 3.7)
+                        .rotationEffect(.degrees(-28))
+                        .offset(x: -2.6, y: -3.4)
+
                     Capsule(style: .continuous)
                         .fill(.black)
-                        .frame(width: 8.2, height: 2.0)
-                        .offset(x: -3.2, y: -1.4)
-
-                    Circle()
-                        .fill(.black)
-                        .frame(width: 2.1, height: 2.1)
-                        .offset(x: 8.2, y: -4.1)
+                        .frame(width: 1.8, height: 5.6)
+                        .rotationEffect(.degrees(-6))
+                        .offset(x: 7.2, y: 1.0)
                 }
                 .blendMode(.destinationOut)
             }
             .compositingGroup()
-            .rotationEffect(.degrees(-14))
     }
 }
 
-/// Three hairlines leaving the glass tile on a slow loop, the way NameDrop
-/// pushes a pulse out from the devices it is connecting.
-private struct NameDropRipple: View {
-    @State private var start = Date()
+/// AirDrop's radar: three arcs with the AirDrop wedge open at the bottom and
+/// a faint sweep turning inside them. The glass tile is the blip at the hub.
+private struct AirDropRadar: View {
+    let clockwise: Bool
 
-    private let cycle: Double = 2.6
-    private let ringCount = 3
+    @State private var sweep: Double = 0
+
+    private let diameters: [CGFloat] = [116, 140, 164]
+    private let opacities: [Double] = [0.20, 0.14, 0.09]
 
     var body: some View {
-        TimelineView(.animation) { timeline in
-            let elapsed = timeline.date.timeIntervalSince(start)
-            let phase = elapsed.truncatingRemainder(dividingBy: cycle) / cycle
+        ZStack {
+            Circle()
+                .fill(
+                    AngularGradient(
+                        gradient: Gradient(stops: [
+                            .init(color: .white.opacity(0.09), location: 0),
+                            .init(color: .white.opacity(0), location: 0.16)
+                        ]),
+                        center: .center
+                    )
+                )
+                .frame(width: 164, height: 164)
+                .rotationEffect(.degrees(sweep + 90))
 
-            ZStack {
-                ForEach(0..<ringCount, id: \.self) { index in
-                    let p = (phase + Double(index) / Double(ringCount))
-                        .truncatingRemainder(dividingBy: 1)
-
-                    let scale = 1 + CGFloat(p) * 4.2
-
-                    Circle()
-                        .strokeBorder(.white, lineWidth: 0.8 / scale)
-                        .scaleEffect(scale)
-                        .opacity(sin(p * .pi) * 0.30)
-                }
+            ForEach(Array(diameters.enumerated()), id: \.offset) { index, diameter in
+                Circle()
+                    .trim(from: 0.14, to: 0.86)
+                    .stroke(
+                        .white.opacity(opacities[index]),
+                        style: StrokeStyle(lineWidth: 0.7, lineCap: .round)
+                    )
+                    .frame(width: diameter, height: diameter)
+                    .rotationEffect(.degrees(90))
             }
         }
-        .frame(width: 96, height: 96)
+        .frame(width: 164, height: 164)
+        .onAppear {
+            withAnimation(.linear(duration: 9).repeatForever(autoreverses: false)) {
+                sweep = clockwise ? 360 : -360
+            }
+        }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
