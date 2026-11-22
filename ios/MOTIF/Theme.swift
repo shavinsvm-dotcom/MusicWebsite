@@ -1358,6 +1358,43 @@ struct GlassActionButton: View {
     }
 }
 
+/// The single loud control on a page. Primary actions get an ink-on-paper
+/// capsule; everything else stays glass so a screen has one obvious next step.
+struct LiltPrimaryButton: View {
+    let title: String
+    var systemImage: String? = nil
+    var height: CGFloat = 44
+    var expands = true
+    var isEnabled = true
+    var accessibilityLabel: String? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 12, weight: .bold))
+                }
+
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Color(uiColor: .systemBackground))
+            .padding(.horizontal, 18)
+            .frame(maxWidth: expands ? CGFloat.infinity : nil)
+            .frame(height: height)
+            .background(Color.primary, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.94))
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.35)
+        .accessibilityLabel(accessibilityLabel ?? title)
+    }
+}
+
 struct GlassIconButton: View {
     let systemImage: String
     let label: String
