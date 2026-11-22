@@ -209,6 +209,8 @@ struct SettingsView: View {
                     .environmentObject(library)
             }
         }
+        // Apply the choice inside the sheet too, so the change is visible
+        // before the sheet is dismissed.
         .preferredColorScheme(AppAppearance.resolved(appearanceRaw))
     }
 }
