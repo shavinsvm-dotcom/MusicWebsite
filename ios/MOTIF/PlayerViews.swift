@@ -63,7 +63,7 @@ struct MiniPlayer: View {
                                     .font(.system(size: 12, weight: .semibold))
                                     .frame(width: 30, height: 30)
                                     .contentShape(Circle())
-                                    .playerGlass(Circle())
+                                    .rowControl(Circle())
                             }
                             .buttonStyle(PlayerControlPressStyle())
                             .accessibilityLabel("Previous")
@@ -78,7 +78,7 @@ struct MiniPlayer: View {
                                     .frame(width: 34, height: 34)
                                     .contentShape(Circle())
                                     .motifReplace()
-                                    .playerGlass(Circle())
+                                    .rowControl(Circle())
                             }
                             .buttonStyle(PlayerControlPressStyle(haptic: .medium))
                             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
@@ -92,7 +92,7 @@ struct MiniPlayer: View {
                                     .font(.system(size: 12, weight: .semibold))
                                     .frame(width: 30, height: 30)
                                     .contentShape(Circle())
-                                    .playerGlass(Circle())
+                                    .rowControl(Circle())
                             }
                             .buttonStyle(PlayerControlPressStyle())
                             .accessibilityLabel("Next")
@@ -257,6 +257,8 @@ struct NowPlayingView: View {
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
     @State private var effectsReady = false
+    @State private var beatGrid: BeatGrid?
+    @State private var beatPulseGradient = PlayerGradient.fallback
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 58
     @ScaledMetric(relativeTo: .body) private var artistSize: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11
@@ -276,6 +278,9 @@ struct NowPlayingView: View {
             if let track = currentTrack {
                 backdrop(track)
                 content(track)
+                    .task(id: track.id) {
+                        await prepareBeatPulse(for: track)
+                    }
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "music.note")
@@ -330,6 +335,37 @@ struct NowPlayingView: View {
         )
     }
 
+    @MainActor
+    private func prepareBeatPulse(for track: Track) async {
+        beatGrid = nil
+
+        if let url = track.artworkURL {
+            if let gradient = PlaybackBackdropCache.shared.gradient(for: url) {
+                beatPulseGradient = gradient
+            } else {
+                beatPulseGradient = await PlaybackBackdropCache.shared.prepareGradient(for: url)
+                guard !Task.isCancelled else { return }
+            }
+        } else {
+            beatPulseGradient = .fallback
+        }
+
+        if let cached = AutomixAnalysisService.shared.grid(for: track) {
+            beatGrid = cached
+            return
+        }
+
+        // Let the player transition finish before spending time decoding the
+        // first 90 seconds of audio for a beat grid. The analysis runs on a
+        // utility task and is cached on disk for the next session.
+        try? await Task.sleep(nanoseconds: 700_000_000)
+        guard !Task.isCancelled else { return }
+        if let analyzed = await AutomixAnalysisService.shared.analyze(track) {
+            guard !Task.isCancelled else { return }
+            beatGrid = analyzed
+        }
+    }
+
     private func content(_ track: Track) -> some View {
         GeometryReader { geometry in
             // Slightly wider than the screen so the artwork never exposes a
@@ -374,9 +410,19 @@ struct NowPlayingView: View {
                     }
 
                     if effectsReady {
-                        HeroEdgeBlurOverlay(url: track.artworkURL, intensity: 1)
+                        HeroEdgeBlurOverlay(
+                            url: track.artworkURL,
+                            intensity: 1,
+                            isPlaying: player.isPlaying
+                        )
                             .transition(.opacity)
                     }
+
+                    BeatPulseOverlay(
+                        grid: beatGrid,
+                        isPlaying: player.isPlaying,
+                        gradient: beatPulseGradient
+                    )
                 }
                 .compositingGroup()
                 .id(track.id)

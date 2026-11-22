@@ -6,7 +6,7 @@ struct LibraryArtistCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            ArtworkView(url: artist.artworkURL, seed: artist.name)
+            ArtworkView(url: artist.artworkURL, seed: artist.name, card: true)
                 .frame(width: 112, height: 112)
                 .clipShape(Circle())
                 .overlay {
@@ -39,7 +39,7 @@ struct LibraryArtistGridCard: View {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
                 .overlay {
-                    ArtworkView(url: artist.artworkURL, seed: artist.name)
+                    ArtworkView(url: artist.artworkURL, seed: artist.name, card: true)
                 }
                 .clipShape(Circle())
 
@@ -341,7 +341,7 @@ struct LibraryAlbumCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ArtworkView(url: album.artworkURL, seed: album.title + album.artist)
+            ArtworkView(url: album.artworkURL, seed: album.title + album.artist, card: true)
                 .frame(width: 132, height: 132)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay {
@@ -382,7 +382,7 @@ struct LibraryAlbumGridCard: View {
             Color.clear
                 .aspectRatio(1, contentMode: .fit)
                 .overlay {
-                    ArtworkView(url: album.artworkURL, seed: album.title + album.artist)
+                    ArtworkView(url: album.artworkURL, seed: album.title + album.artist, card: true)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 

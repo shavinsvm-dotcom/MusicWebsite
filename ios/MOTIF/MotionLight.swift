@@ -46,8 +46,8 @@ final class MotionLightController {
         guard shouldStart, motion.isDeviceMotionAvailable else { return }
 
         motion.deviceMotionUpdateInterval = ProcessInfo.processInfo.isLowPowerModeEnabled
-            ? 1.0 / 15.0
-            : 1.0 / 30.0
+            ? 1.0 / 12.0
+            : 1.0 / 20.0
         motion.startDeviceMotionUpdates(using: .xArbitraryZVertical, to: queue) { [weak self] data, _ in
             guard let self, let data else { return }
 
@@ -378,21 +378,30 @@ final class HeroEdgeBlurCache {
 struct HeroEdgeBlurOverlay: View {
     let url: URL?
     var intensity: Double = 1
+    var isPlaying: Bool = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     @State private var edges: HeroEdgeBlur?
     @State private var isVisible = false
 
     private let controller = MotionLightController.shared
 
+    private var motionAllowed: Bool {
+        !reduceMotion && !ProcessInfo.processInfo.isLowPowerModeEnabled
+    }
+
     var body: some View {
         Group {
-            if reduceMotion {
-                canvas(sample: .level)
-            } else {
-                TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !isVisible)) { _ in
+            if motionAllowed {
+                TimelineView(.animation(
+                    minimumInterval: 1.0 / 20.0,
+                    paused: !isVisible || !isPlaying || scenePhase != .active
+                )) { _ in
                     canvas(sample: controller.sample)
                 }
+            } else {
+                canvas(sample: .level)
             }
         }
         .allowsHitTesting(false)
@@ -401,13 +410,13 @@ struct HeroEdgeBlurOverlay: View {
         }
         .onAppear {
             isVisible = true
-            if !reduceMotion {
+            if motionAllowed {
                 controller.begin()
             }
         }
         .onDisappear {
             isVisible = false
-            if !reduceMotion {
+            if motionAllowed {
                 controller.end()
             }
         }

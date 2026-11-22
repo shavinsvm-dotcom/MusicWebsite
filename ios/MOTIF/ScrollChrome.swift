@@ -44,9 +44,9 @@ private struct CarouselItemTransition: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 17.0, *), !reduceMotion {
             content.scrollTransition(.interactive, axis: .horizontal) { view, phase in
-                view
-                    .scaleEffect(phase.isIdentity ? 1 : 0.95)
-                    .opacity(phase.isIdentity ? 1 : 0.78)
+                // Opacity alone keeps the shelf edge soft without forcing a
+                // scaled transform and its offscreen pass for every card.
+                view.opacity(phase.isIdentity ? 1 : 0.84)
             }
         } else {
             content

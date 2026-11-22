@@ -162,7 +162,7 @@ struct HomeView: View {
 
     private func mixArtwork(_ index: Int, tracks: [Track]) -> some View {
         let track = tracks[index % max(tracks.count, 1)]
-        return ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+        return ArtworkView(url: track.artworkURL, seed: track.title + track.artist, card: true)
             .frame(maxWidth: .infinity)
             .frame(height: 122)
             .clipped()
@@ -293,7 +293,7 @@ struct HomeView: View {
     private func trackTile(_ track: Track) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack(alignment: .bottomTrailing) {
-                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                ArtworkView(url: track.artworkURL, seed: track.title + track.artist, card: true)
                     .frame(width: 132, height: 132)
 
                 Image(systemName: "play.fill")

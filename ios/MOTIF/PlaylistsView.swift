@@ -190,19 +190,21 @@ struct PlaylistsView: View {
 struct PlaylistArtwork: View {
     let playlist: Playlist
     let tracks: [Track]
+    var card = true
 
     var body: some View {
         if let cover = playlist.customCoverURL {
-            ArtworkView(url: cover, seed: playlist.name)
+            ArtworkView(url: cover, seed: playlist.name, card: card)
                 .id(cover)
         } else {
-            PlaylistMosaic(tracks: tracks)
+            PlaylistMosaic(tracks: tracks, card: card)
         }
     }
 }
 
 struct PlaylistMosaic: View {
     let tracks: [Track]
+    var card = true
 
     var body: some View {
         GeometryReader { geometry in
@@ -215,7 +217,7 @@ struct PlaylistMosaic: View {
                 // A two- or three-song playlist looks best as one strong cover.
                 // Splitting a single square into thin strips crops artwork badly.
                 let track = tracks.first(where: { $0.artworkURL != nil }) ?? tracks[0]
-                ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+                ArtworkView(url: track.artworkURL, seed: track.title + track.artist, card: card)
                     .frame(width: width, height: height)
             } else {
                 VStack(spacing: 0) {
@@ -259,9 +261,23 @@ struct PlaylistMosaic: View {
     private func cell(_ index: Int, width: CGFloat, height: CGFloat) -> some View {
         if index < tracks.count {
             let track = tracks[index]
-            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
+            if card {
+                ArtworkView(
+                    url: track.artworkURL,
+                    seed: track.title + track.artist,
+                    thumbnail: true
+                )
                 .frame(width: width, height: height)
                 .clipped()
+            } else {
+                ArtworkView(
+                    url: track.artworkURL,
+                    seed: track.title + track.artist,
+                    card: true
+                )
+                .frame(width: width, height: height)
+                .clipped()
+            }
         } else {
             Color(white: 0.12)
                 .frame(width: width, height: height)
@@ -332,8 +348,12 @@ struct PlaylistDetailView: View {
         List {
             Section {
                 VStack(spacing: 12) {
-                    PlaylistArtwork(playlist: playlist ?? Playlist(name: "Playlist"), tracks: tracks)
-                        .frame(width: 240, height: 240)
+                    PlaylistArtwork(
+                        playlist: playlist ?? Playlist(name: "Playlist"),
+                        tracks: tracks,
+                        card: false
+                    )
+                    .frame(width: 240, height: 240)
                         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -1237,7 +1257,7 @@ struct PlaylistEditorView: View {
                 .resizable()
                 .scaledToFill()
         } else if !removeCover, let cover = playlist?.customCoverURL {
-            ArtworkView(url: cover, seed: previewPlaylist.name)
+            ArtworkView(url: cover, seed: previewPlaylist.name, card: true)
         } else {
             PlaylistMosaic(tracks: tracks)
         }

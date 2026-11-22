@@ -345,6 +345,7 @@ struct ArtworkView: View {
     let onImageLoaded: ((UIImage) -> Void)?
     let highResolution: Bool
     let thumbnail: Bool
+    let card: Bool
 
     @State private var image: UIImage?
     @State private var failed = false
@@ -354,17 +355,22 @@ struct ArtworkView: View {
         seed: String,
         onImageLoaded: ((UIImage) -> Void)? = nil,
         highResolution: Bool = false,
-        thumbnail: Bool = false
+        thumbnail: Bool = false,
+        card: Bool = false
     ) {
         self.url = url
         self.seed = seed
         self.onImageLoaded = onImageLoaded
         self.highResolution = highResolution
         self.thumbnail = thumbnail
+        self.card = card
 
         let cached: UIImage?
         if highResolution, let url {
             cached = ArtworkImageCache.shared.heroImage(for: url)
+                ?? ArtworkImageCache.shared.image(for: url)
+        } else if card, let url {
+            cached = ArtworkImageCache.shared.card(for: url)
                 ?? ArtworkImageCache.shared.image(for: url)
         } else if thumbnail, let url {
             cached = ArtworkImageCache.shared.thumbnail(for: url)
@@ -380,6 +386,10 @@ struct ArtworkView: View {
         guard let url else { return nil }
         if highResolution {
             return ArtworkImageCache.shared.heroImage(for: url)
+                ?? ArtworkImageCache.shared.image(for: url)
+        }
+        if card {
+            return ArtworkImageCache.shared.card(for: url)
                 ?? ArtworkImageCache.shared.image(for: url)
         }
         if thumbnail {
@@ -400,7 +410,7 @@ struct ArtworkView: View {
             if let image = resolvedImage {
                 Image(uiImage: image)
                     .resizable()
-                    .interpolation(.high)
+                    .interpolation(thumbnail || card ? .medium : .high)
                     .antialiased(true)
                     .scaledToFill()
             } else if url != nil, !failed {
@@ -417,6 +427,8 @@ struct ArtworkView: View {
                 if highResolution {
                     cached = ArtworkImageCache.shared.heroImage(for: url)
                         ?? ArtworkImageCache.shared.image(for: url)
+                } else if card {
+                    cached = ArtworkImageCache.shared.card(for: url)
                 } else if thumbnail {
                     cached = ArtworkImageCache.shared.thumbnail(for: url)
                 } else {
@@ -430,9 +442,9 @@ struct ArtworkView: View {
                     failed = false
                     onImageLoaded?(cached)
 
-                    // A cached thumbnail can paint immediately, but the player
-                    // still upgrades itself to the 1200 px hero decode.
-                    if thumbnail {
+                    // Cached row and card sizes paint immediately; only the
+                    // player upgrades itself to the 1200 px hero decode.
+                    if thumbnail || card {
                         return
                     }
                     if !highResolution || ArtworkImageCache.shared.heroImage(for: url) != nil {
@@ -459,6 +471,13 @@ struct ArtworkView: View {
                 onImageLoaded?(cached)
                 return
             }
+        } else if card {
+            if let cached = ArtworkImageCache.shared.card(for: url) {
+                image = cached
+                failed = false
+                onImageLoaded?(cached)
+                return
+            }
         } else if thumbnail {
             if let cached = ArtworkImageCache.shared.thumbnail(for: url) {
                 image = cached
@@ -473,7 +492,7 @@ struct ArtworkView: View {
             return
         }
 
-        if !highResolution && !thumbnail {
+        if !highResolution && !thumbnail && !card {
             image = nil
         }
         failed = false
@@ -481,6 +500,8 @@ struct ArtworkView: View {
         let loaded: UIImage?
         if highResolution {
             loaded = await ArtworkImageCache.shared.loadHeroImage(for: url)
+        } else if card {
+            loaded = await ArtworkImageCache.shared.loadCard(for: url)
         } else if thumbnail {
             loaded = await ArtworkImageCache.shared.loadThumbnail(for: url)
         } else {
@@ -526,10 +547,12 @@ final class ArtworkImageCache {
 
     private let cache = NSCache<NSURL, UIImage>()
     private let heroCache = NSCache<NSURL, UIImage>()
+    private let cardCache = NSCache<NSURL, UIImage>()
     private let thumbnailCache = NSCache<NSURL, UIImage>()
     private let taskLock = NSLock()
     private var loadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
     private var heroLoadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
+    private var cardLoadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
     private var thumbnailLoadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
 
     private init() {
@@ -537,6 +560,8 @@ final class ArtworkImageCache {
         cache.totalCostLimit = 96 * 1024 * 1024
         heroCache.countLimit = 20
         heroCache.totalCostLimit = 72 * 1024 * 1024
+        cardCache.countLimit = 120
+        cardCache.totalCostLimit = 72 * 1024 * 1024
         thumbnailCache.countLimit = 220
         thumbnailCache.totalCostLimit = 40 * 1024 * 1024
     }
@@ -546,12 +571,21 @@ final class ArtworkImageCache {
     }
 
     func store(_ image: UIImage, for url: URL) {
+        // Never let a full-resolution cover enter the shared 720 px cache.
+        // The player and blur prep use this cache too, and a multi-megapixel
+        // image there turns every row into a large texture upload.
+        let maxSide = max(image.size.width, image.size.height)
+        guard maxSide <= 900 else { return }
         let cost = Int(image.size.width * image.size.height * 4)
         cache.setObject(image, forKey: url as NSURL, cost: cost)
     }
 
     func heroImage(for url: URL) -> UIImage? {
         heroCache.object(forKey: url as NSURL)
+    }
+
+    func card(for url: URL) -> UIImage? {
+        cardCache.object(forKey: url as NSURL)
     }
 
     func thumbnail(for url: URL) -> UIImage? {
@@ -614,6 +648,38 @@ final class ArtworkImageCache {
 
         if let image {
             store(image, for: url)
+        }
+        return image
+    }
+
+    /// Card-sized covers feed the 100–170 pt Home, album, artist and playlist
+    /// tiles. They sit between the 720 px detail decode and the 220 px row
+    /// thumbnail so a grid never pays for four large textures per playlist.
+    func loadCard(for url: URL, maxPixelSize: Int = 480) async -> UIImage? {
+        if let cached = card(for: url) { return cached }
+
+        let key = url as NSURL
+        taskLock.lock()
+        if let existing = cardLoadingTasks[key] {
+            taskLock.unlock()
+            return await existing.value
+        }
+
+        let task = Task.detached(priority: .utility) {
+            await Self.downsample(url: url, maxPixelSize: maxPixelSize)
+        }
+        cardLoadingTasks[key] = task
+        taskLock.unlock()
+
+        let image = await task.value
+
+        taskLock.lock()
+        cardLoadingTasks[key] = nil
+        taskLock.unlock()
+
+        if let image {
+            let cost = Int(image.size.width * image.size.height * 4)
+            cardCache.setObject(image, forKey: key, cost: cost)
         }
         return image
     }
@@ -965,20 +1031,13 @@ final class PlaybackBackdropCache {
     func prepareGradient(for url: URL) async -> PlayerGradient {
         if let cached = gradient(for: url) { return cached }
 
-        let artwork: UIImage?
-        if let cachedArtwork = ArtworkImageCache.shared.image(for: url) {
-            artwork = cachedArtwork
-        } else if url.isFileURL {
-            artwork = UIImage(contentsOfFile: url.path)
-        } else {
-            guard let (data, _) = try? await URLSession.shared.data(from: url) else {
-                return .fallback
-            }
-            artwork = UIImage(data: data)
+        // A 3×3 colour sample only needs a tiny decode. Loading the original
+        // file here used to put a full-resolution cover back into the row
+        // cache, so every list item that reused the artwork rendered a huge
+        // texture.
+        guard let artwork = await ArtworkImageCache.shared.loadThumbnail(for: url) else {
+            return .fallback
         }
-
-        guard let artwork else { return .fallback }
-        ArtworkImageCache.shared.store(artwork, for: url)
 
         let sampled = await Task.detached(priority: .utility) {
             Self.makeGradient(from: artwork)
@@ -1049,20 +1108,9 @@ final class PlaybackBackdropCache {
         let size = renderSize
         let ciContext = context
         let task = Task.detached(priority: .utility) { () -> UIImage? in
-            let artwork: UIImage?
-            if let cachedArtwork = ArtworkImageCache.shared.image(for: url) {
-                artwork = cachedArtwork
-            } else if url.isFileURL {
-                artwork = UIImage(contentsOfFile: url.path)
-            } else {
-                guard let (data, _) = try? await URLSession.shared.data(from: url) else {
-                    return nil
-                }
-                artwork = UIImage(data: data)
+            guard let artwork = await ArtworkImageCache.shared.loadImage(for: url) else {
+                return nil
             }
-
-            guard let artwork else { return nil }
-            ArtworkImageCache.shared.store(artwork, for: url)
             return Self.render(artwork, size: size, context: ciContext)
         }
         renders[key] = task
