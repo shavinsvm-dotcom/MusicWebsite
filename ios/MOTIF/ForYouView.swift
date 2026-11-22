@@ -93,9 +93,10 @@ struct ForYouView: View {
 
                 Image(systemName: "play.fill")
                     .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(.black)
                     .frame(width: 46, height: 46)
-                    .nativeGlass(Circle(), interactive: true)
+                    .background(Color.white.opacity(0.94), in: Circle())
+                    .shadow(color: .black.opacity(0.18), radius: 9, y: 4)
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
@@ -234,7 +235,7 @@ struct ForYouView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(radius: 26)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
 }

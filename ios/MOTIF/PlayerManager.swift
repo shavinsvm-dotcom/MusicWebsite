@@ -185,6 +185,7 @@ final class PlayerManager: ObservableObject {
               queue.contains(where: { $0.id == current.id })
         else { return }
 
+        cancelCrossfade()
         queue = [current]
         currentIndex = 0
         navigationHistory.removeAll()

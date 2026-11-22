@@ -9,6 +9,7 @@ struct LibraryView: View {
         case artists
         case playlists
         case downloads
+        case cloud
 
         var id: String { rawValue }
 
@@ -19,6 +20,7 @@ struct LibraryView: View {
             case .artists: return "Artists"
             case .playlists: return "Playlists"
             case .downloads: return "Downloads"
+            case .cloud: return "Cloud"
             }
         }
     }
@@ -53,6 +55,7 @@ struct LibraryView: View {
     @State private var showImporter = false
     @State private var showNewPlaylist = false
     @State private var showDownloads = false
+    @State private var showSettings = false
     @State private var importError: String?
 
     private var section: LibrarySection {
@@ -101,6 +104,10 @@ struct LibraryView: View {
         library.tracks.filter { library.isDownloaded($0) }
     }
 
+    private var cloudTracks: [Track] {
+        library.tracks.filter(\.isCloud)
+    }
+
     private var albums: [LibraryAlbumGroup] {
         LibraryAlbumBuilder.albums(from: library.tracks)
     }
@@ -139,6 +146,8 @@ struct LibraryView: View {
                             playlistsGrid
                         case .downloads:
                             downloads
+                        case .cloud:
+                            cloudSection
                         }
                     }
                 }
@@ -168,6 +177,11 @@ struct LibraryView: View {
             .sheet(isPresented: $showDownloads) {
                 DownloadManagerView()
                     .environmentObject(library)
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+                    .environmentObject(library)
+                    .environmentObject(player)
             }
             .alert(
                 "Couldn’t add music",
@@ -208,7 +222,21 @@ struct LibraryView: View {
 
             Spacer(minLength: 8)
 
-            Menu {
+            HStack(spacing: 8) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 36, height: 36)
+                        .background(Color.primary.opacity(0.06), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(MotifPressStyle(scale: 0.92))
+                .accessibilityLabel("Settings")
+
+                Menu {
                 Button {
                     showImporter = true
                 } label: {
@@ -257,7 +285,8 @@ struct LibraryView: View {
                     .background(Color.primary.opacity(0.06), in: Circle())
                     .contentShape(Circle())
             }
-            .accessibilityLabel("Add music or playlist")
+                .accessibilityLabel("Add music or playlist")
+            }
             .padding(.top, 4)
         }
     }
@@ -644,6 +673,86 @@ struct LibraryView: View {
                         )
 
                         if track.id != downloadedTracks.last?.id {
+                            Divider().opacity(0.35)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var cloudSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                SectionTitle(title: "Cloud")
+                Spacer()
+                Text("\(cloudTracks.count)")
+                    .font(.caption.monospacedDigit().weight(.medium))
+                    .foregroundStyle(.tertiary)
+            }
+
+            if cloudTracks.isEmpty {
+                VStack(alignment: .leading, spacing: 9) {
+                    Image(systemName: "cloud")
+                        .font(.system(size: 26, weight: .light))
+                        .foregroundStyle(.tertiary)
+
+                    Text("No cloud tracks yet")
+                        .font(.subheadline.weight(.semibold))
+
+                    Text("Sync your cloud library to stream songs here, or download them for offline listening.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    GlassActionButton(
+                        title: "Sync cloud library",
+                        systemImage: "arrow.clockwise",
+                        prominent: true
+                    ) {
+                        Task { await library.refreshCloud() }
+                    }
+                    .disabled(library.isRefreshingCloud)
+                    .padding(.top, 2)
+                }
+                .padding(.vertical, 18)
+            } else {
+                HStack(spacing: 10) {
+                    GlassActionButton(
+                        title: "Play",
+                        prominent: true,
+                        accessibilityLabel: "Play cloud tracks"
+                    ) {
+                        play(cloudTracks)
+                    }
+
+                    GlassActionButton(
+                        title: "Download all",
+                        systemImage: "arrow.down.circle",
+                        accessibilityLabel: "Download all cloud tracks"
+                    ) {
+                        let pending = cloudTracks.filter { !library.isDownloaded($0) }
+                        Task { await library.downloadAll(pending) }
+                    }
+                    .disabled(cloudTracks.allSatisfy { library.isDownloaded($0) })
+
+                    Spacer(minLength: 8)
+                }
+
+                Text("Stream from your cloud library, or download songs for offline listening.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                LazyVStack(spacing: 0) {
+                    ForEach(cloudTracks) { track in
+                        TrackRow(
+                            track: track,
+                            queue: cloudTracks,
+                            showNowPlaying: $showNowPlaying
+                        )
+
+                        if track.id != cloudTracks.last?.id {
                             Divider().opacity(0.35)
                         }
                     }

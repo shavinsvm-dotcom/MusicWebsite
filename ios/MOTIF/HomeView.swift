@@ -11,6 +11,10 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var importError: String?
 
+    private var cloudTracks: [Track] {
+        library.tracks.filter(\.isCloud)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -33,6 +37,10 @@ struct HomeView: View {
                         }
 
                         recentlyAdded
+
+                        if !cloudTracks.isEmpty {
+                            cloudShelf
+                        }
 
                         if !library.favorites.isEmpty {
                             favorites
@@ -267,7 +275,7 @@ struct HomeView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassSurface(radius: 26)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private var recentlyPlayed: some View {
@@ -339,6 +347,36 @@ struct HomeView: View {
         }
         .frame(width: 132, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    private var cloudShelf: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "From the cloud") {
+                GlassActionButton(
+                    title: "Play",
+                    accessibilityLabel: "Play cloud tracks"
+                ) {
+                    guard let first = cloudTracks.first else { return }
+                    player.play(first, queue: cloudTracks)
+                    showNowPlaying = true
+                }
+            }
+
+            CarouselScroll {
+                LazyHStack(spacing: 14) {
+                    ForEach(cloudTracks.prefix(10)) { track in
+                        Button {
+                            player.play(track, queue: cloudTracks)
+                        } label: {
+                            trackTile(track)
+                        }
+                        .buttonStyle(MotifPressStyle(scale: 0.96))
+                    }
+                }
+                .padding(.horizontal, 2)
+                .padding(.bottom, 4)
+            }
+        }
     }
 
     private var favorites: some View {

@@ -578,9 +578,6 @@ struct PlaylistDetailView: View {
                     Text(subtitle)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 4)
-                        .nativeGlass(Capsule())
 
                     if !tracks.isEmpty {
                         HStack(spacing: 2) {
@@ -627,9 +624,9 @@ struct PlaylistDetailView: View {
                             }
                         }
                         .foregroundStyle(.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .nativeGlass(Capsule(), interactive: true)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.primary.opacity(0.06), in: Capsule())
                         .padding(.top, 2)
                     }
                 }
@@ -667,9 +664,6 @@ struct PlaylistDetailView: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .textCase(nil)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 4)
-                        .nativeGlass(Capsule())
                         .padding(.leading, 4)
                 }
             }
@@ -1279,9 +1273,6 @@ struct SmartPlaylistDetailView: View {
                     Text(subtitle)
                         .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 4)
-                        .nativeGlass(Capsule())
 
                     if !tracks.isEmpty {
                         HStack(spacing: 2) {
@@ -1328,9 +1319,9 @@ struct SmartPlaylistDetailView: View {
                             }
                         }
                         .foregroundStyle(.primary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .nativeGlass(Capsule(), interactive: true)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color.primary.opacity(0.06), in: Capsule())
                         .padding(.top, 2)
                     }
                 }
@@ -1373,9 +1364,6 @@ struct SmartPlaylistDetailView: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.secondary)
                         .textCase(nil)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 4)
-                        .nativeGlass(Capsule())
                         .padding(.leading, 4)
                 }
             }

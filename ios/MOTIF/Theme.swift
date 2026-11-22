@@ -1227,7 +1227,9 @@ struct GlassActionButton: View {
                             .font(.system(size: 13, weight: .semibold))
                     }
                     .foregroundStyle(.primary)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
                 }
             }
             .lineLimit(1)
@@ -1322,7 +1324,7 @@ struct PlaybackProgressLine: View {
 
                 Capsule()
                     .fill(tint.opacity(0.75))
-                    .frame(width: max(height, geometry.size.width * fraction))
+                    .frame(width: fraction > 0 ? max(height, geometry.size.width * fraction) : 0)
             }
         }
         .frame(height: height)
