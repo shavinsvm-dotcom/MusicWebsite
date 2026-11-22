@@ -230,7 +230,6 @@ struct LibraryView: View {
                     .fill(Color.primary)
                     .frame(width: max(segment - 4, 0), height: 32)
                     .offset(x: index * segment + 2)
-                    .animation(MotifMotion.control, value: section)
                     .allowsHitTesting(false)
 
                 HStack(spacing: 0) {
@@ -253,7 +252,7 @@ struct LibraryView: View {
         return Button {
             guard !isSelected else { return }
             MotifHaptics.play(.light)
-            withAnimation(MotifMotion.settle) {
+            withAnimation(MotifMotion.control) {
                 sectionRaw = option.rawValue
             }
         } label: {
