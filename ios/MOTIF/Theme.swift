@@ -175,12 +175,10 @@ extension View {
 
 /// Keeps the native navigation bar in charge of page headers: the large title
 /// collapses into an inline header while scrolling, with the system's own
-/// scroll-edge treatment underneath. iOS 27 can also minimize the bar on the
-/// way down and restore it as soon as the person scrolls back up.
+/// scroll-edge treatment underneath.
 extension View {
     func nativeScrollHeader() -> some View {
         modifier(NativeScrollEdge())
-            .modifier(NativeToolbarMinimization())
     }
 
     /// On iOS 26+ the search field folds into a compact toolbar button and
@@ -212,21 +210,6 @@ private struct NativeScrollEdge: ViewModifier {
         #if compiler(>=6.2)
         if #available(iOS 26.0, *) {
             content.scrollEdgeEffectStyle(.soft, for: .top)
-        } else {
-            content
-        }
-        #else
-        content
-        #endif
-    }
-}
-
-private struct NativeToolbarMinimization: ViewModifier {
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        #if compiler(>=6.3)
-        if #available(iOS 27.0, *) {
-            content.toolbarMinimizationBehavior(.onScrollDown, for: .navigationBar)
         } else {
             content
         }
