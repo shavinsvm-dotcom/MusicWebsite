@@ -20,9 +20,9 @@ enum TigrisAPI {
         var errorDescription: String? {
             switch self {
             case .invalidResponse:
-                return "Tigris returned an unreadable response."
+                return "The cloud library returned an unreadable response."
             case .server(let status):
-                return "Tigris is unavailable right now (HTTP \(status))."
+                return "The cloud library is unavailable right now (HTTP \(status))."
             }
         }
     }

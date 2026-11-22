@@ -209,6 +209,7 @@ struct LibraryArtistDetailView: View {
                             LibraryAlbumCard(album: album)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.96, opacity: 0.92))
+                        .carouselItemTransition()
                     }
                 }
                 .padding(.horizontal, 2)

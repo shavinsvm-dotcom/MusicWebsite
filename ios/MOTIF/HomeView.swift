@@ -229,6 +229,8 @@ struct HomeView: View {
             .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(MotifPressStyle(scale: 0.985))
+        .accessibilityLabel("Play Daily Mix 1")
+        .accessibilityHint("Plays a mix of songs from your library")
     }
 
     private func mixArtwork(_ index: Int, tracks: [Track]) -> some View {
@@ -261,6 +263,7 @@ struct HomeView: View {
                             trackTile(track)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.96))
+                        .carouselItemTransition()
                     }
                 }
                 .padding(.horizontal, 2)
@@ -291,6 +294,7 @@ struct HomeView: View {
                             trackTile(track)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.96))
+                        .carouselItemTransition()
                     }
                 }
                 .padding(.horizontal, 2)
@@ -321,6 +325,7 @@ struct HomeView: View {
                             trackTile(track)
                         }
                         .buttonStyle(MotifPressStyle(scale: 0.96))
+                        .carouselItemTransition()
                     }
                 }
                 .padding(.horizontal, 2)
@@ -385,6 +390,13 @@ struct HomeView: View {
         }
         .frame(width: 132, alignment: .leading)
         .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            track.artist.isEmpty
+                ? track.title
+                : "\(track.title), \(track.artist)"
+        )
+        .accessibilityHint("Plays this song")
     }
 
     private var emptyCard: some View {
@@ -472,7 +484,12 @@ private struct HomeSnapshot {
 
         topArtistName = top
         if let top {
-            topArtistTracks = Array(all.filter { $0.artist == top }.prefix(6))
+            topArtistTracks = Array(
+                all.filter {
+                    $0.artist.caseInsensitiveCompare(top) == .orderedSame
+                }
+                .prefix(6)
+            )
         } else {
             topArtistTracks = []
         }

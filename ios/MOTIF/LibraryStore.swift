@@ -271,10 +271,10 @@ final class LibraryStore: ObservableObject {
 
             await repairMissingCloudCovers()
             cloudMessage = remoteTracks.isEmpty
-                ? "No tracks in the Tigris library yet."
-                : "\(remoteTracks.count) tracks in the Tigris library"
+                ? "No cloud tracks yet. Upload a song to get started."
+                : "\(remoteTracks.count) tracks in your cloud library"
         } catch {
-            cloudMessage = "Couldn’t reach the Tigris library. Tap refresh to retry."
+            cloudMessage = "Couldn’t reach your cloud library. Tap refresh to retry."
         }
     }
 

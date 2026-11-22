@@ -48,6 +48,9 @@ struct EqualizerView: View {
                     .disabled(!equalizer.isEnabled)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(AppBackground())
+            .tint(.primary)
             .navigationTitle("Equalizer")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -59,6 +62,7 @@ struct EqualizerView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private func band(

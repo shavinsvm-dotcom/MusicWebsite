@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-private enum SearchScope: String, CaseIterable, Identifiable {
+private enum SearchScope: String, CaseIterable, Identifiable, Hashable {
     case all
     case songs
     case artists
@@ -112,7 +112,9 @@ struct SearchView: View {
                             recentSearchesSection
                         }
 
-                        if !library.tracks.isEmpty {
+                        if library.tracks.isEmpty {
+                            searchLanding
+                        } else {
                             resultSection(
                                 title: "Your library",
                                 subtitle: "\(library.tracks.count) tracks",
@@ -122,7 +124,8 @@ struct SearchView: View {
                     } else {
                         scopePicker
 
-                        switch scope {
+                        Group {
+                            switch scope {
                         case .all:
                             if !matchingArtists.isEmpty {
                                 artistSection
@@ -164,7 +167,10 @@ struct SearchView: View {
                                 subtitle: nil,
                                 tracks: cloudMatches
                             )
+                            }
                         }
+                        .id(scope)
+                        .transition(.opacity)
 
                         if isLoading {
                             HStack(spacing: 10) {
@@ -300,6 +306,7 @@ struct SearchView: View {
         let isSelected = scope == option
 
         return Button {
+            MotifHaptics.play(.light)
             withAnimation(.easeOut(duration: 0.16)) {
                 scope = option
             }
@@ -351,6 +358,7 @@ struct SearchView: View {
                                 LibraryArtistCard(artist: artist)
                             }
                             .buttonStyle(MotifPressStyle(scale: 0.96, opacity: 0.92))
+                            .carouselItemTransition()
                         }
                     }
                     .padding(.horizontal, 2)
@@ -382,6 +390,7 @@ struct SearchView: View {
                                 LibraryAlbumCard(album: album)
                             }
                             .buttonStyle(MotifPressStyle(scale: 0.96, opacity: 0.92))
+                            .carouselItemTransition()
                         }
                     }
                     .padding(.horizontal, 2)
@@ -417,6 +426,7 @@ struct SearchView: View {
                                 .frame(width: 146)
                             }
                             .buttonStyle(MotifPressStyle(scale: 0.97, opacity: 0.92))
+                            .carouselItemTransition()
                         }
                     }
                     .padding(.horizontal, 2)
@@ -457,15 +467,42 @@ struct SearchView: View {
         }
     }
 
+    private var searchLanding: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(.secondary)
+
+            Text("Find something new.")
+                .font(.system(size: 23, weight: .semibold))
+                .tracking(-0.4)
+
+            Text("Search Apple Music for a 30-second preview, then add it to your library. You can also import your own files from Library.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .nativeGlass(RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
     private var emptyResults: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 24, weight: .light))
+                .foregroundStyle(.secondary)
+
             Text("No matches for “\(trimmedQuery)”.")
                 .font(.subheadline.weight(.semibold))
+
             Text("Try a shorter title, artist, album or playlist name.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-        .padding(.top, 8)
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .nativeGlass(RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private func emptyScope(_ message: String) -> some View {

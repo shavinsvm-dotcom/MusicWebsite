@@ -1,35 +1,8 @@
 import SwiftUI
 
-/// A horizontal shelf with soft, blurred-looking edges. The mask is cheap and
-/// keeps the first and last card from looking sliced off at the screen edge.
-extension View {
-    func carouselEdgeBlur(_ width: CGFloat = 18) -> some View {
-        mask {
-            GeometryReader { proxy in
-                let fade = min(width, proxy.size.width / 2)
-
-                HStack(spacing: 0) {
-                    LinearGradient(
-                        colors: [.clear, .black],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: fade)
-
-                    Rectangle().fill(.black)
-
-                    LinearGradient(
-                        colors: [.black, .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                    .frame(width: fade)
-                }
-            }
-        }
-    }
-}
-
+/// A horizontal shelf that lets card shadows and glass edges breathe past the
+/// scroll view. On iOS 17+ it also snaps to card boundaries, so a shelf never
+/// comes to rest half-clipped at the screen edge.
 struct CarouselScroll<Content: View>: View {
     private let content: Content
 
@@ -38,10 +11,46 @@ struct CarouselScroll<Content: View>: View {
     }
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        Group {
+            if #available(iOS 17.0, *) {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    content
+                        .scrollTargetLayout()
+                }
+                .scrollTargetBehavior(.viewAligned)
+                .scrollClipDisabled()
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    content
+                }
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+extension View {
+    /// Cards ease in and out of the shelf instead of being cut off by the
+    /// scroll view's edge. Motion is disabled when Reduce Motion is on.
+    func carouselItemTransition() -> some View {
+        modifier(CarouselItemTransition())
+    }
+}
+
+private struct CarouselItemTransition: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *), !reduceMotion {
+            content.scrollTransition(.interactive, axis: .horizontal) { view, phase in
+                view
+                    .scaleEffect(phase.isIdentity ? 1 : 0.95)
+                    .opacity(phase.isIdentity ? 1 : 0.78)
+            }
+        } else {
             content
         }
-        .carouselEdgeBlur()
     }
 }
 

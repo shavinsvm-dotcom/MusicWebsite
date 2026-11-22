@@ -3,7 +3,7 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct LibraryView: View {
-    private enum LibrarySection: String, CaseIterable, Identifiable {
+    private enum LibrarySection: String, CaseIterable, Identifiable, Hashable {
         case songs
         case albums
         case artists
@@ -128,18 +128,22 @@ struct LibraryView: View {
                     if library.tracks.isEmpty {
                         emptyState
                     } else {
-                        switch section {
-                        case .songs:
-                            songs
-                        case .albums:
-                            albumsGrid
-                        case .artists:
-                            artistsGrid
-                        case .downloads:
-                            downloads
-                        case .cloud:
-                            cloudSection
+                        Group {
+                            switch section {
+                            case .songs:
+                                songs
+                            case .albums:
+                                albumsGrid
+                            case .artists:
+                                artistsGrid
+                            case .downloads:
+                                downloads
+                            case .cloud:
+                                cloudSection
+                            }
                         }
+                        .id(section)
+                        .transition(.opacity.combined(with: .scale(scale: 0.995, anchor: .top)))
                     }
                 }
                 .screenEntrance()

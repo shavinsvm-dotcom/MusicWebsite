@@ -75,6 +75,7 @@ struct DownloadManagerView: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
