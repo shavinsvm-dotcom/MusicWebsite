@@ -924,7 +924,9 @@ private struct MiniPlayerTransitionSource: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 18.0, *) {
             content.matchedTransitionSource(id: sourceID, in: namespace) { source in
-                source.clipShape(Capsule())
+                source.clipShape(
+                    RoundedRectangle(cornerRadius: 23, style: .continuous)
+                )
             }
         } else {
             content
