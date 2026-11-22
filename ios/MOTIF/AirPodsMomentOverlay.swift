@@ -9,6 +9,7 @@ struct AirPodsMomentOverlay: View {
     @State private var snapshot: UIImage?
     @State private var revealed = false
     @State private var settled = false
+    @State private var warp: CGFloat = 0
     @State private var dismissing = false
     @State private var announced = false
 
@@ -18,12 +19,17 @@ struct AirPodsMomentOverlay: View {
                 GeometryReader { proxy in
                     let size = proxy.size
                     let isConnected = moment.kind == .connected
+                    let origin = CGPoint(
+                        x: size.width / 2,
+                        y: size.height * 0.47 - 35.5
+                    )
+                    let warpProgress = isConnected ? warp : 1 - warp
 
                     ZStack {
-                        backdrop(size: size)
+                        backdrop(size: size, origin: origin, progress: warpProgress)
 
                         VStack(spacing: 0) {
-                            statusTile(isConnected: isConnected)
+                            statusTile
                                 .padding(.bottom, 22)
 
                             VStack(spacing: 0) {
@@ -79,12 +85,17 @@ struct AirPodsMomentOverlay: View {
         snapshot = nil
         revealed = false
         settled = false
+        warp = 0
         dismissing = false
         announced = false
     }
 
     @ViewBuilder
-    private func backdrop(size: CGSize) -> some View {
+    private func backdrop(
+        size: CGSize,
+        origin: CGPoint,
+        progress: CGFloat
+    ) -> some View {
         ZStack {
             Color.black
 
@@ -94,7 +105,14 @@ struct AirPodsMomentOverlay: View {
                     .scaledToFill()
                     .frame(width: size.width, height: size.height)
                     .clipped()
-                    .blur(radius: 24)
+                    .modifier(
+                        AirPodsRippleEffect(
+                            progress: reduceMotion ? 0 : progress,
+                            size: size,
+                            origin: origin
+                        )
+                    )
+                    .blur(radius: 5)
                     .overlay(Color.black.opacity(0.46))
             } else {
                 Color.black.opacity(0.94)
@@ -103,28 +121,20 @@ struct AirPodsMomentOverlay: View {
         .opacity(revealed ? 1 : 0)
     }
 
-    private func statusTile(isConnected: Bool) -> some View {
-        ZStack {
-            if !reduceMotion {
-                AirDropRadar(clockwise: isConnected)
-                    .id(isConnected)
+    private var statusTile: some View {
+        Image(systemName: "airpods.gen3")
+            .font(.system(size: 46, weight: .regular))
+            .symbolRenderingMode(.monochrome)
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.28), radius: 3, y: 1)
+            .frame(width: 96, height: 96)
+            .nativeGlass(Circle())
+            .overlay {
+                Circle()
+                    .strokeBorder(.white.opacity(0.14), lineWidth: 0.5)
             }
-
-            Image(systemName: "airpods.gen3")
-                .font(.system(size: 46, weight: .regular))
-                .symbolRenderingMode(.monochrome)
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.28), radius: 3, y: 1)
-                .frame(width: 96, height: 96)
-                .nativeGlass(Circle())
-                .overlay {
-                    Circle()
-                        .strokeBorder(.white.opacity(0.14), lineWidth: 0.5)
-                }
-        }
-        .frame(width: 96, height: 96)
-        .scaleEffect(revealed ? 1 : 0.92)
-        .opacity(revealed ? 1 : 0)
+            .scaleEffect(revealed ? 1 : 0.92)
+            .opacity(revealed ? 1 : 0)
     }
 
     @MainActor
@@ -157,6 +167,9 @@ struct AirPodsMomentOverlay: View {
         withAnimation(.spring(response: 0.48, dampingFraction: 0.82)) {
             revealed = true
         }
+        withAnimation(.linear(duration: 2.2)) {
+            warp = 1
+        }
         MotifHaptics.play(.soft)
 
         try? await Task.sleep(nanoseconds: 180_000_000)
@@ -167,7 +180,7 @@ struct AirPodsMomentOverlay: View {
         MotifHaptics.play(moment.kind == .connected ? .success : .soft)
         announce(moment)
 
-        try? await Task.sleep(nanoseconds: 1_700_000_000)
+        try? await Task.sleep(nanoseconds: 1_900_000_000)
         guard !Task.isCancelled else { return }
 
         withAnimation(.easeIn(duration: 0.30)) {
@@ -191,50 +204,41 @@ struct AirPodsMomentOverlay: View {
     }
 }
 
-/// AirDrop's radar: three arcs with the AirDrop wedge open at the bottom and
-/// a faint sweep turning inside them. The glass tile is the blip at the hub.
-private struct AirDropRadar: View {
-    let clockwise: Bool
+private struct AirPodsRippleEffect: ViewModifier, Animatable {
+    var progress: CGFloat
+    let size: CGSize
+    let origin: CGPoint
 
-    @State private var sweep: Double = 0
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
 
-    private let diameters: [CGFloat] = [116, 140, 164]
-    private let opacities: [Double] = [0.20, 0.14, 0.09]
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .fill(
-                    AngularGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: .white.opacity(0.09), location: 0),
-                            .init(color: .white.opacity(0), location: 0.16)
-                        ]),
-                        center: .center
-                    )
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 17.0, *) {
+            // layerEffect samples the layer in a vertically flipped space.
+            // Pre-flip the snapshot so the shader's flip cancels it out, and
+            // hand it the tile's origin in that same flipped space.
+            content
+                .scaleEffect(x: 1, y: -1)
+                .layerEffect(
+                    Shader(
+                        function: ShaderFunction(library: .default, name: "airPodsRipple"),
+                        arguments: [
+                            .float(Float(progress * 2.2)),
+                            .float2(Float(size.width), Float(size.height)),
+                            .float2(
+                                Float(origin.x / max(size.width, 1)),
+                                Float(1 - origin.y / max(size.height, 1))
+                            )
+                        ]
+                    ),
+                    maxSampleOffset: CGSize(width: 240, height: 240)
                 )
-                .frame(width: 164, height: 164)
-                .rotationEffect(.degrees(sweep + 90))
-
-            ForEach(Array(diameters.enumerated()), id: \.offset) { index, diameter in
-                Circle()
-                    .trim(from: 0.14, to: 0.86)
-                    .stroke(
-                        .white.opacity(opacities[index]),
-                        style: StrokeStyle(lineWidth: 0.7, lineCap: .round)
-                    )
-                    .frame(width: diameter, height: diameter)
-                    .rotationEffect(.degrees(90))
-            }
+        } else {
+            content
         }
-        .frame(width: 164, height: 164)
-        .onAppear {
-            withAnimation(.linear(duration: 9).repeatForever(autoreverses: false)) {
-                sweep = clockwise ? 360 : -360
-            }
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 
