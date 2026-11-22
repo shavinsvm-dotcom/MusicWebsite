@@ -173,6 +173,69 @@ extension View {
     }
 }
 
+/// Keeps the native navigation bar in charge of page headers: the large title
+/// collapses into an inline header while scrolling, with the system's own
+/// scroll-edge treatment underneath. iOS 27 can also minimize the bar on the
+/// way down and restore it as soon as the person scrolls back up.
+extension View {
+    func nativeScrollHeader() -> some View {
+        modifier(NativeScrollEdge())
+            .modifier(NativeToolbarMinimization())
+    }
+
+    /// On iOS 26+ the search field folds into a compact toolbar button and
+    /// expands into the native search experience — with its scope menu — when
+    /// tapped. Earlier versions keep the standard search field.
+    func minimizedSearch() -> some View {
+        modifier(MinimizedSearch())
+    }
+}
+
+private struct MinimizedSearch: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content.searchToolbarBehavior(.minimize)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
+private struct NativeScrollEdge: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content.scrollEdgeEffectStyle(.soft, for: .top)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
+private struct NativeToolbarMinimization: ViewModifier {
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        #if compiler(>=6.3)
+        if #available(iOS 27.0, *) {
+            content.toolbarMinimizationBehavior(.onScrollDown, for: .navigationBar)
+        } else {
+            content
+        }
+        #else
+        content
+        #endif
+    }
+}
+
 private struct ScreenEntrance: ViewModifier {
     @State private var appeared = false
 
@@ -1114,58 +1177,6 @@ struct SectionHeader<Trailing: View>: View {
     }
 }
 
-/// The one header used by every primary tab. Same type scale, same spacing,
-/// same glass action cluster, so the app reads as one piece.
-struct ScreenHeader<Trailing: View>: View {
-    let title: String
-    let subtitle: String
-    private let trailing: () -> Trailing
-
-    init(
-        title: String,
-        subtitle: String,
-        @ViewBuilder trailing: @escaping () -> Trailing
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.trailing = trailing
-    }
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(size: 34, weight: .bold))
-                    .tracking(-1.1)
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-
-                Text(subtitle)
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            GlassGroup(spacing: 8) {
-                HStack(spacing: 8) {
-                    trailing()
-                }
-                .padding(.top, 2)
-            }
-        }
-    }
-}
-
-extension ScreenHeader where Trailing == EmptyView {
-    init(title: String, subtitle: String) {
-        self.init(title: title, subtitle: subtitle) { EmptyView() }
-    }
-}
-
-
 /// One glass language for every discrete control: capsules carry words,
 /// circles carry icons, and each group is wrapped in a GlassGroup at the call
 /// site when several controls sit together.
@@ -1218,20 +1229,6 @@ struct GlassIconButton: View {
         }
         .buttonStyle(MotifPressStyle(scale: 0.92))
         .accessibilityLabel(label)
-    }
-}
-
-struct GlassMenuLabel: View {
-    var systemImage: String
-    var size: CGFloat = 34
-
-    var body: some View {
-        Image(systemName: systemImage)
-            .font(.system(size: size >= 40 ? 15 : 13, weight: .semibold))
-            .foregroundStyle(.primary)
-            .frame(width: size, height: size)
-            .nativeGlass(Circle(), interactive: true)
-            .contentShape(Circle())
     }
 }
 
@@ -1300,37 +1297,6 @@ struct ArtworkProgressRing: View {
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: size, height: size)
-        .animation(.linear(duration: 0.12), value: fraction)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
-/// A thin monochrome progress line for the Home listening strip.
-struct PlaybackProgressLine: View {
-    var tint: Color = .primary
-    var height: CGFloat = 1.5
-
-    @EnvironmentObject private var player: PlayerManager
-    @EnvironmentObject private var progress: PlaybackProgress
-
-    private var fraction: CGFloat {
-        guard player.duration > 0 else { return 0 }
-        return CGFloat(min(max(progress.elapsed / player.duration, 0), 1))
-    }
-
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(tint.opacity(0.10))
-
-                Capsule()
-                    .fill(tint.opacity(0.75))
-                    .frame(width: fraction > 0 ? max(height, geometry.size.width * fraction) : 0)
-            }
-        }
-        .frame(height: height)
         .animation(.linear(duration: 0.12), value: fraction)
         .allowsHitTesting(false)
         .accessibilityHidden(true)

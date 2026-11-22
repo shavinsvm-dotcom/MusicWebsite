@@ -17,31 +17,6 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 28) {
-                    ScreenHeader(
-                        title: greeting,
-                        subtitle: "Your music, all in one place."
-                    ) {
-                        GlassIconButton(
-                            systemImage: "gearshape",
-                            label: "Settings",
-                            size: 36
-                        ) {
-                            showSettings = true
-                        }
-
-                        GlassIconButton(
-                            systemImage: "plus",
-                            label: "Import music",
-                            size: 36
-                        ) {
-                            showImporter = true
-                        }
-                    }
-
-                    if let current = player.current {
-                        listeningNow(current)
-                    }
-
                     if library.tracks.isEmpty {
                         emptyCard
                     } else {
@@ -72,7 +47,26 @@ struct HomeView: View {
             }
             .scrollIndicators(.hidden)
             .background(AppBackground())
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("Home")
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
+            .toolbar {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Settings")
+
+                    Button {
+                        showImporter = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("Import music")
+                }
+            }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
                     .environmentObject(player)
@@ -101,73 +95,6 @@ struct HomeView: View {
                 Text(importError ?? "")
             }
         }
-    }
-
-    private var greeting: String {
-        switch Calendar.current.component(.hour, from: Date()) {
-        case 5..<12: return "Good morning."
-        case 12..<17: return "Good afternoon."
-        case 17..<22: return "Good evening."
-        default: return "Good night."
-        }
-    }
-
-    private func listeningNow(_ track: Track) -> some View {
-        Button {
-            showNowPlaying = true
-        } label: {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                        .frame(width: 48, height: 48)
-                        .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                        .overlay {
-                            ArtworkProgressRing(
-                                size: 52,
-                                cornerRadius: 15.5,
-                                tint: Color.primary
-                            )
-                        }
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 6) {
-                            PlayingWaveform(isPlaying: player.isPlaying)
-                                .frame(width: 12, height: 9)
-
-                            Text(player.isPlaying ? "LISTENING NOW" : "PAUSED")
-                                .font(.system(size: 9, weight: .bold))
-                                .tracking(1.6)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text(track.title)
-                            .font(.system(size: 16, weight: .semibold))
-                            .tracking(-0.2)
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-
-                        Text(track.artist.isEmpty ? "Unknown artist" : track.artist)
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                PlaybackProgressLine(tint: .primary, height: 1.5)
-            }
-            .padding(12)
-            .nativeGlass(
-                RoundedRectangle(cornerRadius: 22, style: .continuous),
-                interactive: true
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        }
-        .buttonStyle(MotifPressStyle(scale: 0.99, opacity: 0.94))
-        .accessibilityLabel(
-            "\(player.isPlaying ? "Listening now" : "Paused"): \(track.title) by \(track.artist.isEmpty ? "Unknown artist" : track.artist). Open player"
-        )
-        .accessibilityHint("Opens the player")
     }
 
     private func dailyMix(_ data: HomeSnapshot) -> some View {

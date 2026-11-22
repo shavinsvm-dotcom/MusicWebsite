@@ -7,8 +7,6 @@ private enum SearchScope: String, CaseIterable, Identifiable, Hashable {
     case artists
     case albums
     case playlists
-    case downloads
-    case cloud
 
     var id: String { rawValue }
 
@@ -19,8 +17,6 @@ private enum SearchScope: String, CaseIterable, Identifiable, Hashable {
         case .artists: return "Artists"
         case .albums: return "Albums"
         case .playlists: return "Playlists"
-        case .downloads: return "Downloads"
-        case .cloud: return "Cloud"
         }
     }
 }
@@ -81,14 +77,6 @@ struct SearchView: View {
         }
     }
 
-    private var downloadedMatches: [Track] {
-        matchingTracks.filter { library.isDownloaded($0) }
-    }
-
-    private var cloudMatches: [Track] {
-        matchingTracks.filter(\.isCloud)
-    }
-
     private var hasAnyLocalMatch: Bool {
         !matchingTracks.isEmpty
             || !matchingArtists.isEmpty
@@ -100,21 +88,14 @@ struct SearchView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 22) {
-                    ScreenHeader(
-                        title: "Search",
-                        subtitle: "Songs, artists, albums, playlists"
-                    )
-
-                    searchField
-
                     if trimmedQuery.isEmpty {
                         if !recentSearches.isEmpty {
                             recentSearchesSection
                         }
 
-                        if library.tracks.isEmpty {
-                            searchLanding
-                        } else {
+                        browseHint
+
+                        if !library.tracks.isEmpty {
                             resultSection(
                                 title: "Your library",
                                 subtitle: "\(library.tracks.count) tracks",
@@ -122,8 +103,6 @@ struct SearchView: View {
                             )
                         }
                     } else {
-                        scopePicker
-
                         Group {
                             switch scope {
                         case .all:
@@ -155,19 +134,7 @@ struct SearchView: View {
                             albumSection
                         case .playlists:
                             playlistSection
-                        case .downloads:
-                            resultSection(
-                                title: "Downloaded",
-                                subtitle: nil,
-                                tracks: downloadedMatches
-                            )
-                        case .cloud:
-                            resultSection(
-                                title: "Cloud tracks",
-                                subtitle: nil,
-                                tracks: cloudMatches
-                            )
-                            }
+                        }
                         }
                         .id(scope)
                         .transition(.opacity)
@@ -212,48 +179,28 @@ struct SearchView: View {
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.immediately)
             .background(AppBackground())
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("Search")
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
+            .searchable(
+                text: $query,
+                prompt: "Songs, artists, albums, playlists"
+            )
+            .minimizedSearch()
+            .searchScopes($scope) {
+                Text("All").tag(SearchScope.all)
+                Text("Songs").tag(SearchScope.songs)
+                Text("Artists").tag(SearchScope.artists)
+                Text("Albums").tag(SearchScope.albums)
+                Text("Playlists").tag(SearchScope.playlists)
+            }
+            .onSubmit(of: .search) {
+                remember(trimmedQuery)
+            }
             .task(id: query) {
                 await runSearch()
             }
         }
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.secondary)
-
-            TextField("Songs, artists, albums, playlists", text: $query)
-                .font(.system(size: 16, weight: .regular))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .onSubmit {
-                    remember(trimmedQuery)
-                }
-
-            if !query.isEmpty {
-                Button {
-                    query = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 16, weight: .regular))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Circle())
-                }
-                .buttonStyle(MotifPressStyle(scale: 0.9))
-                .accessibilityLabel("Clear search")
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .nativeGlass(
-            RoundedRectangle(cornerRadius: 18, style: .continuous),
-            interactive: true
-        )
     }
 
     private var recentSearchesSection: some View {
@@ -288,50 +235,6 @@ struct SearchView: View {
                 }
                 .padding(.vertical, 2)
             }
-        }
-    }
-
-    private var scopePicker: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(SearchScope.allCases) { option in
-                    scopeChip(option)
-                }
-            }
-            .padding(.vertical, 2)
-        }
-    }
-
-    private func scopeChip(_ option: SearchScope) -> some View {
-        let isSelected = scope == option
-
-        return Button {
-            MotifHaptics.play(.light)
-            withAnimation(.easeOut(duration: 0.16)) {
-                scope = option
-            }
-        } label: {
-            scopeLabel(option, isSelected: isSelected)
-        }
-        .buttonStyle(MotifPressStyle(scale: 0.94))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
-    }
-
-    @ViewBuilder
-    private func scopeLabel(_ option: SearchScope, isSelected: Bool) -> some View {
-        let label = Text(option.title)
-            .font(.system(size: 12, weight: .semibold))
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-
-        if isSelected {
-            label
-                .foregroundStyle(Color(uiColor: .systemBackground))
-                .background(Color.primary, in: Capsule())
-        } else {
-            label
-                .foregroundStyle(.primary)
-                .nativeGlass(Capsule(), interactive: true)
         }
     }
 
@@ -467,32 +370,22 @@ struct SearchView: View {
         }
     }
 
-    private var searchLanding: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 28, weight: .light))
-                .foregroundStyle(.secondary)
+    private var browseHint: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Find anything.")
+                .font(.system(size: 24, weight: .semibold))
+                .tracking(-0.5)
 
-            Text("Find something new.")
-                .font(.system(size: 23, weight: .semibold))
-                .tracking(-0.4)
-
-            Text("Search Apple Music for a 30-second preview, then add it to your library. You can also import your own files from Library.")
+            Text("Search your library, or find something new in the iTunes catalog.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .nativeGlass(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private var emptyResults: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 24, weight: .light))
-                .foregroundStyle(.secondary)
-
+        VStack(alignment: .leading, spacing: 6) {
             Text("No matches for “\(trimmedQuery)”.")
                 .font(.subheadline.weight(.semibold))
 
@@ -500,9 +393,7 @@ struct SearchView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .nativeGlass(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .padding(.top, 8)
     }
 
     private func emptyScope(_ message: String) -> some View {

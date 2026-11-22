@@ -17,16 +17,6 @@ struct PlaylistsView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
-                    ScreenHeader(title: "Playlists", subtitle: playlistSummary) {
-                        GlassIconButton(
-                            systemImage: "plus",
-                            label: "New playlist",
-                            size: 36
-                        ) {
-                            showCreatePlaylist = true
-                        }
-                    }
-
                     yourPlaylistsSection
                 }
                 .screenEntrance()
@@ -36,7 +26,19 @@ struct PlaylistsView: View {
             }
             .scrollIndicators(.hidden)
             .background(AppBackground())
-            .toolbar(.hidden, for: .navigationBar)
+            .navigationTitle("Playlists")
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        showCreatePlaylist = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .accessibilityLabel("New playlist")
+                }
+            }
             .navigationDestination(for: PlaylistRoute.self) { route in
                 PlaylistDetailView(
                     playlistID: route.id,
@@ -47,12 +49,6 @@ struct PlaylistsView: View {
                 PlaylistEditorView()
             }
         }
-    }
-
-    private var playlistSummary: String {
-        let count = library.playlists.count
-        guard count > 0 else { return "Create a playlist from your library" }
-        return count == 1 ? "1 playlist" : "\(count) playlists"
     }
 
     @ViewBuilder

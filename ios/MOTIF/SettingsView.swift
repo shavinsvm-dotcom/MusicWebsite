@@ -53,33 +53,35 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                ScreenHeader(
-                    title: "Settings",
-                    subtitle: "Make Lilt yours"
-                ) {
-                    GlassIconButton(
-                        systemImage: "xmark",
-                        label: "Close settings",
-                        size: 36
-                    ) {
-                        dismiss()
-                    }
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    appearanceSection
+                    playbackSection
+                    aboutSection
+                    footer
                 }
-
-                appearanceSection
-                playbackSection
-                aboutSection
-                footer
+                .screenEntrance()
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 36)
             }
-            .screenEntrance()
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 36)
+            .scrollIndicators(.hidden)
+            .background(AppBackground())
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.large)
+            .nativeScrollHeader()
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close settings")
+                }
+            }
         }
-        .scrollIndicators(.hidden)
-        .background(AppBackground())
         .tint(.primary)
         .sheet(isPresented: $showEqualizer) {
             EqualizerView()
