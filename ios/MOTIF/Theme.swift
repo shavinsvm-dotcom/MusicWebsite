@@ -1279,6 +1279,21 @@ final class PlaybackBackdropCache {
     }
 }
 
+/// The glass lilypad mark. The asset catalog carries light and dark
+/// appearances, and the PNGs are transparent so the mark can sit on paper,
+/// obsidian, or artwork without a plate.
+struct LiltMark: View {
+    var height: CGFloat = 28
+
+    var body: some View {
+        Image("LiltMark")
+            .resizable()
+            .scaledToFit()
+            .frame(height: height)
+            .accessibilityLabel("Lilt")
+    }
+}
+
 struct LiltWordmark: View {
     var height: CGFloat = 18
 
