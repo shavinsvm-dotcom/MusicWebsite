@@ -827,9 +827,13 @@ private struct AddSongRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            ArtworkView(
+                url: track.artworkURL,
+                seed: track.title + track.artist,
+                thumbnail: true
+            )
+            .frame(width: 44, height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(track.title)
@@ -876,9 +880,13 @@ private struct PlaylistTrackRow: View {
             } label: {
                 HStack(spacing: 12) {
                     ZStack(alignment: .bottomTrailing) {
-                        ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                            .frame(width: 52, height: 52)
-                            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        ArtworkView(
+                            url: track.artworkURL,
+                            seed: track.title + track.artist,
+                            thumbnail: true
+                        )
+                        .frame(width: 52, height: 52)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                         if isCurrent {
                             PlayingWaveform(isPlaying: player.isPlaying, color: .white)
@@ -992,7 +1000,7 @@ private struct PlaylistTrackRow: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.primary)
                     .frame(width: 30, height: 30)
-                    .nativeGlass(Circle(), interactive: true)
+                    .rowControl(Circle())
                     .frame(width: 32, height: 38)
                     .contentShape(Rectangle())
             }
@@ -1038,9 +1046,13 @@ struct PlaylistTracksEditor: View {
                 } else {
                     ForEach(tracks) { track in
                         HStack(spacing: 12) {
-                            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                                .frame(width: 42, height: 42)
-                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            ArtworkView(
+                                url: track.artworkURL,
+                                seed: track.title + track.artist,
+                                thumbnail: true
+                            )
+                            .frame(width: 42, height: 42)
+                            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(track.title)

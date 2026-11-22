@@ -108,6 +108,22 @@ extension View {
         background(.ultraThinMaterial, in: shape)
     }
 
+    /// Blur-free control surface for dense, per-row overlays. Live glass in
+    /// every list row is expensive while scrolling; these badges only need a
+    /// translucent fill and a hairline edge.
+    func rowControl<S: Shape>(_ shape: S, dark: Bool = false) -> some View {
+        background {
+            shape
+                .fill(dark ? Color.black.opacity(0.42) : Color.primary.opacity(0.06))
+                .overlay {
+                    shape.stroke(
+                        dark ? Color.white.opacity(0.16) : Color.primary.opacity(0.08),
+                        lineWidth: 0.5
+                    )
+                }
+        }
+    }
+
     /// Player chrome opts out of repeated material blur passes on older iOS.
     /// A flat translucent fill keeps the same layering without recompositing
     /// ten live blurs while a full-screen cover is scaling.
@@ -328,6 +344,7 @@ struct ArtworkView: View {
     let seed: String
     let onImageLoaded: ((UIImage) -> Void)?
     let highResolution: Bool
+    let thumbnail: Bool
 
     @State private var image: UIImage?
     @State private var failed = false
@@ -336,16 +353,21 @@ struct ArtworkView: View {
         url: URL?,
         seed: String,
         onImageLoaded: ((UIImage) -> Void)? = nil,
-        highResolution: Bool = false
+        highResolution: Bool = false,
+        thumbnail: Bool = false
     ) {
         self.url = url
         self.seed = seed
         self.onImageLoaded = onImageLoaded
         self.highResolution = highResolution
+        self.thumbnail = thumbnail
 
         let cached: UIImage?
         if highResolution, let url {
             cached = ArtworkImageCache.shared.heroImage(for: url)
+                ?? ArtworkImageCache.shared.image(for: url)
+        } else if thumbnail, let url {
+            cached = ArtworkImageCache.shared.thumbnail(for: url)
                 ?? ArtworkImageCache.shared.image(for: url)
         } else {
             cached = url.flatMap { ArtworkImageCache.shared.image(for: $0) }
@@ -358,6 +380,10 @@ struct ArtworkView: View {
         guard let url else { return nil }
         if highResolution {
             return ArtworkImageCache.shared.heroImage(for: url)
+                ?? ArtworkImageCache.shared.image(for: url)
+        }
+        if thumbnail {
+            return ArtworkImageCache.shared.thumbnail(for: url)
                 ?? ArtworkImageCache.shared.image(for: url)
         }
         return ArtworkImageCache.shared.image(for: url)
@@ -387,10 +413,15 @@ struct ArtworkView: View {
         .clipped()
         .task(id: url) {
             if let url {
-                let cached = highResolution
-                    ? ArtworkImageCache.shared.heroImage(for: url)
+                let cached: UIImage?
+                if highResolution {
+                    cached = ArtworkImageCache.shared.heroImage(for: url)
                         ?? ArtworkImageCache.shared.image(for: url)
-                    : ArtworkImageCache.shared.image(for: url)
+                } else if thumbnail {
+                    cached = ArtworkImageCache.shared.thumbnail(for: url)
+                } else {
+                    cached = ArtworkImageCache.shared.image(for: url)
+                }
 
                 if let cached {
                     if image !== cached {
@@ -401,6 +432,9 @@ struct ArtworkView: View {
 
                     // A cached thumbnail can paint immediately, but the player
                     // still upgrades itself to the 1200 px hero decode.
+                    if thumbnail {
+                        return
+                    }
                     if !highResolution || ArtworkImageCache.shared.heroImage(for: url) != nil {
                         return
                     }
@@ -425,6 +459,13 @@ struct ArtworkView: View {
                 onImageLoaded?(cached)
                 return
             }
+        } else if thumbnail {
+            if let cached = ArtworkImageCache.shared.thumbnail(for: url) {
+                image = cached
+                failed = false
+                onImageLoaded?(cached)
+                return
+            }
         } else if let cached = ArtworkImageCache.shared.image(for: url) {
             image = cached
             failed = false
@@ -432,7 +473,7 @@ struct ArtworkView: View {
             return
         }
 
-        if !highResolution || image == nil {
+        if !highResolution && !thumbnail {
             image = nil
         }
         failed = false
@@ -440,6 +481,8 @@ struct ArtworkView: View {
         let loaded: UIImage?
         if highResolution {
             loaded = await ArtworkImageCache.shared.loadHeroImage(for: url)
+        } else if thumbnail {
+            loaded = await ArtworkImageCache.shared.loadThumbnail(for: url)
         } else {
             loaded = await ArtworkImageCache.shared.loadImage(for: url)
         }
@@ -483,15 +526,19 @@ final class ArtworkImageCache {
 
     private let cache = NSCache<NSURL, UIImage>()
     private let heroCache = NSCache<NSURL, UIImage>()
+    private let thumbnailCache = NSCache<NSURL, UIImage>()
     private let taskLock = NSLock()
     private var loadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
     private var heroLoadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
+    private var thumbnailLoadingTasks: [NSURL: Task<UIImage?, Never>] = [:]
 
     private init() {
         cache.countLimit = 160
         cache.totalCostLimit = 96 * 1024 * 1024
         heroCache.countLimit = 20
         heroCache.totalCostLimit = 72 * 1024 * 1024
+        thumbnailCache.countLimit = 220
+        thumbnailCache.totalCostLimit = 40 * 1024 * 1024
     }
 
     func image(for url: URL) -> UIImage? {
@@ -505,6 +552,10 @@ final class ArtworkImageCache {
 
     func heroImage(for url: URL) -> UIImage? {
         heroCache.object(forKey: url as NSURL)
+    }
+
+    func thumbnail(for url: URL) -> UIImage? {
+        thumbnailCache.object(forKey: url as NSURL)
     }
 
     func loadHeroImage(for url: URL, maxPixelSize: Int = 1200) async -> UIImage? {
@@ -539,7 +590,7 @@ final class ArtworkImageCache {
     /// Loads and downsamples artwork once per URL. Playlist mosaics often ask
     /// for the same covers several times in one frame; sharing the task keeps
     /// those cells from starting duplicate network and decode work.
-    func loadImage(for url: URL, maxPixelSize: Int = 900) async -> UIImage? {
+    func loadImage(for url: URL, maxPixelSize: Int = 720) async -> UIImage? {
         if let cached = image(for: url) { return cached }
 
         let key = url as NSURL
@@ -563,6 +614,37 @@ final class ArtworkImageCache {
 
         if let image {
             store(image, for: url)
+        }
+        return image
+    }
+
+    /// Row-sized covers stay in a smaller cache so a long song list never
+    /// forces the full 720 px decode for every 44–64 pt thumbnail.
+    func loadThumbnail(for url: URL, maxPixelSize: Int = 220) async -> UIImage? {
+        if let cached = thumbnail(for: url) { return cached }
+
+        let key = url as NSURL
+        taskLock.lock()
+        if let existing = thumbnailLoadingTasks[key] {
+            taskLock.unlock()
+            return await existing.value
+        }
+
+        let task = Task.detached(priority: .utility) {
+            await Self.downsample(url: url, maxPixelSize: maxPixelSize)
+        }
+        thumbnailLoadingTasks[key] = task
+        taskLock.unlock()
+
+        let image = await task.value
+
+        taskLock.lock()
+        thumbnailLoadingTasks[key] = nil
+        taskLock.unlock()
+
+        if let image {
+            let cost = Int(image.size.width * image.size.height * 4)
+            thumbnailCache.setObject(image, forKey: key, cost: cost)
         }
         return image
     }
@@ -1347,15 +1429,19 @@ struct TrackRow: View {
                 player.play(track, queue: queue ?? [track])
             } label: {
                 ZStack(alignment: .bottomTrailing) {
-                    ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                        .frame(width: 52, height: 52)
-                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    ArtworkView(
+                        url: track.artworkURL,
+                        seed: track.title + track.artist,
+                        thumbnail: true
+                    )
+                    .frame(width: 52, height: 52)
+                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
 
                     Image(systemName: "play.fill")
                         .font(.system(size: 7, weight: .bold))
                         .foregroundStyle(.primary)
                         .frame(width: 18, height: 18)
-                        .nativeGlass(Circle(), interactive: false)
+                        .rowControl(Circle(), dark: true)
                         .padding(3)
                 }
                 .contentShape(Rectangle())

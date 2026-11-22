@@ -196,15 +196,23 @@ enum LyricsParser {
     }
 }
 
+private struct LyricPlayheadState: Equatable {
+    var line: Int?
+    var word: Int?
+
+    static let none = LyricPlayheadState(line: nil, word: nil)
+}
+
 struct LyricsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
 
     let track: Track
 
-    @State private var activeIndex: Int?
-    @State private var activeWordIndex: Int?
+    @State private var playhead = LyricPlayheadState.none
+    @State private var followsPlayback = true
     @State private var showFinder = false
 
     private var currentTrack: Track {
@@ -215,23 +223,7 @@ struct LyricsView: View {
     }
 
     private var document: LyricsDocument {
-        let fileDocument = currentTrack.lyricsFile
-            .flatMap { $0.isEmpty ? nil : LyricsFileParser.parse($0) }
-        let textDocument = currentTrack.lyrics.flatMap { lyrics -> LyricsDocument? in
-            guard !lyrics.isEmpty else { return nil }
-            return LyricsParser.parse(lyrics)
-        }
-
-        if let fileDocument, fileDocument.isWordSynced {
-            return fileDocument
-        }
-        if let textDocument, textDocument.isWordSynced {
-            return textDocument
-        }
-        if let fileDocument, fileDocument.isSynced {
-            return fileDocument
-        }
-        return textDocument ?? .empty
+        LyricsDocumentCache.document(for: currentTrack)
     }
 
     var body: some View {
@@ -255,13 +247,26 @@ struct LyricsView: View {
                 }
                 .scrollIndicators(.hidden)
                 .background(lyricsBackdrop)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 8)
+                        .onChanged { _ in
+                            guard followsPlayback else { return }
+                            followsPlayback = false
+                        }
+                )
                 .task {
                     // The first layout pass must exist before scrolling to a
                     // line in the middle of the song.
                     try? await Task.sleep(nanoseconds: 80_000_000)
+                    guard followsPlayback else { return }
                     scrollToActive(proxy: proxy, animated: false)
                 }
-                .onChange(of: activeIndex) { _ in
+                .onChange(of: playhead.line) { _ in
+                    guard followsPlayback else { return }
+                    scrollToActive(proxy: proxy, animated: true)
+                }
+                .onChange(of: followsPlayback) { follows in
+                    guard follows else { return }
                     scrollToActive(proxy: proxy, animated: true)
                 }
             }
@@ -276,6 +281,15 @@ struct LyricsView: View {
                         Image(systemName: "globe")
                     }
                     .accessibilityLabel("Find different lyrics")
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        followsPlayback.toggle()
+                    } label: {
+                        Image(systemName: followsPlayback ? "location.fill" : "location.slash")
+                    }
+                    .accessibilityLabel(followsPlayback ? "Stop following lyrics" : "Follow lyrics")
                 }
 
                 ToolbarItem(placement: .topBarTrailing) {
@@ -316,8 +330,12 @@ struct LyricsView: View {
 
     private var header: some View {
         HStack(spacing: 14) {
-            ArtworkView(url: currentTrack.artworkURL, seed: currentTrack.title + currentTrack.artist)
-                .frame(width: 64, height: 64)
+            ArtworkView(
+                url: currentTrack.artworkURL,
+                seed: currentTrack.title + currentTrack.artist,
+                thumbnail: true
+            )
+            .frame(width: 64, height: 64)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -403,18 +421,14 @@ struct LyricsView: View {
 
     private var syncedLyrics: some View {
         VStack(alignment: .leading, spacing: 0) {
-            LyricsPlayhead(lines: document.lines) { lineIndex, wordIndex in
-                if activeIndex != lineIndex {
-                    activeIndex = lineIndex
-                    activeWordIndex = wordIndex
-                } else if activeWordIndex != wordIndex {
-                    activeWordIndex = wordIndex
-                }
+            LyricsPlayhead(lines: document.lines) { next in
+                guard next != playhead else { return }
+                playhead = next
             }
 
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(document.lines.enumerated()), id: \.element.id) { index, line in
-                    let isActive = index == activeIndex
+                    let isActive = index == playhead.line
 
                     HStack(alignment: .top, spacing: 12) {
                         Capsule()
@@ -425,7 +439,7 @@ struct LyricsView: View {
                         lyricText(
                             for: line,
                             isActive: isActive,
-                            activeWord: isActive ? activeWordIndex : nil
+                            activeWord: isActive ? playhead.word : nil
                         )
                         .font(.system(
                             size: isActive ? 29 : 25,
@@ -436,8 +450,7 @@ struct LyricsView: View {
                         .lineSpacing(isActive ? 8 : 6)
                         .scaleEffect(isActive ? 1 : 0.985, anchor: .leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .animation(.easeInOut(duration: 0.24), value: isActive)
-                        .animation(.easeInOut(duration: 0.12), value: activeWordIndex)
+                        .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: isActive)
                     }
                     .padding(.vertical, isActive ? 12 : 8)
                     .background {
@@ -476,31 +489,25 @@ struct LyricsView: View {
     }
 
     private func lyricText(for line: LyricLine, isActive: Bool, activeWord: Int?) -> Text {
-        guard !line.words.isEmpty else {
+        guard isActive, !line.words.isEmpty else {
             return Text(line.text)
                 .foregroundColor(isActive ? .white : .white.opacity(0.38))
+        }
+        guard let activeWord else {
+            return Text(line.text)
+                .foregroundColor(.white.opacity(0.38))
         }
 
         var result = Text("")
         for (index, word) in line.words.enumerated() {
             var part = Text(word.text)
-
-            if isActive {
-                if let activeWord {
-                    if index < activeWord {
-                        part = part.foregroundColor(.white)
-                    } else if index == activeWord {
-                        part = part.foregroundColor(.white).fontWeight(.bold)
-                    } else {
-                        part = part.foregroundColor(.white.opacity(0.38))
-                    }
-                } else {
-                    part = part.foregroundColor(.white.opacity(0.38))
-                }
+            if index < activeWord {
+                part = part.foregroundColor(.white)
+            } else if index == activeWord {
+                part = part.foregroundColor(.white).fontWeight(.bold)
             } else {
                 part = part.foregroundColor(.white.opacity(0.38))
             }
-
             result = result + part
         }
         return result
@@ -562,13 +569,13 @@ struct LyricsView: View {
     }
 
     private func scrollToActive(proxy: ScrollViewProxy, animated: Bool) {
-        guard
-            let activeIndex,
-            document.lines.indices.contains(activeIndex)
+        guard followsPlayback,
+              let line = playhead.line,
+              document.lines.indices.contains(line)
         else { return }
 
-        let id = document.lines[activeIndex].id
-        if animated {
+        let id = document.lines[line].id
+        if animated && !reduceMotion {
             withAnimation(.easeInOut(duration: 0.38)) {
                 proxy.scrollTo(id, anchor: .center)
             }
@@ -584,32 +591,130 @@ private struct LyricsPlayhead: View {
     @EnvironmentObject private var progress: PlaybackProgress
 
     let lines: [LyricLine]
-    let onChange: (Int?, Int?) -> Void
+    let onChange: (LyricPlayheadState) -> Void
+
+    @State private var lastLine: Int?
+    @State private var lastWord: Int?
 
     var body: some View {
         Color.clear
             .frame(height: 1)
             .onAppear {
-                let state = state(for: progress.elapsed)
-                onChange(state.line, state.word)
+                emit(progress.elapsed)
             }
             .onChange(of: progress.elapsed) { elapsed in
-                let state = state(for: elapsed)
-                onChange(state.line, state.word)
+                emit(elapsed)
+            }
+            .onChange(of: lines) { _ in
+                lastLine = nil
+                lastWord = nil
+                emit(progress.elapsed)
             }
     }
 
-    private func state(for elapsed: Double) -> (line: Int?, word: Int?) {
+    private func emit(_ elapsed: Double) {
+        let next = state(for: elapsed)
+        guard next.line != lastLine || next.word != lastWord else { return }
+        lastLine = next.line
+        lastWord = next.word
+        onChange(next)
+    }
+
+    private func state(for elapsed: Double) -> LyricPlayheadState {
         let time = elapsed + 0.06
-        guard let lineIndex = lines.lastIndex(where: { line in
-            guard let timestamp = line.timestamp else { return false }
-            return timestamp <= time
-        }) else { return (nil, nil) }
+        guard let lineIndex = lineIndex(at: time) else { return .none }
 
         let words = lines[lineIndex].words
-        guard !words.isEmpty else { return (lineIndex, nil) }
+        guard !words.isEmpty else {
+            return LyricPlayheadState(line: lineIndex, word: nil)
+        }
+        return LyricPlayheadState(
+            line: lineIndex,
+            word: wordIndex(in: words, at: time)
+        )
+    }
 
-        let wordIndex = words.lastIndex(where: { $0.start <= time })
-        return (lineIndex, wordIndex)
+    private func lineIndex(at time: Double) -> Int? {
+        var low = 0
+        var high = lines.count - 1
+        var result: Int?
+
+        while low <= high {
+            let middle = (low + high) / 2
+            if let timestamp = lines[middle].timestamp, timestamp <= time {
+                result = middle
+                low = middle + 1
+            } else {
+                high = middle - 1
+            }
+        }
+
+        return result
+    }
+
+    private func wordIndex(in words: [LyricWord], at time: Double) -> Int? {
+        var low = 0
+        var high = words.count - 1
+        var result: Int?
+
+        while low <= high {
+            let middle = (low + high) / 2
+            if words[middle].start <= time {
+                result = middle
+                low = middle + 1
+            } else {
+                high = middle - 1
+            }
+        }
+
+        return result
+    }
+}
+
+@MainActor
+private enum LyricsDocumentCache {
+    private static var documents: [String: LyricsDocument] = [:]
+    private static var keys: [String] = []
+
+    static func document(for track: Track) -> LyricsDocument {
+        let lyricsFile = track.lyricsFile ?? ""
+        let lyrics = track.lyrics ?? ""
+        let key = [
+            track.id.uuidString,
+            String(lyricsFile.utf8.count),
+            String(lyrics.utf8.count),
+            track.lyricsSource?.rawValue ?? "-",
+            String(lyricsFile.prefix(24)),
+            String(lyricsFile.suffix(24)),
+            String(lyrics.prefix(24)),
+            String(lyrics.suffix(24))
+        ].joined(separator: "|")
+
+        if let cached = documents[key] { return cached }
+
+        let fileDocument = track.lyricsFile
+            .flatMap { $0.isEmpty ? nil : LyricsFileParser.parse($0) }
+        let textDocument = track.lyrics.flatMap { lyrics -> LyricsDocument? in
+            guard !lyrics.isEmpty else { return nil }
+            return LyricsParser.parse(lyrics)
+        }
+
+        let document: LyricsDocument
+        if let fileDocument, fileDocument.isWordSynced {
+            document = fileDocument
+        } else if let textDocument, textDocument.isWordSynced {
+            document = textDocument
+        } else if let fileDocument, fileDocument.isSynced {
+            document = fileDocument
+        } else {
+            document = textDocument ?? .empty
+        }
+
+        documents[key] = document
+        keys.append(key)
+        if keys.count > 48 {
+            documents.removeValue(forKey: keys.removeFirst())
+        }
+        return document
     }
 }

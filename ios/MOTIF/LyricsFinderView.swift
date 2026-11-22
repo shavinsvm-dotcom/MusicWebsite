@@ -124,8 +124,12 @@ struct LyricsFinderView: View {
 
     private var trackHeader: some View {
         HStack(spacing: 12) {
-            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                .frame(width: 54, height: 54)
+            ArtworkView(
+                url: track.artworkURL,
+                seed: track.title + track.artist,
+                thumbnail: true
+            )
+            .frame(width: 54, height: 54)
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {

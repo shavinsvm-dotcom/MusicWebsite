@@ -19,9 +19,13 @@ struct MiniPlayer: View {
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
-                            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                                .id(track.id)
-                                .frame(width: 34, height: 34)
+                            ArtworkView(
+                                url: track.artworkURL,
+                                seed: track.title + track.artist,
+                                thumbnail: true
+                            )
+                            .id(track.id)
+                            .frame(width: 34, height: 34)
                                 .clipShape(RoundedRectangle(cornerRadius: 10.5, style: .continuous))
                                 .overlay {
                                     ArtworkProgressRing(size: 36, cornerRadius: 11.5)
@@ -1028,9 +1032,13 @@ private struct QueueRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ArtworkView(url: track.artworkURL, seed: track.title + track.artist)
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            ArtworkView(
+                url: track.artworkURL,
+                seed: track.title + track.artist,
+                thumbnail: true
+            )
+            .frame(width: 44, height: 44)
+            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(track.title)

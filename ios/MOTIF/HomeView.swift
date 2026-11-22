@@ -300,7 +300,7 @@ struct HomeView: View {
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.primary)
                     .frame(width: 26, height: 26)
-                    .nativeGlass(Circle(), interactive: false)
+                    .rowControl(Circle(), dark: true)
                     .padding(7)
             }
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
