@@ -19,24 +19,32 @@ private struct PaperBackground: View {
 
     private var base: Color {
         colorScheme == .dark
-            ? Color(red: 0.0196, green: 0.0196, blue: 0.0235) // #050506
-            : Color(red: 0.9804, green: 0.9765, blue: 0.9647) // #FAF9F6
+            ? Color(red: 0.0392, green: 0.0392, blue: 0.0471) // #0A0A0C
+            : Color(red: 0.9569, green: 0.9451, blue: 0.9098) // #F4F1E8
     }
 
     private var scrim: Color {
         colorScheme == .dark
-            ? Color.black.opacity(0.50)
-            : Color.black.opacity(0.035)
+            ? Color.black.opacity(0.55)
+            : Color.black.opacity(0.045)
     }
 
     var body: some View {
         ZStack {
             base
 
+            // A stretched low-resolution field makes the paper mottle; the
+            // tiled texture adds the fine grain on top of it.
+            Image(uiImage: PaperGrain.mottle(for: colorScheme))
+                .resizable(resizingMode: .stretch)
+                .interpolation(.high)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(colorScheme == .dark ? 0.040 : 0.028)
+
             Image(uiImage: PaperGrain.texture(for: colorScheme))
                 .resizable(resizingMode: .tile)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .opacity(colorScheme == .dark ? 0.030 : 0.022)
+                .opacity(colorScheme == .dark ? 0.055 : 0.035)
 
             LinearGradient(
                 stops: [
@@ -58,11 +66,16 @@ private enum PaperGrain {
         scheme == .dark ? whiteTexture : blackTexture
     }
 
-    private static let whiteTexture = make(white: true)
-    private static let blackTexture = make(white: false)
+    static func mottle(for scheme: ColorScheme) -> UIImage {
+        scheme == .dark ? whiteMottle : blackMottle
+    }
 
-    private static func make(white: Bool) -> UIImage {
-        let side = 160
+    private static let whiteTexture = make(white: true, side: 160, scale: UIScreen.main.scale)
+    private static let blackTexture = make(white: false, side: 160, scale: UIScreen.main.scale)
+    private static let whiteMottle = make(white: true, side: 32, scale: 1)
+    private static let blackMottle = make(white: false, side: 32, scale: 1)
+
+    private static func make(white: Bool, side: Int, scale: CGFloat) -> UIImage {
         var pixels = [UInt8](repeating: 0, count: side * side * 4)
         var generator = SystemRandomNumberGenerator()
 
@@ -93,7 +106,7 @@ private enum PaperGrain {
             return UIImage()
         }
 
-        return UIImage(cgImage: image, scale: UIScreen.main.scale, orientation: .up)
+        return UIImage(cgImage: image, scale: scale, orientation: .up)
     }
 }
 
