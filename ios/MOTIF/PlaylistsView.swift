@@ -264,10 +264,13 @@ struct PlaylistsView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
-            Button("New Playlist") {
+            GlassActionButton(
+                title: "New Playlist",
+                systemImage: "plus",
+                prominent: true
+            ) {
                 showCreatePlaylist = true
             }
-            .buttonStyle(.bordered)
             .padding(.top, 2)
         }
         .frame(maxWidth: .infinity)
@@ -627,7 +630,6 @@ struct PlaylistDetailView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .nativeGlass(Capsule(), interactive: true)
-                        .glassOutline(Capsule())
                         .padding(.top, 2)
                     }
                 }
@@ -1331,7 +1333,6 @@ struct SmartPlaylistDetailView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .nativeGlass(Capsule(), interactive: true)
-                        .glassOutline(Capsule())
                         .padding(.top, 2)
                     }
                 }

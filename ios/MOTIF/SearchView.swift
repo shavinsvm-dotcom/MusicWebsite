@@ -263,7 +263,6 @@ struct SearchView: View {
             label
                 .foregroundStyle(.primary)
                 .nativeGlass(Capsule(), interactive: true)
-                .glassOutline(Capsule())
         }
     }
 

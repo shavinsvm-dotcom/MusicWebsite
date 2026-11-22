@@ -226,7 +226,6 @@ struct LibraryView: View {
         }
         .padding(4)
         .nativeGlass(Capsule(), interactive: true)
-        .glassOutline(Capsule())
     }
 
     private var emptyState: some View {
@@ -244,18 +243,14 @@ struct LibraryView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button {
+            GlassActionButton(
+                title: "Import audio",
+                systemImage: "square.and.arrow.down",
+                prominent: true
+            ) {
                 showImporter = true
-            } label: {
-                Label("Import audio", systemImage: "square.and.arrow.down")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 11)
-                    .background(Color.primary, in: Capsule())
-                    .foregroundStyle(Color(uiColor: .systemBackground))
             }
-            .buttonStyle(MotifPressStyle(scale: 0.94))
-            .padding(.top, 4)
+            .padding(.top, 2)
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -418,17 +413,13 @@ struct LibraryView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    Button {
+                    GlassActionButton(
+                        title: "Sync cloud tracks",
+                        systemImage: "arrow.clockwise",
+                        prominent: true
+                    ) {
                         Task { await library.refreshCloud() }
-                    } label: {
-                        Label("Sync cloud tracks", systemImage: "arrow.clockwise")
-                            .font(.subheadline.weight(.semibold))
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 11)
-                            .background(Color.primary, in: Capsule())
-                            .foregroundStyle(Color(uiColor: .systemBackground))
                     }
-                    .buttonStyle(MotifPressStyle(scale: 0.94))
                     .disabled(library.isRefreshingCloud)
                     .padding(.top, 2)
                 }

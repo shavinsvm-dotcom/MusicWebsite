@@ -96,7 +96,6 @@ struct ForYouView: View {
                     .foregroundStyle(.primary)
                     .frame(width: 46, height: 46)
                     .nativeGlass(Circle(), interactive: true)
-                    .glassOutline(Circle())
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
@@ -224,18 +223,14 @@ struct ForYouView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Button {
+            GlassActionButton(
+                title: "Find music",
+                systemImage: "magnifyingglass",
+                prominent: true
+            ) {
                 openSearch()
-            } label: {
-                Label("Find music", systemImage: "magnifyingglass")
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 11)
-                    .background(Color.primary, in: Capsule())
-                    .foregroundStyle(Color(uiColor: .systemBackground))
             }
-            .buttonStyle(MotifPressStyle(scale: 0.94))
-            .padding(.top, 4)
+            .padding(.top, 2)
         }
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)

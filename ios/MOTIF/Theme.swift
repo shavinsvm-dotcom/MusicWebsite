@@ -12,15 +12,13 @@ struct AppBackground: View {
     }
 }
 
-/// Warm paper in light, near-black ink in dark, a fine static grain, and a
-/// soft bottom scrim. No cover tint, no color wash, no hotspot.
+/// Warm paper in light, a graphite gradient in dark, a fine static grain,
+/// and a soft bottom scrim. No cover tint and no color wash.
 private struct PaperBackground: View {
     @Environment(\.colorScheme) private var colorScheme
 
-    private var base: Color {
-        colorScheme == .dark
-            ? Color(red: 0.0392, green: 0.0392, blue: 0.0471) // #0A0A0C
-            : Color(red: 0.9569, green: 0.9451, blue: 0.9098) // #F4F1E8
+    private var paper: Color {
+        Color(red: 0.9569, green: 0.9451, blue: 0.9098) // #F4F1E8
     }
 
     private var scrim: Color {
@@ -29,9 +27,38 @@ private struct PaperBackground: View {
             : Color.black.opacity(0.045)
     }
 
+    /// A top-lit graphite field with a soft vignette. It keeps artwork the
+    /// only saturated thing on screen while giving dark mode some depth.
+    private var darkBase: some View {
+        ZStack {
+            Color(red: 0.031, green: 0.031, blue: 0.039) // #08080A
+
+            LinearGradient(
+                stops: [
+                    .init(color: Color(red: 0.102, green: 0.102, blue: 0.118), location: 0),
+                    .init(color: Color(red: 0.055, green: 0.055, blue: 0.067), location: 0.48),
+                    .init(color: .clear, location: 0.85)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            RadialGradient(
+                colors: [.clear, Color.black.opacity(0.24)],
+                center: .center,
+                startRadius: 210,
+                endRadius: 620
+            )
+        }
+    }
+
     var body: some View {
         ZStack {
-            base
+            if colorScheme == .dark {
+                darkBase
+            } else {
+                paper
+            }
 
             // A stretched low-resolution field makes the paper mottle; the
             // tiled texture adds the fine grain on top of it.
@@ -1253,16 +1280,6 @@ struct SectionHeader<Trailing: View>: View {
     }
 }
 
-extension View {
-    /// A hairline edge keeps glass controls readable on light paper.
-    func glassOutline<S: InsettableShape>(_ shape: S) -> some View {
-        overlay {
-            shape
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
-                .allowsHitTesting(false)
-        }
-    }
-}
 
 /// A compact glass capsule for section actions such as "Play" and
 /// "Play all". Shared so call sites stay a single view.
@@ -1282,7 +1299,6 @@ struct GlassActionButton: View {
                 .padding(.horizontal, prominent ? 18 : 11)
                 .padding(.vertical, prominent ? 12 : 7)
                 .nativeGlass(Capsule(), interactive: true)
-                .glassOutline(Capsule())
         }
         .buttonStyle(MotifPressStyle(scale: 0.92))
         .accessibilityLabel(accessibilityLabel ?? title)
@@ -1302,7 +1318,6 @@ struct GlassIconButton: View {
                 .foregroundStyle(.primary)
                 .frame(width: size, height: size)
                 .nativeGlass(Circle(), interactive: true)
-                .glassOutline(Circle())
         }
         .buttonStyle(MotifPressStyle(scale: 0.9))
         .accessibilityLabel(label)
@@ -1316,7 +1331,6 @@ extension View {
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .nativeGlass(Capsule(), interactive: true)
-            .glassOutline(Capsule())
     }
 }
 
