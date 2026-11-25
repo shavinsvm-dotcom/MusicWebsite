@@ -495,7 +495,7 @@ struct NowPlayingView: View {
                         .padding(.horizontal, 24)
                         .padding(.top, 10)
 
-                    controls()
+                    controls(track)
                         .padding(.horizontal, 24)
                         .padding(.top, 12)
                         .padding(.bottom, -14)
@@ -536,15 +536,6 @@ struct NowPlayingView: View {
 
                     Menu {
                         Section("Song") {
-                            Button {
-                                library.toggleFavorite(track)
-                            } label: {
-                                Label(
-                                    library.isFavorite(track) ? "Remove favorite" : "Favorite",
-                                    systemImage: library.isFavorite(track) ? "heart.slash" : "heart"
-                                )
-                            }
-
                             if track.isCloud {
                                 if library.isDownloaded(track) {
                                     Button(role: .destructive) {
@@ -686,15 +677,23 @@ struct NowPlayingView: View {
         .frame(height: 44)
     }
 
-    private func controls() -> some View {
+    private func controls(_ track: Track) -> some View {
         GlassGroup(spacing: 6) {
             HStack(spacing: 6) {
+            FavoriteHeartButton(isFavorite: library.isFavorite(track)) {
+                withAnimation(MotifMotion.control) {
+                    library.toggleFavorite(track)
+                }
+            }
+
             circularButton(icon: "shuffle", active: player.isShuffled) {
                 withAnimation(MotifMotion.control) {
                     player.toggleShuffle()
                 }
             }
             .accessibilityLabel(player.isShuffled ? "Turn shuffle off" : "Shuffle")
+
+            repeatButton
 
             Spacer(minLength: 2)
 
@@ -740,10 +739,6 @@ struct NowPlayingView: View {
             }
             .buttonStyle(PlayerControlPressStyle())
             .accessibilityLabel("Next")
-
-            Spacer(minLength: 2)
-
-            repeatButton
             }
         }
     }
@@ -827,6 +822,113 @@ struct NowPlayingView: View {
         return "\(album) · \(year)"
     }
 
+}
+
+/// The transport heart. Tapping it pops the symbol, twists it back to rest and
+/// fires a quick ring/spark burst without blocking the next tap.
+private struct FavoriteHeartButton: View {
+    let isFavorite: Bool
+    let action: () -> Void
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var burstProgress: CGFloat = 1
+    @State private var ringProgress: CGFloat = 1
+    @State private var heartScale: CGFloat = 1
+    @State private var heartRotation: Double = 0
+    @State private var pulseToken = 0
+
+    var body: some View {
+        Button {
+            let adding = !isFavorite
+            action()
+            MotifHaptics.play(adding ? .success : .soft)
+            animate(adding: adding)
+        } label: {
+            Image(systemName: isFavorite ? "heart.fill" : "heart")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(isFavorite ? Color.white : Color.white.opacity(0.62))
+                .shadow(color: .white.opacity(isFavorite ? 0.34 : 0), radius: 6)
+                .scaleEffect(heartScale)
+                .rotationEffect(.degrees(heartRotation))
+                .motifReplace()
+                .frame(width: 42, height: 42)
+                .playerGlass(Circle())
+                .overlay {
+                    heartBurst
+                }
+                .contentShape(Circle())
+        }
+        .buttonStyle(PlayerControlPressStyle(haptic: nil))
+        .accessibilityLabel(isFavorite ? "Remove favorite" : "Favorite")
+        .accessibilityValue(isFavorite ? "Favorite" : "Not favorite")
+    }
+
+    private var heartBurst: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.55), lineWidth: 1)
+                .frame(width: 34, height: 34)
+                .scaleEffect(0.62 + ringProgress * 0.92)
+                .opacity(Double(1 - ringProgress))
+
+            if isFavorite {
+                ForEach(0..<8, id: \.self) { index in
+                    spark(index: index)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func spark(index: Int) -> some View {
+        let angle = Double(index) / 8 * 2 * Double.pi
+        let distance = 9 + 15 * burstProgress
+
+        return Image(systemName: index.isMultiple(of: 2) ? "heart.fill" : "circle.fill")
+            .font(.system(size: index.isMultiple(of: 2) ? 5 : 2.5, weight: .bold))
+            .foregroundStyle(.white)
+            .offset(
+                x: CGFloat(cos(angle)) * distance,
+                y: CGFloat(sin(angle)) * distance
+            )
+            .scaleEffect(1 - burstProgress * 0.55)
+            .opacity(Double(1 - burstProgress))
+    }
+
+    private func animate(adding: Bool) {
+        guard !reduceMotion else { return }
+
+        pulseToken += 1
+        let token = pulseToken
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            burstProgress = 0
+            ringProgress = 0
+            heartScale = 0.82
+            heartRotation = adding ? -16 : 12
+        }
+
+        withAnimation(.spring(response: 0.26, dampingFraction: 0.46)) {
+            heartScale = adding ? 1.32 : 1.20
+            heartRotation = 0
+        }
+        withAnimation(.easeOut(duration: 0.52)) {
+            burstProgress = 1
+        }
+        withAnimation(.easeOut(duration: 0.62)) {
+            ringProgress = 1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            guard token == pulseToken else { return }
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.64)) {
+                heartScale = 1
+            }
+        }
+    }
 }
 
 private struct NowPlayingScrubber: View {
