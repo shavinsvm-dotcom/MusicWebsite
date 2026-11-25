@@ -89,12 +89,6 @@ struct RootView: View {
             .task(id: player.current?.id) {
                 guard let track = player.current else { return }
 
-                if let url = track.artworkURL {
-                    async let backdrop = PlaybackBackdropCache.shared.prepare(for: url)
-                    async let gradient = PlaybackBackdropCache.shared.prepareGradient(for: url)
-                    _ = await (backdrop, gradient)
-                }
-
                 // Auto-fetch lyrics for any track that is not already
                 // word-synced. Manual picks are never replaced. The resolver
                 // waits for the real playback duration, then prefers a valid
@@ -157,8 +151,8 @@ struct RootView: View {
     private var currentBackdrop: UIImage? {
         guard let url = player.current?.artworkURL else { return nil }
         // Cache-only: rendering the backdrop synchronously would stall the
-        // unfold animation. The async preparation task fills this in ahead
-        // of the tap, and the artwork view is the fallback when it is cold.
+        // unfold animation. PlayerBackdrop prepares the full backdrop when
+        // the sheet is actually open; this only reads what is already cached.
         return PlaybackBackdropCache.shared.image(for: url)
     }
 

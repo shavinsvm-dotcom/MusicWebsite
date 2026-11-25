@@ -495,7 +495,7 @@ struct NowPlayingView: View {
                         .padding(.horizontal, 24)
                         .padding(.top, 10)
 
-                    controls(track)
+                    controls()
                         .padding(.horizontal, 24)
                         .padding(.top, 12)
                         .padding(.bottom, -14)
@@ -686,27 +686,15 @@ struct NowPlayingView: View {
         .frame(height: 44)
     }
 
-    private func controls(_ track: Track) -> some View {
+    private func controls() -> some View {
         GlassGroup(spacing: 6) {
             HStack(spacing: 6) {
-            circularButton(
-                icon: library.isFavorite(track) ? "heart.fill" : "heart",
-                active: library.isFavorite(track)
-            ) {
-                withAnimation(MotifMotion.control) {
-                    library.toggleFavorite(track)
-                }
-            }
-            .accessibilityLabel(library.isFavorite(track) ? "Remove favorite" : "Favorite")
-
             circularButton(icon: "shuffle", active: player.isShuffled) {
                 withAnimation(MotifMotion.control) {
                     player.toggleShuffle()
                 }
             }
             .accessibilityLabel(player.isShuffled ? "Turn shuffle off" : "Shuffle")
-
-            repeatButton
 
             Spacer(minLength: 2)
 
@@ -752,6 +740,10 @@ struct NowPlayingView: View {
             }
             .buttonStyle(PlayerControlPressStyle())
             .accessibilityLabel("Next")
+
+            Spacer(minLength: 2)
+
+            repeatButton
             }
         }
     }
