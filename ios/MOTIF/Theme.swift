@@ -314,28 +314,113 @@ struct MotifPressStyle: ButtonStyle {
 }
 
 /// Transport and glass controls move as one piece: the whole control, glass
-/// included, compresses by a few percent and springs back with no overshoot.
-/// Nothing inside the button animates separately, which is what made the old
-/// transport taps look jittery.
+/// included, compresses on touch, then springs back with a small pop and a
+/// spark burst. Reduce Motion keeps the press feedback but skips the pop.
 struct PlayerControlPressStyle: ButtonStyle {
     var scale: CGFloat = 0.96
     var haptic: MotifHaptics.Event? = .light
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var animated: Bool = true
 
     func makeBody(configuration: Configuration) -> some View {
-        let pressed = configuration.isPressed
-        let animation: Animation = pressed
-            ? .easeOut(duration: 0.09)
-            : MotifMotion.control
+        PlayerControlPressLabel(
+            content: configuration.label,
+            isPressed: configuration.isPressed,
+            scale: scale,
+            haptic: haptic,
+            animated: animated
+        )
+    }
+}
 
-        return configuration.label
-            .scaleEffect(pressed ? scale : 1)
-            .animation(reduceMotion ? nil : animation, value: pressed)
-            .onChange(of: pressed) { isPressed in
-                guard isPressed, let haptic else { return }
-                MotifHaptics.play(haptic)
+private struct PlayerControlPressLabel<Content: View>: View {
+    let content: Content
+    let isPressed: Bool
+    let scale: CGFloat
+    let haptic: MotifHaptics.Event?
+    let animated: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var pop: CGFloat = 1
+    @State private var burstProgress: CGFloat = 1
+    @State private var burstToken = 0
+
+    var body: some View {
+        content
+            .scaleEffect(isPressed ? scale : (animated ? pop : 1))
+            .overlay {
+                if animated, burstProgress < 1 {
+                    sparkBurst
+                }
             }
+            .animation(pressAnimation, value: isPressed)
+            .onChange(of: isPressed) { pressed in
+                if pressed {
+                    if let haptic {
+                        MotifHaptics.play(haptic)
+                    }
+                } else if animated, !reduceMotion {
+                    animatePop()
+                }
+            }
+    }
+
+    private var pressAnimation: Animation? {
+        guard !reduceMotion else { return nil }
+        if isPressed { return .easeOut(duration: 0.09) }
+        return animated ? nil : MotifMotion.control
+    }
+
+    private var sparkBurst: some View {
+        GeometryReader { geometry in
+            let side = min(geometry.size.width, geometry.size.height)
+            let start = side * 0.18
+            let travel = side * 0.24
+            let dot = max(1.4, side * 0.052)
+
+            ZStack {
+                ForEach(0..<6, id: \.self) { index in
+                    let angle = Double(index) / 6 * 2 * Double.pi
+                    Circle()
+                        .fill(Color.primary)
+                        .frame(width: dot, height: dot)
+                        .offset(
+                            x: CGFloat(cos(angle)) * (start + travel * burstProgress),
+                            y: CGFloat(sin(angle)) * (start + travel * burstProgress)
+                        )
+                        .scaleEffect(1 - burstProgress * 0.45)
+                        .opacity(Double(1 - burstProgress))
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    private func animatePop() {
+        burstToken += 1
+        let token = burstToken
+
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            pop = scale
+            burstProgress = 0
+        }
+
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.52)) {
+            pop = 1.09
+        }
+        withAnimation(.easeOut(duration: 0.42)) {
+            burstProgress = 1
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+            guard token == burstToken else { return }
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.70)) {
+                pop = 1
+            }
+        }
     }
 }
 

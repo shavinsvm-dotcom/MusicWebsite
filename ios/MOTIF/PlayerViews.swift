@@ -825,14 +825,13 @@ struct NowPlayingView: View {
 }
 
 /// The transport heart. Tapping it pops the symbol, twists it back to rest and
-/// fires a quick ring/spark burst without blocking the next tap.
+/// fires a quick spark burst without blocking the next tap.
 private struct FavoriteHeartButton: View {
     let isFavorite: Bool
     let action: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var burstProgress: CGFloat = 1
-    @State private var ringProgress: CGFloat = 1
     @State private var heartScale: CGFloat = 1
     @State private var heartRotation: Double = 0
     @State private var pulseToken = 0
@@ -858,20 +857,14 @@ private struct FavoriteHeartButton: View {
                 }
                 .contentShape(Circle())
         }
-        .buttonStyle(PlayerControlPressStyle(haptic: nil))
+        .buttonStyle(PlayerControlPressStyle(haptic: nil, animated: false))
         .accessibilityLabel(isFavorite ? "Remove favorite" : "Favorite")
         .accessibilityValue(isFavorite ? "Favorite" : "Not favorite")
     }
 
     private var heartBurst: some View {
         ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.55), lineWidth: 1)
-                .frame(width: 34, height: 34)
-                .scaleEffect(0.62 + ringProgress * 0.92)
-                .opacity(Double(1 - ringProgress))
-
-            if isFavorite {
+            if isFavorite, burstProgress < 1 {
                 ForEach(0..<8, id: \.self) { index in
                     spark(index: index)
                 }
@@ -906,7 +899,6 @@ private struct FavoriteHeartButton: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             burstProgress = 0
-            ringProgress = 0
             heartScale = 0.82
             heartRotation = adding ? -16 : 12
         }
@@ -917,9 +909,6 @@ private struct FavoriteHeartButton: View {
         }
         withAnimation(.easeOut(duration: 0.52)) {
             burstProgress = 1
-        }
-        withAnimation(.easeOut(duration: 0.62)) {
-            ringProgress = 1
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
