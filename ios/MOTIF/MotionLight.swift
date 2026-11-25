@@ -394,8 +394,10 @@ struct HeroEdgeBlurOverlay: View {
     var body: some View {
         Group {
             if motionAllowed {
+                // 15 fps is enough for this light; 20 fps redrew the whole
+                // canvas more often for no visible gain.
                 TimelineView(.animation(
-                    minimumInterval: 1.0 / 20.0,
+                    minimumInterval: 1.0 / 15.0,
                     paused: !isVisible || !isPlaying || scenePhase != .active
                 )) { _ in
                     canvas(sample: controller.sample)

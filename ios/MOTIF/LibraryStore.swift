@@ -6,11 +6,17 @@ import UniformTypeIdentifiers
 
 @MainActor
 final class LibraryStore: ObservableObject {
-    @Published private(set) var tracks: [Track] = []
-    @Published private(set) var favoriteIDs: Set<UUID> = []
+    @Published private(set) var tracks: [Track] = [] {
+        didSet { invalidateDerivedCaches() }
+    }
+    @Published private(set) var favoriteIDs: Set<UUID> = [] {
+        didSet { favoritesCache = nil }
+    }
     @Published private(set) var playlists: [Playlist] = []
     @Published private(set) var recentTrackIDs: [UUID] = []
-    @Published private(set) var playCounts: [UUID: Int] = [:]
+    @Published private(set) var playCounts: [UUID: Int] = [:] {
+        didSet { sortedTracksCache.removeAll(keepingCapacity: true) }
+    }
     @Published private(set) var isRefreshingCloud = false
     @Published private(set) var downloadingIDs: Set<UUID> = []
     @Published private(set) var downloadJobs: [DownloadJob] = []
@@ -39,6 +45,15 @@ final class LibraryStore: ObservableObject {
     /// and pattern pair, even if the view's own counter starts over.
     private var coverGenerationCount = 0
 
+    // Derived collections are read from SwiftUI bodies that run far more often
+    // than the library changes. Each one is built once per library revision
+    // instead of once per row, per scroll frame or per player state change.
+    private var favoritesCache: [Track]?
+    private var sortedTracksCache: [SongSort: [Track]] = [:]
+    private var homeSnapshotCache: HomeSnapshot?
+    private var albumGroupsCache: [LibraryAlbumGroup]?
+    private var artistGroupsCache: [LibraryArtistGroup]?
+
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
         self.documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -53,7 +68,85 @@ final class LibraryStore: ObservableObject {
     }
 
     var favorites: [Track] {
-        tracks.filter { favoriteIDs.contains($0.id) }
+        if let favoritesCache { return favoritesCache }
+        let resolved = tracks.filter { favoriteIDs.contains($0.id) }
+        favoritesCache = resolved
+        return resolved
+    }
+
+    func sortedTracks(by sort: SongSort) -> [Track] {
+        if let cached = sortedTracksCache[sort] { return cached }
+
+        let sorted: [Track]
+        switch sort {
+        case .recentlyAdded:
+            sorted = tracks.sorted { $0.addedAt > $1.addedAt }
+        case .title:
+            sorted = tracks.sorted {
+                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+            }
+        case .artist:
+            sorted = tracks.sorted {
+                let artist = $0.artist.localizedCaseInsensitiveCompare($1.artist)
+                if artist == .orderedSame {
+                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                }
+                return artist == .orderedAscending
+            }
+        case .album:
+            sorted = tracks.sorted {
+                let album = $0.album.localizedCaseInsensitiveCompare($1.album)
+                if album == .orderedSame {
+                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                }
+                return album == .orderedAscending
+            }
+        case .mostPlayed:
+            sorted = tracks.sorted {
+                let left = playCounts[$0.id] ?? 0
+                let right = playCounts[$1.id] ?? 0
+                if left != right { return left > right }
+                return $0.addedAt > $1.addedAt
+            }
+        }
+
+        sortedTracksCache[sort] = sorted
+        return sorted
+    }
+
+    var homeSnapshot: HomeSnapshot {
+        if let homeSnapshotCache { return homeSnapshotCache }
+        let snapshot = HomeSnapshot(library: self)
+        homeSnapshotCache = snapshot
+        return snapshot
+    }
+
+    var albumGroups: [LibraryAlbumGroup] {
+        if let albumGroupsCache { return albumGroupsCache }
+        let groups = LibraryAlbumBuilder.albums(from: tracks)
+        albumGroupsCache = groups
+        return groups
+    }
+
+    var artistGroups: [LibraryArtistGroup] {
+        if let artistGroupsCache { return artistGroupsCache }
+        let groups = LibraryArtistBuilder.artists(from: tracks)
+        artistGroupsCache = groups
+        return groups
+    }
+
+    /// Resolves a player copy of a track to the library's canonical row using
+    /// the existing indexes, instead of scanning every song on each pass.
+    func resolve(_ track: Track) -> Track {
+        canonicalTrack(for: track) ?? track
+    }
+
+    private func invalidateDerivedCaches() {
+        favoritesCache = nil
+        sortedTracksCache.removeAll(keepingCapacity: true)
+        homeSnapshotCache = nil
+        albumGroupsCache = nil
+        artistGroupsCache = nil
     }
 
     var recentTracks: [Track] {
@@ -1284,6 +1377,76 @@ final class LibraryStore: ObservableObject {
             return nil
         } catch {
             return error.localizedDescription
+        }
+    }
+}
+
+/// Everything the Home screen derives from the library. Building this used to
+/// happen inside `HomeView.body`; caching it in the store means a play/pause
+/// change no longer rescans and re-sorts every track.
+struct HomeSnapshot {
+    let mixTracks: [Track]
+    let mixSubtitle: String
+    let topArtistName: String?
+    let topArtistTracks: [Track]
+
+    @MainActor
+    init(library: LibraryStore) {
+        let all = library.tracks
+
+        guard !all.isEmpty else {
+            mixTracks = []
+            mixSubtitle = ""
+            topArtistName = nil
+            topArtistTracks = []
+            return
+        }
+
+        let count = min(8, all.count)
+        let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
+        let mix = (0..<count).map { all[(day + $0 * 7) % all.count] }
+        mixTracks = mix
+
+        var seen = Set<String>()
+        let artists = mix.compactMap { track -> String? in
+            let name = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty, seen.insert(name).inserted else { return nil }
+            return name
+        }
+        mixSubtitle = artists.isEmpty
+            ? "Songs picked for today"
+            : artists.prefix(3).joined(separator: ", ")
+
+        var counts: [String: Int] = [:]
+        for track in all {
+            let name = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty,
+                  name != "Imported",
+                  name.caseInsensitiveCompare("Unknown artist") != .orderedSame
+            else { continue }
+            counts[name, default: 0] += 1
+        }
+
+        let top = counts
+            .sorted {
+                if $0.value == $1.value {
+                    return $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending
+                }
+                return $0.value > $1.value
+            }
+            .first?
+            .key
+
+        topArtistName = top
+        if let top {
+            topArtistTracks = Array(
+                all.filter {
+                    $0.artist.caseInsensitiveCompare(top) == .orderedSame
+                }
+                .prefix(6)
+            )
+        } else {
+            topArtistTracks = []
         }
     }
 }

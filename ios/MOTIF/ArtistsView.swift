@@ -85,6 +85,7 @@ struct LibraryArtistDetailView: View {
     }
 
     var body: some View {
+        let artistTracks = tracks
         ZStack {
             DetailBackdrop(artworkURL: artworkURL)
 
@@ -92,7 +93,7 @@ struct LibraryArtistDetailView: View {
                 VStack(spacing: 0) {
                     header
 
-                    if tracks.isEmpty {
+                    if artistTracks.isEmpty {
                         Text("No songs by this artist.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -106,7 +107,7 @@ struct LibraryArtistDetailView: View {
                         HStack(alignment: .firstTextBaseline) {
                             SectionTitle(title: "All songs")
                             Spacer()
-                            Text("\(tracks.count)")
+                            Text("\(artistTracks.count)")
                                 .font(.caption.weight(.medium))
                                 .foregroundStyle(.tertiary)
                         }
@@ -114,10 +115,10 @@ struct LibraryArtistDetailView: View {
                         .padding(.bottom, 8)
 
                         LazyVStack(spacing: 0) {
-                            ForEach(tracks) { track in
-                                TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
+                            ForEach(Array(artistTracks.enumerated()), id: \.element.id) { index, track in
+                                TrackRow(track: track, queue: artistTracks, showNowPlaying: $showNowPlaying)
 
-                                if track.id != tracks.last?.id {
+                                if index < artistTracks.count - 1 {
                                     Divider().opacity(0.35)
                                 }
                             }

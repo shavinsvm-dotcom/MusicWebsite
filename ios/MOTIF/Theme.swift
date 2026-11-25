@@ -414,8 +414,15 @@ struct ArtworkView: View {
                     .antialiased(true)
                     .scaledToFill()
             } else if url != nil, !failed {
-                ProgressView()
-                    .tint(.white)
+                // Rows and cards sit in lazy stacks and shelves; a spinning
+                // ProgressView in every loading cell keeps dozens of animations
+                // alive while scrolling. The gradient is placeholder enough.
+                if thumbnail || card {
+                    Color.clear
+                } else {
+                    ProgressView()
+                        .tint(.white)
+                }
             } else {
                 fallback
             }
@@ -1753,7 +1760,10 @@ struct TrackRow: View {
             }
             .padding(.horizontal, 3)
             .padding(.vertical, 3)
-            .nativeGlass(Capsule(), interactive: true)
+            // One live glass capsule per row is the most expensive thing in a
+            // long song list while it scrolls. The menu is a dense overlay, so
+            // use the blur-free row treatment the theme already provides.
+            .rowControl(Capsule())
         }
         .padding(.vertical, 6)
     }

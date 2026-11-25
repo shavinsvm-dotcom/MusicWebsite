@@ -19,26 +19,6 @@ struct LibraryView: View {
         }
     }
 
-    private enum SongSort: String, CaseIterable, Identifiable {
-        case recentlyAdded
-        case title
-        case artist
-        case album
-        case mostPlayed
-
-        var id: String { rawValue }
-
-        var title: String {
-            switch self {
-            case .recentlyAdded: return "Recently added"
-            case .title: return "Title"
-            case .artist: return "Artist"
-            case .album: return "Album"
-            case .mostPlayed: return "Most played"
-            }
-        }
-    }
-
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
     @Binding var showNowPlaying: Bool
@@ -76,45 +56,15 @@ struct LibraryView: View {
     }
 
     private var sortedTracks: [Track] {
-        switch sort {
-        case .recentlyAdded:
-            return library.tracks.sorted { $0.addedAt > $1.addedAt }
-        case .title:
-            return library.tracks.sorted {
-                $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-            }
-        case .artist:
-            return library.tracks.sorted {
-                let artist = $0.artist.localizedCaseInsensitiveCompare($1.artist)
-                if artist == .orderedSame {
-                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-                }
-                return artist == .orderedAscending
-            }
-        case .album:
-            return library.tracks.sorted {
-                let album = $0.album.localizedCaseInsensitiveCompare($1.album)
-                if album == .orderedSame {
-                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
-                }
-                return album == .orderedAscending
-            }
-        case .mostPlayed:
-            return library.tracks.sorted {
-                let left = library.playCounts[$0.id] ?? 0
-                let right = library.playCounts[$1.id] ?? 0
-                if left != right { return left > right }
-                return $0.addedAt > $1.addedAt
-            }
-        }
+        library.sortedTracks(by: sort)
     }
 
     private var albums: [LibraryAlbumGroup] {
-        LibraryAlbumBuilder.albums(from: library.tracks)
+        library.albumGroups
     }
 
     private var artists: [LibraryArtistGroup] {
-        LibraryArtistBuilder.artists(from: library.tracks)
+        library.artistGroups
     }
 
     var body: some View {
@@ -306,14 +256,15 @@ struct LibraryView: View {
     }
 
     private var songs: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let rows = sortedTracks
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 GlassActionButton(
                     title: "Play",
                     prominent: true,
                     accessibilityLabel: "Play all songs"
                 ) {
-                    play(sortedTracks)
+                    play(rows)
                 }
 
                 GlassActionButton(
@@ -321,7 +272,7 @@ struct LibraryView: View {
                     systemImage: "shuffle",
                     accessibilityLabel: "Shuffle all songs"
                 ) {
-                    play(sortedTracks, shuffled: true)
+                    play(rows, shuffled: true)
                 }
 
                 Spacer(minLength: 8)
@@ -350,18 +301,18 @@ struct LibraryView: View {
             }
             .padding(.bottom, 2)
 
-            if sortedTracks.isEmpty {
+            if rows.isEmpty {
                 emptyScope("Songs will appear here once you import or add music.")
             } else {
                 LazyVStack(spacing: 0) {
-                    ForEach(sortedTracks) { track in
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, track in
                         TrackRow(
                             track: track,
-                            queue: sortedTracks,
+                            queue: rows,
                             showNowPlaying: $showNowPlaying
                         )
 
-                        if track.id != sortedTracks.last?.id {
+                        if index < rows.count - 1 {
                             Divider().opacity(0.35)
                         }
                     }

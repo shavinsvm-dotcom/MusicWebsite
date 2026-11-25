@@ -178,3 +178,25 @@ enum LibrarySearch {
         return 3
     }
 }
+
+/// Sort orders offered by the Library tab. Lives here so the store can cache
+/// the sorted array instead of rebuilding it for every view pass.
+enum SongSort: String, CaseIterable, Identifiable {
+    case recentlyAdded
+    case title
+    case artist
+    case album
+    case mostPlayed
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .recentlyAdded: return "Recently added"
+        case .title: return "Title"
+        case .artist: return "Artist"
+        case .album: return "Album"
+        case .mostPlayed: return "Most played"
+        }
+    }
+}

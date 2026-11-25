@@ -263,10 +263,7 @@ struct NowPlayingView: View {
 
     private var currentTrack: Track? {
         guard let current = player.current else { return nil }
-        return library.tracks.first { existing in
-            existing.id == current.id
-                || (current.remoteID != nil && existing.remoteID == current.remoteID)
-        } ?? current
+        return library.resolve(current)
     }
 
     var body: some View {
@@ -456,25 +453,12 @@ struct NowPlayingView: View {
                         .padding(.top, 1)
                         .contentTransition(.opacity)
 
-                        Menu {
-                            lyricsOptions(track)
-                        } label: {
-                            Label(
-                                track.lyrics?.isEmpty == false ? "Lyrics" : "Find Lyrics",
-                                systemImage: "quote.bubble"
-                            )
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.78))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .playerGlass(Capsule(), interactive: true)
-                            .contentShape(Capsule())
-                        }
-                        .buttonStyle(MotifPressStyle(scale: 0.94))
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 24)
                     .animation(MotifMotion.artwork, value: track.id)
+
+                    quickActions(track)
 
                     NowPlayingScrubber()
                         .padding(.horizontal, 24)
@@ -520,141 +504,87 @@ struct NowPlayingView: View {
                         .playerGlass(Circle())
 
                     Menu {
-                    if !library.playlists.isEmpty {
-                        Section("Add to playlist") {
-                            ForEach(library.playlists) { playlist in
-                                Button(playlist.name) {
-                                    library.add(track, to: playlist.id)
-                                }
-                            }
-                        }
-                    }
-
-                    Button {
-                        library.toggleFavorite(track)
-                    } label: {
-                        Label(
-                            library.isFavorite(track) ? "Remove favorite" : "Favorite",
-                            systemImage: library.isFavorite(track) ? "heart.slash" : "heart"
-                        )
-                    }
-
-                    if track.isCloud {
-                        if library.isDownloaded(track) {
-                            Button(role: .destructive) {
-                                library.removeDownload(track)
-                            } label: {
-                                Label("Remove download", systemImage: "icloud.slash")
-                            }
-                        } else {
+                        Section("Song") {
                             Button {
-                                Task { await library.download(track) }
+                                library.toggleFavorite(track)
                             } label: {
-                                Label("Download for offline", systemImage: "arrow.down.circle")
-                            }
-                            .disabled(library.isDownloading(track))
-                        }
-                    }
-
-                    if track.source == .local && track.mediaURL.isFileURL {
-                        if track.isUploadedToCloud {
-                            Button {} label: {
-                                Label("Uploaded to cloud", systemImage: "checkmark.icloud")
-                            }
-                            .disabled(true)
-                        } else if library.isUploading(track) {
-                            Button {} label: {
-                                Label("Uploading…", systemImage: "icloud.and.arrow.up")
-                            }
-                            .disabled(true)
-                        } else {
-                            Button {
-                                Task { await library.uploadToCloud(track) }
-                            } label: {
-                                Label("Upload to cloud", systemImage: "icloud.and.arrow.up")
-                            }
-                        }
-                    }
-
-                    Section {
-                        Button {
-                            showQueue = true
-                        } label: {
-                            Label("Up Next", systemImage: "text.line.first.and.arrowtriangle.forward")
-                        }
-
-                        Menu {
-                            lyricsOptions(track)
-                        } label: {
-                            Label("Lyrics", systemImage: "quote.bubble")
-                        }
-                    }
-
-                    Section("Playback") {
-                        Button {
-                            MotifHaptics.play(.light)
-                            player.setAutomix(!player.automixEnabled)
-                        } label: {
-                            Label(
-                                player.automixEnabled ? "Automix · On" : "Automix",
-                                systemImage: "waveform.path.ecg"
-                            )
-                        }
-
-                        Button {
-                            MotifHaptics.play(.light)
-                            showEqualizer = true
-                        } label: {
-                            Label(
-                                equalizer.isEnabled ? "Equalizer · On" : "Equalizer",
-                                systemImage: "slider.vertical.3"
-                            )
-                        }
-
-                        Menu {
-                            if player.isSleepTimerActive {
-                                Button {
-                                    player.cancelSleepTimer()
-                                } label: {
-                                    Label("Cancel Sleep Timer", systemImage: "xmark.circle")
-                                }
-                                Divider()
+                                Label(
+                                    library.isFavorite(track) ? "Remove favorite" : "Favorite",
+                                    systemImage: library.isFavorite(track) ? "heart.slash" : "heart"
+                                )
                             }
 
-                            ForEach([5, 10, 15, 30, 45, 60], id: \.self) { minutes in
-                                Button("\(minutes) minutes") {
-                                    player.setSleepTimer(minutes: minutes)
+                            if track.isCloud {
+                                if library.isDownloaded(track) {
+                                    Button(role: .destructive) {
+                                        library.removeDownload(track)
+                                    } label: {
+                                        Label("Remove download", systemImage: "icloud.slash")
+                                    }
+                                } else {
+                                    Button {
+                                        Task { await library.download(track) }
+                                    } label: {
+                                        Label("Download for offline", systemImage: "arrow.down.circle")
+                                    }
+                                    .disabled(library.isDownloading(track))
                                 }
                             }
-                        } label: {
-                            Label(
-                                player.sleepTimerRemainingText.map { "Sleep Timer · \($0)" } ?? "Sleep Timer",
-                                systemImage: "moon.zzz"
-                            )
-                        }
 
-                        Menu {
-                            ForEach([0, 2, 4, 6, 8, 12], id: \.self) { seconds in
-                                Button {
-                                    player.setCrossfade(Double(seconds))
-                                } label: {
-                                    HStack {
-                                        Text(seconds == 0 ? "Off" : "\(seconds) seconds")
-                                        if abs(player.crossfadeDuration - Double(seconds)) < 0.01 {
-                                            Image(systemName: "checkmark")
-                                        }
+                            if track.source == .local && track.mediaURL.isFileURL {
+                                if track.isUploadedToCloud {
+                                    Button {} label: {
+                                        Label("Uploaded to cloud", systemImage: "checkmark.icloud")
+                                    }
+                                    .disabled(true)
+                                } else if library.isUploading(track) {
+                                    Button {} label: {
+                                        Label("Uploading…", systemImage: "icloud.and.arrow.up")
+                                    }
+                                    .disabled(true)
+                                } else {
+                                    Button {
+                                        Task { await library.uploadToCloud(track) }
+                                    } label: {
+                                        Label("Upload to cloud", systemImage: "icloud.and.arrow.up")
                                     }
                                 }
                             }
-                        } label: {
-                            Label(
-                                player.crossfadeDuration > 0
-                                    ? "Crossfade · \(Int(player.crossfadeDuration))s"
-                                    : "Crossfade",
-                                systemImage: "arrow.left.arrow.right"
-                            )
                         }
-                    }
+
+                        Section("Playback") {
+                            Button {
+                                MotifHaptics.play(.light)
+                                player.setAutomix(!player.automixEnabled)
+                            } label: {
+                                Label(
+                                    player.automixEnabled ? "Automix · On" : "Automix",
+                                    systemImage: "waveform.path.ecg"
+                                )
+                            }
+
+                            Menu {
+                                ForEach([0, 2, 4, 6, 8, 12], id: \.self) { seconds in
+                                    Button {
+                                        player.setCrossfade(Double(seconds))
+                                    } label: {
+                                        HStack {
+                                            Text(seconds == 0 ? "Off" : "\(seconds) seconds")
+                                            if abs(player.crossfadeDuration - Double(seconds)) < 0.01 {
+                                                Image(systemName: "checkmark")
+                                            }
+                                        }
+                                    }
+                                }
+                            } label: {
+                                Label(
+                                    player.crossfadeDuration > 0
+                                        ? "Crossfade · \(Int(player.crossfadeDuration))s"
+                                        : "Crossfade",
+                                    systemImage: "arrow.left.arrow.right"
+                                )
+                            }
+                        }
 
                 } label: {
                     Image(systemName: "line.3.horizontal")
@@ -681,6 +611,90 @@ struct NowPlayingView: View {
         }
         .padding(.horizontal, 24)
         .frame(height: 44)
+    }
+
+    /// Player-level shortcuts for the actions that used to be buried in the
+    /// More menu. Five compact glass buttons keep the menu to song/file and
+    /// playback settings instead of one long list.
+    private func quickActions(_ track: Track) -> some View {
+        GlassGroup(spacing: 8) {
+            HStack(spacing: 8) {
+            Button {
+                showQueue = true
+            } label: {
+                quickActionLabel("list.bullet")
+            }
+            .buttonStyle(PlayerControlPressStyle())
+            .accessibilityLabel("Up Next")
+
+            Menu {
+                lyricsOptions(track)
+            } label: {
+                quickActionLabel(
+                    "quote.bubble",
+                    active: track.lyrics?.isEmpty == false
+                )
+            }
+            .accessibilityLabel("Lyrics")
+
+            Button {
+                MotifHaptics.play(.light)
+                showEqualizer = true
+            } label: {
+                quickActionLabel("slider.vertical.3", active: equalizer.isEnabled)
+            }
+            .buttonStyle(PlayerControlPressStyle())
+            .accessibilityLabel(equalizer.isEnabled ? "Equalizer, on" : "Equalizer")
+
+            Menu {
+                if player.isSleepTimerActive {
+                    Button {
+                        player.cancelSleepTimer()
+                    } label: {
+                        Label("Cancel Sleep Timer", systemImage: "xmark.circle")
+                    }
+                    Divider()
+                }
+
+                ForEach([5, 10, 15, 30, 45, 60], id: \.self) { minutes in
+                    Button("\(minutes) minutes") {
+                        player.setSleepTimer(minutes: minutes)
+                    }
+                }
+            } label: {
+                quickActionLabel("moon.zzz", active: player.isSleepTimerActive)
+            }
+            .accessibilityLabel(
+                player.sleepTimerRemainingText.map { "Sleep timer, \($0) remaining" }
+                    ?? "Sleep timer"
+            )
+
+                if !library.playlists.isEmpty {
+                    Menu {
+                        ForEach(library.playlists) { playlist in
+                            Button(playlist.name) {
+                                library.add(track, to: playlist.id)
+                            }
+                        }
+                    } label: {
+                        quickActionLabel("text.badge.plus")
+                    }
+                    .accessibilityLabel("Add to playlist")
+                }
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 10)
+    }
+
+    private func quickActionLabel(_ icon: String, active: Bool = false) -> some View {
+        Image(systemName: icon)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(active ? Color.white : Color.white.opacity(0.62))
+            .frame(width: 40, height: 40)
+            .motifReplace()
+            .playerGlass(Circle())
+            .contentShape(Circle())
     }
 
     private func controls(_ track: Track) -> some View {

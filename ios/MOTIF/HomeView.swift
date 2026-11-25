@@ -12,7 +12,7 @@ struct HomeView: View {
     @State private var importError: String?
 
     var body: some View {
-        let data = HomeSnapshot(library: library)
+        let data = library.homeSnapshot
 
         NavigationStack {
             ScrollView {
@@ -275,14 +275,14 @@ struct HomeView: View {
             }
 
             LazyVStack(spacing: 0) {
-                ForEach(library.favorites) { track in
+                ForEach(Array(library.favorites.enumerated()), id: \.element.id) { index, track in
                     TrackRow(
                         track: track,
                         queue: library.favorites,
                         showNowPlaying: $showNowPlaying
                     )
 
-                    if track.id != library.favorites.last?.id {
+                    if index < library.favorites.count - 1 {
                         Divider().opacity(0.35)
                     }
                 }
@@ -353,72 +353,5 @@ struct HomeView: View {
         .padding(24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .nativeGlass(RoundedRectangle(cornerRadius: 24, style: .continuous))
-    }
-}
-
-private struct HomeSnapshot {
-    let mixTracks: [Track]
-    let mixSubtitle: String
-    let topArtistName: String?
-    let topArtistTracks: [Track]
-
-    @MainActor
-    init(library: LibraryStore) {
-        let all = library.tracks
-
-        guard !all.isEmpty else {
-            mixTracks = []
-            mixSubtitle = ""
-            topArtistName = nil
-            topArtistTracks = []
-            return
-        }
-
-        let count = min(8, all.count)
-        let day = Calendar.current.ordinality(of: .day, in: .year, for: Date()) ?? 0
-        let mix = (0..<count).map { all[(day + $0 * 7) % all.count] }
-        mixTracks = mix
-
-        var seen = Set<String>()
-        let artists = mix.compactMap { track -> String? in
-            let name = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty, seen.insert(name).inserted else { return nil }
-            return name
-        }
-        mixSubtitle = artists.isEmpty
-            ? "Songs picked for today"
-            : artists.prefix(3).joined(separator: ", ")
-
-        var counts: [String: Int] = [:]
-        for track in all {
-            let name = track.artist.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty,
-                  name != "Imported",
-                  name.caseInsensitiveCompare("Unknown artist") != .orderedSame
-            else { continue }
-            counts[name, default: 0] += 1
-        }
-
-        let top = counts
-            .sorted {
-                if $0.value == $1.value {
-                    return $0.key.localizedCaseInsensitiveCompare($1.key) == .orderedAscending
-                }
-                return $0.value > $1.value
-            }
-            .first?
-            .key
-
-        topArtistName = top
-        if let top {
-            topArtistTracks = Array(
-                all.filter {
-                    $0.artist.caseInsensitiveCompare(top) == .orderedSame
-                }
-                .prefix(6)
-            )
-        } else {
-            topArtistTracks = []
-        }
     }
 }
