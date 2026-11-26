@@ -10,7 +10,16 @@ struct SharedNowPlaying: Codable, Equatable {
     var duration: Double
     var updatedAt: Date
 
-    static let appGroup = "group.com.example.motif"
+    /// Derived from the running bundle so renaming the bundle identifier
+    /// carries the widget's shared container with it. The widget bundle id is
+    /// the app's id plus `.widgets`.
+    static var appGroup: String {
+        let identifier = Bundle.main.bundleIdentifier ?? "com.example.motif"
+        let appIdentifier = identifier.hasSuffix(".widgets")
+            ? String(identifier.dropLast(".widgets".count))
+            : identifier
+        return "group." + appIdentifier
+    }
     private static let storageKey = "motif.nowPlaying"
 
     static func save(_ snapshot: SharedNowPlaying) {

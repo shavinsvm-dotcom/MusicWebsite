@@ -5,6 +5,8 @@ on:
   push:
     paths:
       - "ios/**"
+      - "!ios/build-error.log"
+      - "!ios/audit/**"
       - ".github/workflows/ios-unsigned.yml"
 
 permissions:
@@ -19,7 +21,7 @@ concurrency:
 jobs:
   build:
     runs-on: macos-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
       - name: Check out repository
@@ -56,13 +58,17 @@ jobs:
           if [ -f /tmp/motif-build.log ]; then
             { echo '### Xcode errors'; grep -nE 'error:|warning:' /tmp/motif-build.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
             tail -n 500 /tmp/motif-build.log > build-error.log
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git checkout -B ci/build-log
-            git add -f build-error.log
-            git commit -m 'Record Xcode build failure'
-            git push --force origin HEAD:ci/build-log
           fi
+          if [ -f /tmp/motif-sim-build.log ]; then
+            { echo; echo '### Simulator build errors'; grep -nE 'error:' /tmp/motif-sim-build.log | tail -n 60; } >> "$GITHUB_STEP_SUMMARY" || true
+            { echo; echo '### Simulator build log'; tail -n 200 /tmp/motif-sim-build.log; } >> build-error.log
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B ci/build-log
+          git add -f build-error.log
+          git commit -m 'Record Xcode build failure [skip ci]'
+          git push --force origin HEAD:ci/build-log
 
       - name: Package unsigned IPA
         working-directory: ios
@@ -78,9 +84,210 @@ jobs:
           set -euo pipefail
           unzip -l MOTIF.ipa | grep -q 'Payload/MOTIF.app/PlugIns/MOTIFWidgets.appex/MOTIFWidgets'
 
-      - name: Verify IPA contents
+      - name: Unpack IPA and audit submission metadata
         working-directory: ios
-        run: unzip -l MOTIF.ipa
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/ipa-audit audit
+          mkdir -p /tmp/ipa-audit audit
+          unzip -q MOTIF.ipa -d /tmp/ipa-audit
+
+          {
+            echo "# Bundle audit"
+            echo
+            echo "- Commit: ${GITHUB_SHA}"
+            echo "- IPA sha256: $(shasum -a 256 MOTIF.ipa | awk '{print $1}')"
+            echo "- IPA bytes: $(wc -c < MOTIF.ipa | tr -d ' ')"
+            echo
+          } > audit/report.txt
+
+          python3 - <<'PY' | tee -a audit/report.txt
+          import os
+          import plistlib
+          import re
+          import sys
+
+          APP = "/tmp/ipa-audit/Payload/MOTIF.app"
+          WIDGET = os.path.join(APP, "PlugIns", "MOTIFWidgets.appex")
+          failures = []
+
+          def check(name, ok, detail=""):
+              print(("PASS " if ok else "FAIL ") + name + ((" - " + str(detail)) if detail else ""))
+              if not ok:
+                  failures.append(name)
+
+          check("app bundle present", os.path.isdir(APP), APP)
+          check("widget bundle present", os.path.isdir(WIDGET), WIDGET)
+
+          for label, bundle in (("app", APP), ("widget", WIDGET)):
+              path = os.path.join(bundle, "PrivacyInfo.xcprivacy")
+              check(label + " privacy manifest present", os.path.isfile(path), path)
+              if not os.path.isfile(path):
+                  continue
+              with open(path, "rb") as handle:
+                  manifest = plistlib.load(handle)
+              check(label + " tracking disabled", manifest.get("NSPrivacyTracking") is False)
+              check(label + " no tracking domains", manifest.get("NSPrivacyTrackingDomains") == [])
+              check(label + " no collected data types", manifest.get("NSPrivacyCollectedDataTypes") == [])
+              apis = manifest.get("NSPrivacyAccessedAPITypes") or []
+              defaults = [
+                  api for api in apis
+                  if api.get("NSPrivacyAccessedAPIType") == "NSPrivacyAccessedAPICategoryUserDefaults"
+              ]
+              check(label + " UserDefaults declared", len(defaults) == 1)
+              if defaults:
+                  reasons = defaults[0].get("NSPrivacyAccessedAPITypeReasons") or []
+                  check(label + " UserDefaults reason CA92.1", "CA92.1" in reasons, reasons)
+              check(label + " only UserDefaults API declared", len(apis) == 1,
+                    [api.get("NSPrivacyAccessedAPIType") for api in apis])
+
+          with open(os.path.join(APP, "Info.plist"), "rb") as handle:
+              info = plistlib.load(handle)
+
+          check("CFBundleIdentifier", info.get("CFBundleIdentifier") == "com.example.motif",
+                info.get("CFBundleIdentifier"))
+          motion = info.get("NSMotionUsageDescription")
+          check("motion usage description", isinstance(motion, str) and len(motion.strip()) > 10, motion)
+          check("export compliance declared", info.get("ITSAppUsesNonExemptEncryption") is False)
+          check("launch screen declared", isinstance(info.get("UILaunchScreen"), dict))
+          check("background audio mode", info.get("UIBackgroundModes") == ["audio"])
+          check("portrait only", info.get("UISupportedInterfaceOrientations") == ["UIInterfaceOrientationPortrait"])
+          check("marketing version",
+                bool(re.fullmatch(r"\d+(\.\d+){0,2}", str(info.get("CFBundleShortVersionString", "")))),
+                info.get("CFBundleShortVersionString"))
+          check("build number",
+                bool(re.fullmatch(r"\d+", str(info.get("CFBundleVersion", "")))),
+                info.get("CFBundleVersion"))
+          check("minimum iOS 16", str(info.get("MinimumOSVersion", "")).startswith("16"),
+                info.get("MinimumOSVersion"))
+          check("display name", info.get("CFBundleDisplayName") == "Lilt", info.get("CFBundleDisplayName"))
+          check("compiled icon",
+                bool(info.get("CFBundleIcons")) or bool(info.get("CFBundleIconName"))
+                or any(name.startswith("AppIcon") for name in os.listdir(APP)))
+
+          documents = info.get("CFBundleDocumentTypes") or []
+          check("one audio document type", len(documents) == 1, len(documents))
+          if documents:
+              document = documents[0]
+              types = document.get("LSItemContentTypes") or []
+              check("document role editor", document.get("CFBundleTypeRole") == "Editor",
+                    document.get("CFBundleTypeRole"))
+              check("document rank alternate", document.get("LSHandlerRank") == "Alternate",
+                    document.get("LSHandlerRank"))
+              for uti in ("public.audio", "public.mp3", "public.mpeg-4-audio"):
+                  check("accepts " + uti, uti in types, types)
+          check("opens documents in place", info.get("LSSupportsOpeningDocumentsInPlace") is True)
+
+          def walk(node, path=""):
+              if isinstance(node, dict):
+                  for key, value in node.items():
+                      yield from walk(value, path + "." + str(key))
+              elif isinstance(node, list):
+                  for index, value in enumerate(node):
+                      yield from walk(value, path + "[" + str(index) + "]")
+              else:
+                  yield path, node
+
+          allowed = {".CFBundleIdentifier", ".CFBundleURLTypes[0].CFBundleURLName"}
+          leaks = [(p, v) for p, v in walk(info)
+                   if isinstance(v, str) and "com.example" in v and p not in allowed]
+          check("no placeholder metadata outside identifier keys", not leaks, leaks[:5])
+
+          unresolved = [(p, v) for p, v in walk(info) if isinstance(v, str) and "$(" in v]
+          check("no unresolved build settings", not unresolved, unresolved[:5])
+
+          with open(os.path.join(WIDGET, "Info.plist"), "rb") as handle:
+              widget_info = plistlib.load(handle)
+          check("widget bundle id suffix",
+                str(widget_info.get("CFBundleIdentifier", "")).endswith(".widgets"),
+                widget_info.get("CFBundleIdentifier"))
+          check("widget extension declared", isinstance(widget_info.get("NSExtension"), dict))
+
+          print()
+          if failures:
+              print("AUDIT FAILED: " + ", ".join(failures))
+              sys.exit(1)
+          print("AUDIT PASSED")
+          PY
+
+          cp /tmp/ipa-audit/Payload/MOTIF.app/PrivacyInfo.xcprivacy audit/app-PrivacyInfo.xcprivacy
+          cp /tmp/ipa-audit/Payload/MOTIF.app/PlugIns/MOTIFWidgets.appex/PrivacyInfo.xcprivacy audit/widget-PrivacyInfo.xcprivacy
+          plutil -convert xml1 -o audit/app-Info.plist /tmp/ipa-audit/Payload/MOTIF.app/Info.plist
+          plutil -convert xml1 -o audit/widget-Info.plist /tmp/ipa-audit/Payload/MOTIF.app/PlugIns/MOTIFWidgets.appex/Info.plist
+          shasum -a 256 audit/*.xcprivacy audit/*.plist >> audit/report.txt
+          cat audit/report.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Launch app on iOS simulator
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          chosen = ""
+          for runtime in sorted(data, reverse=True):
+              if "iOS" not in runtime:
+                  continue
+              phones = [d for d in data[runtime]
+                        if d.get("isAvailable") and d.get("name", "").startswith("iPhone")]
+              if phones:
+                  chosen = phones[0]["udid"]
+                  break
+          print(chosen)
+          ')
+          test -n "$DEVICE_ID"
+          echo "Simulator: $DEVICE_ID"
+          xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+
+          set -o pipefail
+          xcodebuild \
+            -project MOTIF.xcodeproj \
+            -scheme MOTIF \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination "id=$DEVICE_ID" \
+            -derivedDataPath build-sim \
+            2>&1 | tee /tmp/motif-sim-build.log
+
+          SIM_APP="build-sim/Build/Products/Debug-iphonesimulator/MOTIF.app"
+          test -d "$SIM_APP"
+          xcrun simctl install "$DEVICE_ID" "$SIM_APP"
+          xcrun simctl launch "$DEVICE_ID" com.example.motif | tee /tmp/motif-launch.txt
+          sleep 8
+
+          if ! xcrun simctl spawn "$DEVICE_ID" launchctl list | grep -q 'com.example.motif'; then
+            echo "APP NOT RUNNING AFTER LAUNCH"
+            xcrun simctl spawn "$DEVICE_ID" log show --last 2m --predicate 'process == "MOTIF"' | tail -n 100 || true
+            exit 1
+          fi
+
+          xcrun simctl io "$DEVICE_ID" screenshot audit/simulator-launch.png
+          xcrun simctl terminate "$DEVICE_ID" com.example.motif || true
+          echo "- Simulator launch: PASS (app running 8s after launch, screenshot attached)" >> audit/report.txt
+
+      - name: Publish bundle audit
+        if: always()
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          test -d audit || exit 0
+          test -n "$(ls -A audit)" || exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B ci/bundle-audit
+          git add -f audit
+          git commit -m "Bundle audit for ${GITHUB_SHA} [skip ci]"
+          git push --force origin HEAD:ci/bundle-audit
+
+      - name: Upload bundle audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-audit
+          path: ios/audit
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4

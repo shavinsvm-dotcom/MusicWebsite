@@ -1,7 +1,6 @@
 name: MOTIF
 
 options:
-  bundleIdPrefix: com.example
   deploymentTarget:
     iOS: "16.0"
   createIntermediateGroups: true
@@ -9,6 +8,10 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
+    # The one identifier the account holder must replace. The widget bundle id
+    # and the shared app group derive from it, and the app and widget both
+    # read the resulting group at runtime.
+    APP_BUNDLE_ID: com.example.motif
 
 packages:
   Yams:
@@ -21,10 +24,14 @@ targets:
     platform: iOS
     sources:
       - path: MOTIF
+        excludes:
+          - PrivacyInfo.xcprivacy
+      - path: MOTIF/PrivacyInfo.xcprivacy
+        buildPhase: resources
     settings:
       base:
         PRODUCT_NAME: MOTIF
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.motif
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
         INFOPLIST_FILE: Support/Info.plist
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: MOTIF/MOTIF.entitlements
@@ -42,12 +49,16 @@ targets:
     platform: iOS
     sources:
       - path: MOTIFWidgets
+        excludes:
+          - PrivacyInfo.xcprivacy
+      - path: MOTIFWidgets/PrivacyInfo.xcprivacy
+        buildPhase: resources
       - path: MOTIF/SharedNowPlaying.swift
       - path: MOTIF/SharedLibrary.swift
     settings:
       base:
         PRODUCT_NAME: MOTIFWidgets
-        PRODUCT_BUNDLE_IDENTIFIER: com.example.motif.widgets
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).widgets
         INFOPLIST_FILE: MOTIFWidgets/Info.plist
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: MOTIFWidgets/MOTIFWidgets.entitlements

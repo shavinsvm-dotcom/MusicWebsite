@@ -14,7 +14,14 @@ struct SharedLibrarySnapshot: Codable, Equatable {
     var playlistName: String?
     var playlistArtworkURL: String?
 
-    static let appGroup = "group.com.example.motif"
+    /// Matches SharedNowPlaying.appGroup, including inside the widget.
+    static var appGroup: String {
+        let identifier = Bundle.main.bundleIdentifier ?? "com.example.motif"
+        let appIdentifier = identifier.hasSuffix(".widgets")
+            ? String(identifier.dropLast(".widgets".count))
+            : identifier
+        return "group." + appIdentifier
+    }
     private static let storageKey = "motif.library"
 
     static func save(_ snapshot: SharedLibrarySnapshot) {
