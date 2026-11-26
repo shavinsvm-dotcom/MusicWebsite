@@ -15,9 +15,9 @@ final class PlaybackProgress: ObservableObject {
 /// timer changes and playback errors never invalidate a long list.
 @MainActor
 final class NowPlayingMarker: ObservableObject {
-    @Published private(set) var trackID: UUID?
-    @Published private(set) var remoteID: String?
-    @Published private(set) var isPlaying = false
+    @Published fileprivate(set) var trackID: UUID?
+    @Published fileprivate(set) var remoteID: String?
+    @Published fileprivate(set) var isPlaying = false
 }
 
 @MainActor
