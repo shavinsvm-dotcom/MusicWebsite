@@ -300,6 +300,7 @@ struct LyricsView: View {
                             Image(systemName: "timer")
                         }
                         .accessibilityLabel("Lyrics timing")
+                        .accessibilityIdentifier("lyrics.timing")
                         .accessibilityValue(
                             timingDelay == 0 ? "On time" : String(format: "%+.1fs", timingDelay)
                         )

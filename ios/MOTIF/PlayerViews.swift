@@ -51,6 +51,8 @@ struct MiniPlayer: View {
                     }
                     .buttonStyle(MotifPressStyle(scale: 0.98, opacity: 0.9))
                     .layoutPriority(1)
+                    .accessibilityLabel("Open player")
+                    .accessibilityIdentifier("mini.player")
 
                     GlassGroup(spacing: 8) {
                         HStack(spacing: 8) {
@@ -482,6 +484,7 @@ struct NowPlayingView: View {
                             }
                             .buttonStyle(MotifPressStyle(scale: 0.94))
                             .accessibilityLabel("Lyrics")
+                            .accessibilityIdentifier("player.lyrics")
                         }
                         .padding(.top, 2)
                     }

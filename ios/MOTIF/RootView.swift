@@ -90,6 +90,7 @@ struct RootView: View {
                         ?? sameArtist.randomElement()
                         ?? candidates.randomElement()
                 }
+                guard !UITestSupport.isEnabled else { return }
                 await library.refreshLocalMetadata()
                 await library.refreshCloud()
             }

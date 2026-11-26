@@ -75,7 +75,64 @@ final class LibraryStore: ObservableObject {
         try? fileManager.createDirectory(at: downloadsURL, withIntermediateDirectories: true)
         try? fileManager.createDirectory(at: artworkDirectory, withIntermediateDirectories: true)
         load()
+#if DEBUG
+        if UITestSupport.isEnabled {
+            seedUITestLibraryIfNeeded()
+        }
+#endif
     }
+
+#if DEBUG
+    /// One local, silent, lyric-bearing track so the UI tests can exercise the
+    /// song menu, player lyrics and timing control without network or imports.
+    private func seedUITestLibraryIfNeeded() {
+        let title = "UI Test Track"
+        guard !tracks.contains(where: { $0.title == title }) else { return }
+
+        let url = documentsURL.appendingPathComponent("ui-test-tone.m4a")
+        if !fileManager.fileExists(atPath: url.path) {
+            let settings: [String: Any] = [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 44_100,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 64_000
+            ]
+
+            if let file = try? AVAudioFile(forWriting: url, settings: settings) {
+                let frames = AVAudioFrameCount(file.processingFormat.sampleRate * 60)
+                if let buffer = AVAudioPCMBuffer(
+                    pcmFormat: file.processingFormat,
+                    frameCapacity: frames
+                ) {
+                    buffer.frameLength = frames
+                    if let channel = buffer.floatChannelData?[0] {
+                        memset(channel, 0, Int(frames) * MemoryLayout<Float>.size)
+                    }
+                    try? file.write(from: buffer)
+                }
+            }
+        }
+
+        let track = Track(
+            title: title,
+            artist: "Lilt Tests",
+            album: "UI Tests",
+            mediaURL: url,
+            duration: 60,
+            source: .local,
+            lyrics: """
+            [00:00.00]First line of the test
+            [00:10.00]Second line of the test
+            [00:20.00]Third line of the test
+            [00:30.00]Fourth line of the test
+            """,
+            lyricsSource: .manual
+        )
+
+        tracks.insert(track, at: 0)
+        save()
+    }
+#endif
 
     var favorites: [Track] {
         if let favoritesCache { return favoritesCache }

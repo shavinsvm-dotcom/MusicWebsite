@@ -52,24 +52,6 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             2>&1 | tee /tmp/motif-build.log
 
-      - name: Publish build errors
-        if: failure()
-        run: |
-          if [ -f /tmp/motif-build.log ]; then
-            { echo '### Xcode errors'; grep -nE 'error:|warning:' /tmp/motif-build.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
-            tail -n 500 /tmp/motif-build.log > build-error.log
-          fi
-          if [ -f /tmp/motif-sim-build.log ]; then
-            { echo; echo '### Simulator build errors'; grep -nE 'error:' /tmp/motif-sim-build.log | tail -n 60; } >> "$GITHUB_STEP_SUMMARY" || true
-            { echo; echo '### Simulator build log'; tail -n 200 /tmp/motif-sim-build.log; } >> build-error.log
-          fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git checkout -B ci/build-log
-          git add -f build-error.log
-          git commit -m 'Record Xcode build failure [skip ci]'
-          git push --force origin HEAD:ci/build-log
-
       - name: Package unsigned IPA
         working-directory: ios
         run: |
@@ -217,7 +199,7 @@ jobs:
           shasum -a 256 audit/*.xcprivacy audit/*.plist >> audit/report.txt
           cat audit/report.txt >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Launch app on iOS simulator
+      - name: Run UI tests on iOS simulator
         working-directory: ios
         run: |
           set -euo pipefail
@@ -240,31 +222,63 @@ jobs:
           xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
 
+          rm -rf audit/UITests.xcresult
           set -o pipefail
-          xcodebuild \
+          xcodebuild test \
             -project MOTIF.xcodeproj \
             -scheme MOTIF \
             -configuration Debug \
-            -sdk iphonesimulator \
             -destination "id=$DEVICE_ID" \
-            -derivedDataPath build-sim \
-            2>&1 | tee /tmp/motif-sim-build.log
+            -derivedDataPath build-ui \
+            -resultBundlePath audit/UITests.xcresult \
+            2>&1 | tee /tmp/motif-ui-test.log
 
-          SIM_APP="build-sim/Build/Products/Debug-iphonesimulator/MOTIF.app"
-          test -d "$SIM_APP"
-          xcrun simctl install "$DEVICE_ID" "$SIM_APP"
-          xcrun simctl launch "$DEVICE_ID" com.example.motif | tee /tmp/motif-launch.txt
-          sleep 8
+      - name: Export UI test screenshots
+        if: always()
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          test -d audit/UITests.xcresult || exit 0
+          rm -rf audit/ui-screens
+          mkdir -p audit/ui-screens
+          xcrun xcresulttool export attachments \
+            --path audit/UITests.xcresult \
+            --output-path audit/ui-screens
+          python3 - <<'PY'
+          import json, os, shutil, sys
+          root = "audit/ui-screens"
+          manifest_path = os.path.join(root, "manifest.json")
+          if not os.path.exists(manifest_path):
+              print("No attachment manifest found")
+              sys.exit(0)
+          manifest = json.load(open(manifest_path))
+          exported = 0
+          for test in manifest:
+              for attachment in test.get("attachments", []):
+                  name = attachment.get("suggestedHumanReadableName") or ""
+                  file_name = attachment.get("exportedFileName") or ""
+                  source = os.path.join(root, file_name)
+                  if not name or not os.path.isfile(source):
+                      continue
+                  target = os.path.join("audit", name.replace(" ", "-").lower() + ".png")
+                  shutil.copyfile(source, target)
+                  exported += 1
+                  print("attachment:", name, "->", target)
+          print("exported", exported, "attachments")
+          PY
+          for image in audit/*.png; do
+            if [ -e "$image" ]; then sips -Z 1000 "$image" >/dev/null; fi
+          done
 
-          if ! xcrun simctl spawn "$DEVICE_ID" launchctl list | grep -q 'com.example.motif'; then
-            echo "APP NOT RUNNING AFTER LAUNCH"
-            xcrun simctl spawn "$DEVICE_ID" log show --last 2m --predicate 'process == "MOTIF"' | tail -n 100 || true
-            exit 1
-          fi
-
-          xcrun simctl io "$DEVICE_ID" screenshot audit/simulator-launch.png
-          xcrun simctl terminate "$DEVICE_ID" com.example.motif || true
-          echo "- Simulator launch: PASS (app running 8s after launch, screenshot attached)" >> audit/report.txt
+      - name: Assert UI test evidence
+        if: success()
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          for name in song-info lyrics-timing storage; do
+            test -f "audit/$name.png" || { echo "MISSING audit/$name.png"; ls -la audit; exit 1; }
+          done
+          echo "- UI tests: PASS (Song Info, lyric timing, storage; screenshots attached)" >> audit/report.txt
 
       - name: Publish bundle audit
         if: always()
@@ -276,7 +290,10 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git checkout -B ci/bundle-audit
-          git add -f audit
+          git add -f audit/report.txt
+          for file in audit/*.png audit/*.plist audit/*.xcprivacy; do
+            if [ -e "$file" ]; then git add -f "$file"; fi
+          done
           git commit -m "Bundle audit for ${GITHUB_SHA} [skip ci]"
           git push --force origin HEAD:ci/bundle-audit
 
@@ -285,7 +302,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bundle-audit
-          path: ios/audit
+          path: |
+            ios/audit/*.txt
+            ios/audit/*.png
+            ios/audit/*.plist
+            ios/audit/*.xcprivacy
           if-no-files-found: ignore
           retention-days: 14
 
@@ -296,3 +317,22 @@ jobs:
           path: ios/MOTIF.ipa
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish build errors
+        if: failure()
+        run: |
+          : > build-error.log
+          if [ -f /tmp/motif-build.log ]; then
+            { echo '### Xcode errors'; grep -nE 'error:|warning:' /tmp/motif-build.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
+            tail -n 500 /tmp/motif-build.log > build-error.log
+          fi
+          if [ -f /tmp/motif-ui-test.log ]; then
+            { echo; echo '### UI test errors'; grep -nE 'error:|failed|XCTAssert' /tmp/motif-ui-test.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
+            { echo; echo '### UI test log'; tail -n 800 /tmp/motif-ui-test.log; } >> build-error.log
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B ci/build-log
+          git add -f build-error.log
+          git commit -m 'Record build failure [skip ci]'
+          git push --force origin HEAD:ci/build-log

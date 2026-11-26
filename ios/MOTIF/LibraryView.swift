@@ -117,6 +117,7 @@ struct LibraryView: View {
                         Image(systemName: "gearshape")
                     }
                     .accessibilityLabel("Settings")
+                    .accessibilityIdentifier("library.settings")
 
                     Menu {
                         Button {

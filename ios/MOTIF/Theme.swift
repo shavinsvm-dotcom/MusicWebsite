@@ -1824,6 +1824,8 @@ struct TrackRow: View {
                     .contentShape(Rectangle())
             }
             }
+            .accessibilityLabel("More")
+            .accessibilityIdentifier("track.more")
             .padding(.horizontal, 3)
             .padding(.vertical, 3)
             // One live glass capsule per row is the most expensive thing in a
