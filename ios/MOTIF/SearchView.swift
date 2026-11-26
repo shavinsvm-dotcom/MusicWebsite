@@ -21,6 +21,19 @@ private enum SearchScope: String, CaseIterable, Identifiable, Hashable {
     }
 }
 
+/// Everything the search surface shows, resolved in one pass so a body read
+/// never filters and ranks the library more than once.
+private struct SearchResults {
+    var tracks: [Track] = []
+    var artists: [LibraryArtistGroup] = []
+    var albums: [LibraryAlbumGroup] = []
+    var playlists: [Playlist] = []
+
+    var isEmpty: Bool {
+        tracks.isEmpty && artists.isEmpty && albums.isEmpty && playlists.isEmpty
+    }
+}
+
 struct SearchView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
@@ -29,82 +42,106 @@ struct SearchView: View {
     @State private var query = ""
     @State private var scope: SearchScope = .all
     @State private var recentSearches: [String] = UserDefaults.standard.stringArray(forKey: "motif.recentSearches") ?? []
+    @State private var results = SearchResults()
+    @State private var searchTask: Task<Void, Never>?
 
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var matchingTracks: [Track] {
-        guard !trimmedQuery.isEmpty else { return [] }
-        return library.tracks
-            .filter {
-                LibrarySearch.matches(
-                    trimmedQuery,
-                    in: [$0.title, $0.artist, $0.album]
-                )
+    /// One pass over the library per settled query. Every section reads this
+    /// same value, so a body pass can no longer filter, rank and sort the whole
+    /// song list once per section.
+    private func buildResults(for rawQuery: String) -> SearchResults {
+        let text = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return SearchResults() }
+
+        // Split the query once instead of once per candidate row.
+        let tokens = LibrarySearch.tokens(in: text)
+
+        let tracks = library.tracks
+            .compactMap { track -> (track: Track, rank: Int)? in
+                guard LibrarySearch.matches(tokens, in: [track.title, track.artist, track.album]) else {
+                    return nil
+                }
+                return (track, trackRank(track, query: text))
             }
             .sorted { lhs, rhs in
-                let leftRank = trackRank(lhs)
-                let rightRank = trackRank(rhs)
-                if leftRank != rightRank { return leftRank < rightRank }
-                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+                return lhs.track.title.localizedCaseInsensitiveCompare(rhs.track.title) == .orderedAscending
             }
+            .map { $0.track }
+
+        // Artist and album groups are already built and cached per library
+        // revision. Rebuilding them here made every keystroke walk the whole
+        // song list again.
+        let artists = library.artistGroups
+            .compactMap { group -> (group: LibraryArtistGroup, rank: Int)? in
+                guard LibrarySearch.matches(tokens, in: [group.name]) else { return nil }
+                return (group, LibrarySearch.rank(title: group.name, query: text))
+            }
+            .sorted { lhs, rhs in
+                if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+                if lhs.group.count != rhs.group.count { return lhs.group.count > rhs.group.count }
+                return lhs.group.name.localizedCaseInsensitiveCompare(rhs.group.name) == .orderedAscending
+            }
+            .map { $0.group }
+
+        let albums = library.albumGroups
+            .compactMap { group -> (group: LibraryAlbumGroup, rank: Int)? in
+                guard LibrarySearch.matches(tokens, in: [group.title, group.artist]) else { return nil }
+                return (group, LibrarySearch.rank(title: group.title, query: text))
+            }
+            .sorted { lhs, rhs in
+                if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+                return lhs.group.title.localizedCaseInsensitiveCompare(rhs.group.title) == .orderedAscending
+            }
+            .map { $0.group }
+
+        let playlists = library.playlists
+            .compactMap { playlist -> (playlist: Playlist, rank: Int)? in
+                guard LibrarySearch.matches(tokens, in: [playlist.name, playlist.description]) else {
+                    return nil
+                }
+                return (playlist, LibrarySearch.rank(title: playlist.name, query: text))
+            }
+            .sorted { lhs, rhs in
+                if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+                return lhs.playlist.name.localizedCaseInsensitiveCompare(rhs.playlist.name) == .orderedAscending
+            }
+            .map { $0.playlist }
+
+        return SearchResults(tracks: tracks, artists: artists, albums: albums, playlists: playlists)
     }
 
-    private func trackRank(_ track: Track) -> Int {
-        let titleRank = LibrarySearch.rank(title: track.title, query: trimmedQuery)
+    private func trackRank(_ track: Track, query: String) -> Int {
+        let titleRank = LibrarySearch.rank(title: track.title, query: query)
         if titleRank < 3 { return titleRank }
-        if track.artist.localizedStandardContains(trimmedQuery) { return 3 }
-        if track.album.localizedStandardContains(trimmedQuery) { return 4 }
+        if track.artist.localizedStandardContains(query) { return 3 }
+        if track.album.localizedStandardContains(query) { return 4 }
         return 5
     }
 
-    private var matchingArtists: [LibraryArtistGroup] {
-        guard !trimmedQuery.isEmpty else { return [] }
-        return LibraryArtistBuilder.artists(from: library.tracks)
-            .filter { LibrarySearch.matches(trimmedQuery, in: [$0.name]) }
-            .sorted { lhs, rhs in
-                let leftRank = LibrarySearch.rank(title: lhs.name, query: trimmedQuery)
-                let rightRank = LibrarySearch.rank(title: rhs.name, query: trimmedQuery)
-                if leftRank != rightRank { return leftRank < rightRank }
-                if lhs.count != rhs.count { return lhs.count > rhs.count }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
+    /// Wait for a short pause in typing, then search once. Previously every
+    /// keystroke ran a full scan and sort before the next character arrived.
+    private func scheduleSearch(_ rawQuery: String) {
+        searchTask?.cancel()
+
+        guard !rawQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            results = SearchResults()
+            return
+        }
+
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard !Task.isCancelled else { return }
+            results = buildResults(for: rawQuery)
+        }
     }
 
-    private var matchingAlbums: [LibraryAlbumGroup] {
-        guard !trimmedQuery.isEmpty else { return [] }
-        return LibraryAlbumBuilder.albums(from: library.tracks)
-            .filter {
-                LibrarySearch.matches(trimmedQuery, in: [$0.title, $0.artist])
-            }
-            .sorted { lhs, rhs in
-                let leftRank = LibrarySearch.rank(title: lhs.title, query: trimmedQuery)
-                let rightRank = LibrarySearch.rank(title: rhs.title, query: trimmedQuery)
-                if leftRank != rightRank { return leftRank < rightRank }
-                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
-            }
-    }
-
-    private var matchingPlaylists: [Playlist] {
-        guard !trimmedQuery.isEmpty else { return [] }
-        return library.playlists
-            .filter {
-                LibrarySearch.matches(trimmedQuery, in: [$0.name, $0.description])
-            }
-            .sorted { lhs, rhs in
-                let leftRank = LibrarySearch.rank(title: lhs.name, query: trimmedQuery)
-                let rightRank = LibrarySearch.rank(title: rhs.name, query: trimmedQuery)
-                if leftRank != rightRank { return leftRank < rightRank }
-                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-            }
-    }
-
-    private var hasAnyLocalMatch: Bool {
-        !matchingTracks.isEmpty
-            || !matchingArtists.isEmpty
-            || !matchingAlbums.isEmpty
-            || !matchingPlaylists.isEmpty
+    private func refreshResultsNow() {
+        searchTask?.cancel()
+        results = buildResults(for: query)
     }
 
     var body: some View {
@@ -129,27 +166,27 @@ struct SearchView: View {
                         Group {
                             switch scope {
                         case .all:
-                            if !matchingArtists.isEmpty {
+                            if !results.artists.isEmpty {
                                 artistSection
                             }
-                            if !matchingAlbums.isEmpty {
+                            if !results.albums.isEmpty {
                                 albumSection
                             }
-                            if !matchingPlaylists.isEmpty {
+                            if !results.playlists.isEmpty {
                                 playlistSection
                             }
-                            if !matchingTracks.isEmpty {
+                            if !results.tracks.isEmpty {
                                 resultSection(
                                     title: "Songs",
                                     subtitle: nil,
-                                    tracks: matchingTracks
+                                    tracks: results.tracks
                                 )
                             }
                         case .songs:
                             resultSection(
                                 title: "Songs",
                                 subtitle: nil,
-                                tracks: matchingTracks
+                                tracks: results.tracks
                             )
                         case .artists:
                             artistSection
@@ -162,7 +199,7 @@ struct SearchView: View {
                         .id(scope)
                         .transition(.opacity)
 
-                        if !hasAnyLocalMatch {
+                        if results.isEmpty {
                             emptyResults
                         }
                     }
@@ -191,6 +228,20 @@ struct SearchView: View {
             }
             .onSubmit(of: .search) {
                 remember(trimmedQuery)
+            }
+            .onChange(of: query) { newValue in
+                scheduleSearch(newValue)
+            }
+            .onChange(of: library.tracks.count) { _ in
+                guard !trimmedQuery.isEmpty else { return }
+                refreshResultsNow()
+            }
+            .onChange(of: library.playlists.count) { _ in
+                guard !trimmedQuery.isEmpty else { return }
+                refreshResultsNow()
+            }
+            .onDisappear {
+                searchTask?.cancel()
             }
         }
     }
@@ -233,17 +284,17 @@ struct SearchView: View {
     private var artistSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Artists") {
-                Text("\(matchingArtists.count)")
+                Text("\(results.artists.count)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             }
 
-            if matchingArtists.isEmpty {
+            if results.artists.isEmpty {
                 emptyScope("No artists match this search.")
             } else {
                 CarouselScroll {
                     LazyHStack(alignment: .top, spacing: 16) {
-                        ForEach(matchingArtists) { artist in
+                        ForEach(results.artists) { artist in
                             NavigationLink {
                                 LibraryArtistDetailView(
                                     artistName: artist.name,
@@ -265,17 +316,17 @@ struct SearchView: View {
     private var albumSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Albums") {
-                Text("\(matchingAlbums.count)")
+                Text("\(results.albums.count)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             }
 
-            if matchingAlbums.isEmpty {
+            if results.albums.isEmpty {
                 emptyScope("No albums match this search.")
             } else {
                 CarouselScroll {
                     LazyHStack(alignment: .top, spacing: 16) {
-                        ForEach(matchingAlbums) { album in
+                        ForEach(results.albums) { album in
                             NavigationLink {
                                 LibraryAlbumDetailView(
                                     album: album,
@@ -297,17 +348,17 @@ struct SearchView: View {
     private var playlistSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             SectionHeader(title: "Playlists") {
-                Text("\(matchingPlaylists.count)")
+                Text("\(results.playlists.count)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
             }
 
-            if matchingPlaylists.isEmpty {
+            if results.playlists.isEmpty {
                 emptyScope("No playlists match this search.")
             } else {
                 CarouselScroll {
                     LazyHStack(alignment: .top, spacing: 14) {
-                        ForEach(matchingPlaylists) { playlist in
+                        ForEach(results.playlists) { playlist in
                             NavigationLink {
                                 PlaylistDetailView(
                                     playlistID: playlist.id,
@@ -352,7 +403,7 @@ struct SearchView: View {
             } else {
                 LazyVStack(spacing: 0) {
                     ForEach(tracks) { track in
-                        TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
+                        TrackRow(track: track, queue: tracks, player: player, showNowPlaying: $showNowPlaying)
                         if track.id != tracks.last?.id {
                             Divider().opacity(0.35)
                         }

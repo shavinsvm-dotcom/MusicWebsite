@@ -10,6 +10,16 @@ final class PlaybackProgress: ObservableObject {
     @Published var elapsed: Double = 0
 }
 
+/// The only playback facts a song row draws from. Rows observe this small
+/// object instead of `PlayerManager`, so queue edits, duration updates, sleep
+/// timer changes and playback errors never invalidate a long list.
+@MainActor
+final class NowPlayingMarker: ObservableObject {
+    @Published private(set) var trackID: UUID?
+    @Published private(set) var remoteID: String?
+    @Published private(set) var isPlaying = false
+}
+
 @MainActor
 final class PlayerManager: ObservableObject {
     enum RepeatMode {
@@ -18,9 +28,13 @@ final class PlayerManager: ObservableObject {
         case one
     }
 
-    @Published private(set) var current: Track?
+    @Published private(set) var current: Track? {
+        didSet { syncMarker() }
+    }
     @Published private(set) var queue: [Track] = []
-    @Published private(set) var isPlaying = false
+    @Published private(set) var isPlaying = false {
+        didSet { syncMarker() }
+    }
     @Published private(set) var duration: Double = 0
     /// True once the current item reports its own duration, rather than the
     /// metadata duration copied from the track when loading began.
@@ -36,8 +50,21 @@ final class PlayerManager: ObservableObject {
     var automixContinuationProvider: ((Track, Set<UUID>) -> Track?)?
 
     let progress = PlaybackProgress()
+    let nowPlaying = NowPlayingMarker()
 
     var elapsed: Double { progress.elapsed }
+
+    private func syncMarker() {
+        if nowPlaying.trackID != current?.id {
+            nowPlaying.trackID = current?.id
+        }
+        if nowPlaying.remoteID != current?.remoteID {
+            nowPlaying.remoteID = current?.remoteID
+        }
+        if nowPlaying.isPlaying != isPlaying {
+            nowPlaying.isPlaying = isPlaying
+        }
+    }
 
     var upNext: Track? { upNextTracks.first }
 

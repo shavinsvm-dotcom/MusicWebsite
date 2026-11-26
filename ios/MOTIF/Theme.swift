@@ -1564,16 +1564,22 @@ struct ArtworkProgressRing: View {
 struct TrackRow: View {
     let track: Track
     var queue: [Track]? = nil
+    /// A plain reference, not an environment object: a song row needs the
+    /// player to start playback, never to observe it.
+    let player: PlayerManager
     @Binding var showNowPlaying: Bool
 
     @EnvironmentObject private var library: LibraryStore
-    @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var nowPlaying: NowPlayingMarker
     @State private var downloadPulse = 0
 
     private var isCurrent: Bool {
-        guard let current = player.current else { return false }
-        if current.id == track.id { return true }
-        return current.remoteID != nil && current.remoteID == track.remoteID
+        guard let currentID = nowPlaying.trackID else { return false }
+        if currentID == track.id { return true }
+        guard let remoteID = nowPlaying.remoteID,
+              let trackRemoteID = track.remoteID
+        else { return false }
+        return remoteID == trackRemoteID
     }
 
     var body: some View {
@@ -1664,7 +1670,7 @@ struct TrackRow: View {
 
             HStack(spacing: 6) {
                 if isCurrent {
-                    PlayingWaveform(isPlaying: player.isPlaying)
+                    PlayingWaveform(isPlaying: nowPlaying.isPlaying)
                         .frame(width: 14, height: 12)
                 }
 

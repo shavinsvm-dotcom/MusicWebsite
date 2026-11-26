@@ -1,15 +1,5 @@
 import SwiftUI
 
-/// Reports where the large playlist title sits so the navigation bar can
-/// reveal a compact title once the header scrolls away.
-private struct PlaylistTitlePositionKey: PreferenceKey {
-    static var defaultValue: CGFloat = .greatestFiniteMagnitude
-
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = min(value, nextValue())
-    }
-}
-
 struct PlaylistDetailView: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var player: PlayerManager
@@ -79,13 +69,6 @@ struct PlaylistDetailView: View {
                 menu
             }
         }
-        .onPreferenceChange(PlaylistTitlePositionKey.self) { maxY in
-            let shouldShow = maxY < 86
-            guard shouldShow != showsInlineTitle else { return }
-            withAnimation(reduceMotion ? nil : MotifMotion.control) {
-                showsInlineTitle = shouldShow
-            }
-        }
         .sheet(isPresented: $showEditDetails) {
             if let playlist {
                 PlaylistEditorView(playlist: playlist)
@@ -119,12 +102,14 @@ struct PlaylistDetailView: View {
                         .foregroundStyle(.primary)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
-                        .background {
-                            GeometryReader { proxy in
-                                Color.clear.preference(
-                                    key: PlaylistTitlePositionKey.self,
-                                    value: proxy.frame(in: .named("playlistDetail")).maxY
-                                )
+                        // The Bool transform means the action runs only when
+                        // the title crosses the bar, not on every scroll frame.
+                        .onGeometryChange(for: Bool.self) { proxy in
+                            proxy.frame(in: .named("playlistDetail")).maxY < 86
+                        } action: { collapsed in
+                            guard collapsed != showsInlineTitle else { return }
+                            withAnimation(reduceMotion ? nil : MotifMotion.control) {
+                                showsInlineTitle = collapsed
                             }
                         }
 
@@ -268,6 +253,7 @@ struct PlaylistDetailView: View {
             ForEach(Array(tracks.enumerated()), id: \.element.id) { index, track in
                 PlaylistTrackRow(
                     track: track,
+                    player: player,
                     index: index + 1,
                     queue: tracks,
                     playlistID: playlistID,
@@ -484,9 +470,11 @@ struct PlaylistDetailView: View {
 
 private struct PlaylistTrackRow: View {
     @EnvironmentObject private var library: LibraryStore
-    @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var nowPlaying: NowPlayingMarker
 
     let track: Track
+    /// A plain reference so the row never observes the whole player.
+    let player: PlayerManager
     let index: Int
     let queue: [Track]
     let playlistID: UUID
@@ -494,14 +482,14 @@ private struct PlaylistTrackRow: View {
     let showsDivider: Bool
 
     private var isCurrent: Bool {
-        player.current?.id == track.id
+        nowPlaying.trackID == track.id
     }
 
     var body: some View {
         HStack(spacing: 10) {
             Group {
                 if isCurrent {
-                    PlayingWaveform(isPlaying: player.isPlaying, color: .primary)
+                    PlayingWaveform(isPlaying: nowPlaying.isPlaying, color: .primary)
                 } else {
                     Text("\(index)")
                         .font(.system(size: 10, weight: .medium, design: .monospaced))

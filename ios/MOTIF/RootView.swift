@@ -32,6 +32,7 @@ struct RootView: View {
             .environmentObject(library)
             .environmentObject(player)
             .environmentObject(player.progress)
+            .environmentObject(player.nowPlaying)
             .overlay {
                 if !showNowPlaying {
                     AirPodsMomentOverlay(monitor: routeMonitor)
@@ -214,6 +215,7 @@ struct RootView: View {
         .environmentObject(library)
         .environmentObject(player)
         .environmentObject(player.progress)
+        .environmentObject(player.nowPlaying)
         .overlay {
             AirPodsMomentOverlay(monitor: routeMonitor)
         }

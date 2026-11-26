@@ -116,7 +116,7 @@ struct LibraryArtistDetailView: View {
 
                         LazyVStack(spacing: 0) {
                             ForEach(Array(artistTracks.enumerated()), id: \.element.id) { index, track in
-                                TrackRow(track: track, queue: artistTracks, showNowPlaying: $showNowPlaying)
+                                TrackRow(track: track, queue: artistTracks, player: player, showNowPlaying: $showNowPlaying)
 
                                 if index < artistTracks.count - 1 {
                                     Divider().opacity(0.35)
@@ -419,7 +419,7 @@ struct LibraryAlbumDetailView: View {
 
                     LazyVStack(spacing: 0) {
                         ForEach(tracks) { track in
-                            TrackRow(track: track, queue: tracks, showNowPlaying: $showNowPlaying)
+                            TrackRow(track: track, queue: tracks, player: player, showNowPlaying: $showNowPlaying)
 
                             if track.id != tracks.last?.id {
                                 Divider().opacity(0.35)

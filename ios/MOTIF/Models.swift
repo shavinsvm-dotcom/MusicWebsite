@@ -155,7 +155,12 @@ enum LibrarySearch {
     /// Every token has to match at least one field, so "bad ed" finds
     /// "Bad Habits" by Ed Sheeran instead of requiring the exact phrase.
     static func matches(_ query: String, in fields: [String]) -> Bool {
-        let tokens = tokens(in: query)
+        matches(tokens(in: query), in: fields)
+    }
+
+    /// Tokenised form, so a search pass splits the query once instead of once
+    /// per candidate row.
+    static func matches(_ tokens: [String], in fields: [String]) -> Bool {
         guard !tokens.isEmpty else { return false }
         return tokens.allSatisfy { token in
             fields.contains { $0.localizedStandardContains(token) }

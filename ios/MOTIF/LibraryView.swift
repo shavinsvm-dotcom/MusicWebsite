@@ -309,6 +309,7 @@ struct LibraryView: View {
                         TrackRow(
                             track: track,
                             queue: rows,
+                            player: player,
                             showNowPlaying: $showNowPlaying
                         )
 

@@ -279,6 +279,7 @@ struct HomeView: View {
                     TrackRow(
                         track: track,
                         queue: library.favorites,
+                        player: player,
                         showNowPlaying: $showNowPlaying
                     )
 
