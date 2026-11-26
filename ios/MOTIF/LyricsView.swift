@@ -494,6 +494,10 @@ struct LyricsView: View {
                         .tracking(-0.35)
                         .lineSpacing(isActive ? 8 : 6)
                         .scaleEffect(isActive ? 1 : 0.985, anchor: .leading)
+                        .shadow(
+                            color: isActive ? .white.opacity(0.22) : .clear,
+                            radius: isActive ? 7 : 0
+                        )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .animation(reduceMotion ? nil : .easeInOut(duration: 0.24), value: isActive)
                     }
@@ -565,7 +569,6 @@ struct LyricsView: View {
             result = result + part
         }
         return result
-            .shadow(color: .white.opacity(0.22), radius: 7)
     }
 
     private var plainLyrics: some View {
