@@ -49,6 +49,13 @@ final class MOTIFUITests: XCTestCase {
             "Player did not open"
         )
 
+        // Pause so progress ticks and waveform animation stop before the UI
+        // interactions that follow; the lyrics screens do not need playback.
+        let playPause = element("player.playPause")
+        if playPause.waitForExistence(timeout: 3) {
+            playPause.tap()
+        }
+
         let lyricsMenu = element("player.lyrics")
         XCTAssertTrue(lyricsMenu.waitForExistence(timeout: 10), "Lyrics control is missing")
         lyricsMenu.tap()

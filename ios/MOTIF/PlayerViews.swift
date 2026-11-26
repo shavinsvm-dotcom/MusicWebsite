@@ -724,6 +724,7 @@ struct NowPlayingView: View {
             }
             .buttonStyle(PlayerControlPressStyle(scale: 0.93, pressedOpacity: 0.9, haptic: .medium))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
+            .accessibilityIdentifier("player.playPause")
 
             Button {
                 withAnimation(MotifMotion.control) {

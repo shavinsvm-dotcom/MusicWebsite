@@ -27,6 +27,7 @@ struct RootView: View {
 
     var body: some View {
         tabs
+            .environment(\.accessibilityReduceMotion, UITestSupport.isEnabled)
             .tint(.primary)
             .preferredColorScheme(AppAppearance.resolved(appearanceRaw))
             .environmentObject(library)

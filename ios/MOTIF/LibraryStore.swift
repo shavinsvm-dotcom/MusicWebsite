@@ -89,28 +89,9 @@ final class LibraryStore: ObservableObject {
         let title = "UI Test Track"
         guard !tracks.contains(where: { $0.title == title }) else { return }
 
-        let url = documentsURL.appendingPathComponent("ui-test-tone.m4a")
+        let url = documentsURL.appendingPathComponent("ui-test-tone.wav")
         if !fileManager.fileExists(atPath: url.path) {
-            let settings: [String: Any] = [
-                AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 44_100,
-                AVNumberOfChannelsKey: 1,
-                AVEncoderBitRateKey: 64_000
-            ]
-
-            if let file = try? AVAudioFile(forWriting: url, settings: settings) {
-                let frames = AVAudioFrameCount(file.processingFormat.sampleRate * 60)
-                if let buffer = AVAudioPCMBuffer(
-                    pcmFormat: file.processingFormat,
-                    frameCapacity: frames
-                ) {
-                    buffer.frameLength = frames
-                    if let channel = buffer.floatChannelData?[0] {
-                        memset(channel, 0, Int(frames) * MemoryLayout<Float>.size)
-                    }
-                    try? file.write(from: buffer)
-                }
-            }
+            Self.writeSilentWAV(to: url, seconds: 60)
         }
 
         let track = Track(
@@ -131,6 +112,37 @@ final class LibraryStore: ObservableObject {
 
         tracks.insert(track, at: 0)
         save()
+    }
+
+    /// A plain PCM WAV is written directly, avoiding an encoder on launch.
+    private static func writeSilentWAV(to url: URL, seconds: Int) {
+        let sampleRate = 8_000
+        let channels = 1
+        let bitsPerSample = 16
+        let bytesPerFrame = channels * bitsPerSample / 8
+        let dataBytes = sampleRate * seconds * bytesPerFrame
+
+        var data = Data()
+        func append<T: FixedWidthInteger>(_ value: T) {
+            var little = value.littleEndian
+            withUnsafeBytes(of: &little) { data.append(contentsOf: $0) }
+        }
+
+        data.append(contentsOf: Array("RIFF".utf8))
+        append(UInt32(36 + dataBytes))
+        data.append(contentsOf: Array("WAVE".utf8))
+        data.append(contentsOf: Array("fmt ".utf8))
+        append(UInt32(16))
+        append(UInt16(1))
+        append(UInt16(channels))
+        append(UInt32(sampleRate))
+        append(UInt32(sampleRate * bytesPerFrame))
+        append(UInt16(bytesPerFrame))
+        append(UInt16(bitsPerSample))
+        data.append(contentsOf: Array("data".utf8))
+        append(UInt32(dataBytes))
+        data.append(Data(count: dataBytes))
+        try? data.write(to: url)
     }
 #endif
 

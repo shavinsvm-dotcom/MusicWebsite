@@ -223,7 +223,7 @@ jobs:
           xcrun simctl bootstatus "$DEVICE_ID" -b
 
           rm -rf audit/UITests.xcresult
-          set -o pipefail
+          echo "UI tests on $DEVICE_ID for ${GITHUB_SHA}" > /tmp/motif-ui-test.log
           xcodebuild test \
             -project MOTIF.xcodeproj \
             -scheme MOTIF \
@@ -231,7 +231,32 @@ jobs:
             -destination "id=$DEVICE_ID" \
             -derivedDataPath build-ui \
             -resultBundlePath audit/UITests.xcresult \
-            2>&1 | tee /tmp/motif-ui-test.log
+            -parallel-testing-enabled NO \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 120 \
+            -maximum-test-execution-time-allowance 300 \
+            >> /tmp/motif-ui-test.log 2>&1 &
+          TEST_PID=$!
+          (
+            for tick in $(seq 1 14); do
+              sleep 30
+              if ! kill -0 "$TEST_PID" 2>/dev/null; then exit 0; fi
+              echo "--- UI test still running after $((tick * 30))s ---" >> /tmp/motif-ui-test.log
+              if [ "$tick" -eq 14 ]; then
+                echo "--- UI TEST WATCHDOG TIMEOUT ---" >> /tmp/motif-ui-test.log
+                xcrun simctl spawn "$DEVICE_ID" log show --last 3m --predicate 'process == "MOTIF"' >> /tmp/motif-ui-test.log 2>&1 || true
+                kill -INT "$TEST_PID" 2>/dev/null || true
+                sleep 10
+                kill -9 "$TEST_PID" 2>/dev/null || true
+              fi
+            done
+          ) &
+          WATCHDOG_PID=$!
+          STATUS=0
+          wait "$TEST_PID" || STATUS=$?
+          kill "$WATCHDOG_PID" 2>/dev/null || true
+          tail -n 400 /tmp/motif-ui-test.log
+          exit "$STATUS"
 
       - name: Export UI test screenshots
         if: always()
@@ -321,7 +346,7 @@ jobs:
       - name: Publish build errors
         if: failure()
         run: |
-          : > build-error.log
+          echo "# Run ${GITHUB_RUN_ID} (${GITHUB_SHA})" > build-error.log
           if [ -f /tmp/motif-build.log ]; then
             { echo '### Xcode errors'; grep -nE 'error:|warning:' /tmp/motif-build.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
             tail -n 500 /tmp/motif-build.log > build-error.log
