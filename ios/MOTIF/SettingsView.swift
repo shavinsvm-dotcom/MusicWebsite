@@ -31,12 +31,15 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @EnvironmentObject private var player: PlayerManager
+    @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage("motif.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @ObservedObject private var equalizer = Equalizer.shared
 
     @State private var showEqualizer = false
+    @State private var storageUsage: (library: Int64, downloads: Int64)?
+    @State private var confirmRemoveDownloads = false
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -105,6 +108,25 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    LabeledContent("Imported Music") {
+                        Text(bytesText(storageUsage?.library))
+                            .foregroundStyle(.secondary)
+                    }
+                    LabeledContent("Downloads") {
+                        Text(bytesText(storageUsage?.downloads))
+                            .foregroundStyle(.secondary)
+                    }
+                    Button("Remove All Downloads", role: .destructive) {
+                        confirmRemoveDownloads = true
+                    }
+                    .disabled((storageUsage?.downloads ?? 0) == 0)
+                } header: {
+                    Text("Storage")
+                } footer: {
+                    Text("Downloads are offline copies of cloud songs. Removing them frees space; the songs stay in your library and stream again when played.")
+                }
+
+                Section {
                     LabeledContent("Version") {
                         Text(appVersion)
                             .foregroundStyle(.secondary)
@@ -121,6 +143,22 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.large)
             .nativeScrollHeader()
+            .task {
+                storageUsage = await library.storageUsage()
+            }
+            .confirmationDialog(
+                "Remove all downloads?",
+                isPresented: $confirmRemoveDownloads,
+                titleVisibility: .visible
+            ) {
+                Button("Remove Downloads", role: .destructive) {
+                    library.removeAllDownloads()
+                    Task { storageUsage = await library.storageUsage() }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The songs stay in your library and will stream from the cloud.")
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") {
@@ -165,6 +203,12 @@ struct SettingsView: View {
         }
         .accessibilityLabel("Sleep Timer")
         .accessibilityValue(player.sleepTimerRemainingText ?? "Off")
+    }
+
+    private func bytesText(_ bytes: Int64?) -> String {
+        guard let bytes else { return "Calculating…" }
+        guard bytes > 0 else { return "None" }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private var qualityRow: some View {

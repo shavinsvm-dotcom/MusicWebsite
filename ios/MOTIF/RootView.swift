@@ -48,6 +48,12 @@ struct RootView: View {
                     )
             }
             .onOpenURL { url in
+                if url.isFileURL {
+                    Task { await library.importFiles([url]) }
+                    selectedTab = .library
+                    return
+                }
+
                 guard url.scheme == "motif" else { return }
                 switch url.host {
                 case "nowplaying":

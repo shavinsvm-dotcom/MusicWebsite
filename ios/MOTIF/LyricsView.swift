@@ -214,6 +214,8 @@ struct LyricsView: View {
     @State private var playhead = LyricPlayheadState.none
     @State private var followsPlayback = true
     @State private var showFinder = false
+    /// Positive values show each line later, for lyric files that run ahead.
+    @State private var timingDelay: Double = 0
 
     private var currentTrack: Track {
         library.tracks.first { existing in
@@ -283,6 +285,27 @@ struct LyricsView: View {
                     .accessibilityLabel("Find different lyrics")
                 }
 
+                if document.isSynced {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button("0.5s Earlier") { timingDelay -= 0.5 }
+                            Button("0.1s Earlier") { timingDelay -= 0.1 }
+                            Button("0.1s Later") { timingDelay += 0.1 }
+                            Button("0.5s Later") { timingDelay += 0.5 }
+                            if timingDelay != 0 {
+                                Divider()
+                                Button("Reset Timing") { timingDelay = 0 }
+                            }
+                        } label: {
+                            Image(systemName: "timer")
+                        }
+                        .accessibilityLabel("Lyrics timing")
+                        .accessibilityValue(
+                            timingDelay == 0 ? "On time" : String(format: "%+.1fs", timingDelay)
+                        )
+                    }
+                }
+
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         followsPlayback.toggle()
@@ -300,6 +323,12 @@ struct LyricsView: View {
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.visible)
         .presentationDetents([.medium, .large])
+        .task(id: currentTrack.id) {
+            timingDelay = LyricsTiming.delay(for: currentTrack.id)
+        }
+        .onChange(of: timingDelay) { value in
+            LyricsTiming.setDelay(value, for: currentTrack.id)
+        }
         .sheet(isPresented: $showFinder) {
             LyricsFinderView(track: currentTrack)
                 .environmentObject(library)
@@ -421,7 +450,7 @@ struct LyricsView: View {
 
     private var syncedLyrics: some View {
         VStack(alignment: .leading, spacing: 0) {
-            LyricsPlayhead(lines: document.lines) { next in
+            LyricsPlayhead(lines: document.lines, delay: timingDelay) { next in
                 guard next != playhead else { return }
                 playhead = next
             }
@@ -591,6 +620,7 @@ private struct LyricsPlayhead: View {
     @EnvironmentObject private var progress: PlaybackProgress
 
     let lines: [LyricLine]
+    let delay: Double
     let onChange: (LyricPlayheadState) -> Void
 
     @State private var lastLine: Int?
@@ -610,6 +640,11 @@ private struct LyricsPlayhead: View {
                 lastWord = nil
                 emit(progress.elapsed)
             }
+            .onChange(of: delay) { _ in
+                lastLine = nil
+                lastWord = nil
+                emit(progress.elapsed)
+            }
     }
 
     private func emit(_ elapsed: Double) {
@@ -621,7 +656,7 @@ private struct LyricsPlayhead: View {
     }
 
     private func state(for elapsed: Double) -> LyricPlayheadState {
-        let time = elapsed + 0.06
+        let time = elapsed + 0.06 - delay
         guard let lineIndex = lineIndex(at: time) else { return .none }
 
         let words = lines[lineIndex].words
@@ -668,6 +703,22 @@ private struct LyricsPlayhead: View {
         }
 
         return result
+    }
+}
+
+/// Per-song lyric timing nudge, stored on this device. Most LRC files line up
+/// as-is, so an absent value means exactly on time.
+private enum LyricsTiming {
+    private static let prefix = "motif.lyricsDelay."
+
+    static func delay(for id: UUID) -> Double {
+        let value = UserDefaults.standard.double(forKey: prefix + id.uuidString)
+        return min(max(value, -5), 5)
+    }
+
+    static func setDelay(_ value: Double, for id: UUID) {
+        let clamped = min(max(value, -5), 5)
+        UserDefaults.standard.set(clamped, forKey: prefix + id.uuidString)
     }
 }
 

@@ -1572,6 +1572,7 @@ struct TrackRow: View {
     @EnvironmentObject private var library: LibraryStore
     @EnvironmentObject private var nowPlaying: NowPlayingMarker
     @State private var downloadPulse = 0
+    @State private var showInfo = false
 
     private var isCurrent: Bool {
         guard let currentID = nowPlaying.trackID else { return false }
@@ -1729,6 +1730,12 @@ struct TrackRow: View {
                 }
 
                 Button {
+                    showInfo = true
+                } label: {
+                    Label("Song Info", systemImage: "info.circle")
+                }
+
+                Button {
                     library.toggleFavorite(track)
                 } label: {
                     Label(
@@ -1825,5 +1832,9 @@ struct TrackRow: View {
             .rowControl(Capsule())
         }
         .padding(.vertical, 6)
+        .sheet(isPresented: $showInfo) {
+            TrackInfoView(track: track)
+                .environmentObject(library)
+        }
     }
 }

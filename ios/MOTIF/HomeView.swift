@@ -70,6 +70,7 @@ struct HomeView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
                     .environmentObject(player)
+                    .environmentObject(library)
             }
             .fileImporter(
                 isPresented: $showImporter,

@@ -164,6 +164,7 @@ struct LibraryView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
                     .environmentObject(player)
+                    .environmentObject(library)
             }
             .alert(
                 "Couldn’t add music",

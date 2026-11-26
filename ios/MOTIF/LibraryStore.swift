@@ -846,6 +846,50 @@ final class LibraryStore: ObservableObject {
         save()
     }
 
+    func removeAllDownloads() {
+        var changed = false
+
+        for index in tracks.indices {
+            guard
+                tracks[index].isCloud,
+                tracks[index].mediaURL.isFileURL,
+                let remoteURL = tracks[index].streamURL
+            else { continue }
+
+            try? fileManager.removeItem(at: tracks[index].mediaURL)
+            tracks[index].mediaURL = remoteURL
+            changed = true
+        }
+
+        if changed { save() }
+    }
+
+    /// Imported audio and downloaded copies, measured off the main actor.
+    func storageUsage() async -> (library: Int64, downloads: Int64) {
+        let imports = importsURL
+        let downloads = downloadsURL
+
+        return await Task.detached(priority: .utility) {
+            (Self.directoryBytes(at: imports), Self.directoryBytes(at: downloads))
+        }.value
+    }
+
+    private nonisolated static func directoryBytes(at url: URL) -> Int64 {
+        let fileManager = FileManager.default
+        guard let enumerator = fileManager.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]
+        ) else { return 0 }
+
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            guard values?.isRegularFile == true else { continue }
+            total += Int64(values?.fileSize ?? 0)
+        }
+        return total
+    }
+
     func add(_ incoming: [Track]) {
         var knownRemoteIDs = Set(tracks.compactMap(\.remoteID))
         var changed = false
