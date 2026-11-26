@@ -119,6 +119,20 @@ struct RootView: View {
                     if player.current == nil, let first = library.tracks.first {
                         player.play(first, queue: library.tracks)
                     }
+                    switch DemoMode.screen {
+                    case .library:
+                        selectedTab = .library
+                    case .lyrics:
+                        if let track = player.current ?? library.tracks.first {
+                            lyricsPreview = track
+                        }
+                    case .player:
+                        showNowPlaying = true
+                    case .settings:
+                        showRootSettings = true
+                    case .home, .none:
+                        break
+                    }
                     return
                 }
                 await library.refreshLocalMetadata()
@@ -328,8 +342,16 @@ private struct MiniPlayerInset: ViewModifier {
                 transitionSourceID: transitionSourceID,
                 transitionNamespace: transitionNamespace
             )
+                .padding(.bottom, tabBarClearance)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .animation(MotifMotion.control, value: currentID)
         }
+    }
+
+    /// iOS 26 floats the tab bar above the tab content, so the mini player
+    /// needs a little clearance to sit above it rather than behind its glass.
+    private var tabBarClearance: CGFloat {
+        if #available(iOS 26.0, *) { return 46 }
+        return 0
     }
 }

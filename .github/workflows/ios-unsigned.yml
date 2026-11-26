@@ -247,10 +247,12 @@ jobs:
           xcrun simctl install "$DEVICE_ID" "$APP"
 
           launch() {
-            stage "launch app"
+            stage "launch app ($1)"
             xcrun simctl terminate "$DEVICE_ID" com.example.motif 2>/dev/null || true
-            xcrun simctl launch "$DEVICE_ID" com.example.motif --motif-screenshots >> /tmp/motif-screenshots.log
-            sleep 7
+            xcrun simctl launch "$DEVICE_ID" com.example.motif \
+              --motif-screenshots --motif-screen="$1" \
+              >> /tmp/motif-screenshots.log
+            sleep 8
           }
           shot() {
             stage "capture $1"
@@ -260,14 +262,16 @@ jobs:
           }
 
           stage "home"
-          launch
+          launch home
           shot home
-          xcrun simctl openurl "$DEVICE_ID" "motif://library"; sleep 2; shot library
-          xcrun simctl openurl "$DEVICE_ID" "motif://lyrics"; sleep 3; shot lyrics
-          launch
-          xcrun simctl openurl "$DEVICE_ID" "motif://nowplaying"; sleep 3; shot player
-          launch
-          xcrun simctl openurl "$DEVICE_ID" "motif://settings"; sleep 3; shot settings
+          launch library
+          shot library
+          launch lyrics
+          shot lyrics
+          launch player
+          shot player
+          launch settings
+          shot settings
 
           for name in home library lyrics player settings; do
             test -f "audit/$name.png" || { echo "MISSING audit/$name.png"; ls -la audit; exit 1; }
