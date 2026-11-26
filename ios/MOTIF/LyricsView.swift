@@ -214,6 +214,8 @@ struct LyricsView: View {
     @State private var playhead = LyricPlayheadState.none
     @State private var followsPlayback = true
     @State private var showFinder = false
+    @State private var contentRevealed = false
+    @State private var backdropDrifting = false
     /// Positive values show each line later, for lyric files that run ahead.
     @State private var timingDelay: Double = 0
 
@@ -324,6 +326,10 @@ struct LyricsView: View {
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.visible)
         .presentationDetents([.medium, .large])
+        .onAppear {
+            if !reduceMotion { backdropDrifting = true }
+            withAnimation(.easeOut(duration: 0.55)) { contentRevealed = true }
+        }
         .task(id: currentTrack.id) {
             timingDelay = LyricsTiming.delay(for: currentTrack.id)
         }
@@ -345,7 +351,15 @@ struct LyricsView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .opacity(0.30)
+                    .blur(radius: 26)
+                    .scaleEffect(backdropDrifting ? 1.14 : 1.04)
+                    .opacity(0.42)
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .easeInOut(duration: 22).repeatForever(autoreverses: true),
+                        value: backdropDrifting
+                    )
                     .clipped()
             }
 
@@ -486,6 +500,14 @@ struct LyricsView: View {
                     .background {
                         activeLineGlass(isActive)
                     }
+                    .opacity(contentRevealed ? 1 : 0)
+                    .offset(y: contentRevealed ? 0 : 9)
+                    .animation(
+                        reduceMotion
+                            ? nil
+                            : .easeOut(duration: 0.45).delay(min(Double(index) * 0.015, 0.45)),
+                        value: contentRevealed
+                    )
                     .contentShape(Rectangle())
                     .onTapGesture {
                         seek(to: line)
@@ -506,6 +528,7 @@ struct LyricsView: View {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .strokeBorder(Color.white.opacity(0.09), lineWidth: 0.6)
                 }
+                .shadow(color: .white.opacity(0.06), radius: 18)
                 .padding(.horizontal, -10)
                 .padding(.vertical, -5)
         }
@@ -541,6 +564,7 @@ struct LyricsView: View {
             result = result + part
         }
         return result
+            .shadow(color: .white.opacity(0.22), radius: 7)
     }
 
     private var plainLyrics: some View {
@@ -552,6 +576,9 @@ struct LyricsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
             .nativeGlass(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .opacity(contentRevealed ? 1 : 0)
+            .offset(y: contentRevealed ? 0 : 10)
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.6), value: contentRevealed)
             .overlay {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.6)

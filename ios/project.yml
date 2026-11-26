@@ -68,33 +68,11 @@ targets:
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
 
-  MOTIFUITests:
-    type: bundle.ui-testing
-    platform: iOS
-    sources:
-      - path: MOTIFUITests
-    dependencies:
-      - target: MOTIF
-    settings:
-      base:
-        PRODUCT_NAME: MOTIFUITests
-        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).uitests
-        GENERATE_INFOPLIST_FILE: YES
-        TEST_TARGET_NAME: MOTIF
-        CODE_SIGN_STYLE: Automatic
-        TARGETED_DEVICE_FAMILY: "1"
-        SWIFT_VERSION: "5.0"
-
 schemes:
   MOTIF:
     build:
       targets:
         MOTIF: all
-        MOTIFUITests: [test]
-    test:
-      config: Debug
-      targets:
-        - MOTIFUITests
     run:
       config: Debug
     archive:

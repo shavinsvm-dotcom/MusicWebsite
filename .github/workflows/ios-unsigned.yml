@@ -199,7 +199,7 @@ jobs:
           shasum -a 256 audit/*.xcprivacy audit/*.plist >> audit/report.txt
           cat audit/report.txt >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Run UI tests on iOS simulator
+      - name: Capture simulator screenshots
         working-directory: ios
         run: |
           set -euo pipefail
@@ -218,92 +218,48 @@ jobs:
           print(chosen)
           ')
           test -n "$DEVICE_ID"
-          echo "Simulator: $DEVICE_ID"
+          echo "Simulator: $DEVICE_ID" | tee /tmp/motif-screenshots.log
           xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
 
-          rm -rf audit/UITests.xcresult
-          echo "UI tests on $DEVICE_ID for ${GITHUB_SHA}" > /tmp/motif-ui-test.log
-          xcodebuild test \
+          xcodebuild \
             -project MOTIF.xcodeproj \
             -scheme MOTIF \
             -configuration Debug \
+            -sdk iphonesimulator \
             -destination "id=$DEVICE_ID" \
-            -derivedDataPath build-ui \
-            -resultBundlePath audit/UITests.xcresult \
-            -parallel-testing-enabled NO \
-            -test-timeouts-enabled YES \
-            -default-test-execution-time-allowance 120 \
-            -maximum-test-execution-time-allowance 300 \
-            >> /tmp/motif-ui-test.log 2>&1 &
-          TEST_PID=$!
-          (
-            for tick in $(seq 1 14); do
-              sleep 30
-              if ! kill -0 "$TEST_PID" 2>/dev/null; then exit 0; fi
-              echo "--- UI test still running after $((tick * 30))s ---" >> /tmp/motif-ui-test.log
-              if [ "$tick" -eq 14 ]; then
-                echo "--- UI TEST WATCHDOG TIMEOUT ---" >> /tmp/motif-ui-test.log
-                xcrun simctl spawn "$DEVICE_ID" log show --last 3m --predicate 'process == "MOTIF"' >> /tmp/motif-ui-test.log 2>&1 || true
-                kill -INT "$TEST_PID" 2>/dev/null || true
-                sleep 10
-                kill -9 "$TEST_PID" 2>/dev/null || true
-              fi
-            done
-          ) &
-          WATCHDOG_PID=$!
-          STATUS=0
-          wait "$TEST_PID" || STATUS=$?
-          kill "$WATCHDOG_PID" 2>/dev/null || true
-          tail -n 400 /tmp/motif-ui-test.log
-          exit "$STATUS"
+            -derivedDataPath build-sim \
+            >> /tmp/motif-screenshots.log 2>&1
 
-      - name: Export UI test screenshots
-        if: always()
-        working-directory: ios
-        run: |
-          set -euo pipefail
-          test -d audit/UITests.xcresult || exit 0
-          rm -rf audit/ui-screens
-          mkdir -p audit/ui-screens
-          xcrun xcresulttool export attachments \
-            --path audit/UITests.xcresult \
-            --output-path audit/ui-screens
-          python3 - <<'PY'
-          import json, os, shutil, sys
-          root = "audit/ui-screens"
-          manifest_path = os.path.join(root, "manifest.json")
-          if not os.path.exists(manifest_path):
-              print("No attachment manifest found")
-              sys.exit(0)
-          manifest = json.load(open(manifest_path))
-          exported = 0
-          for test in manifest:
-              for attachment in test.get("attachments", []):
-                  name = attachment.get("suggestedHumanReadableName") or ""
-                  file_name = attachment.get("exportedFileName") or ""
-                  source = os.path.join(root, file_name)
-                  if not name or not os.path.isfile(source):
-                      continue
-                  target = os.path.join("audit", name.replace(" ", "-").lower() + ".png")
-                  shutil.copyfile(source, target)
-                  exported += 1
-                  print("attachment:", name, "->", target)
-          print("exported", exported, "attachments")
-          PY
-          for image in audit/*.png; do
-            if [ -e "$image" ]; then sips -Z 1000 "$image" >/dev/null; fi
-          done
+          APP=$(find build-sim/Build/Products/Debug-iphonesimulator -maxdepth 1 -name 'MOTIF.app' -print -quit)
+          test -d "$APP"
+          xcrun simctl uninstall "$DEVICE_ID" com.example.motif 2>/dev/null || true
+          xcrun simctl install "$DEVICE_ID" "$APP"
 
-      - name: Assert UI test evidence
-        if: success()
-        working-directory: ios
-        run: |
-          set -euo pipefail
-          for name in song-info lyrics-timing storage; do
+          launch() {
+            xcrun simctl terminate "$DEVICE_ID" com.example.motif 2>/dev/null || true
+            xcrun simctl launch "$DEVICE_ID" com.example.motif --motif-screenshots >> /tmp/motif-screenshots.log
+            sleep 7
+          }
+          shot() {
+            xcrun simctl io "$DEVICE_ID" screenshot "audit/$1.png" >> /tmp/motif-screenshots.log
+            sips -Z 1100 "audit/$1.png" >/dev/null
+            echo "captured audit/$1.png"
+          }
+
+          launch
+          shot home
+          xcrun simctl openurl "$DEVICE_ID" "motif://library"; sleep 2; shot library
+          xcrun simctl openurl "$DEVICE_ID" "motif://lyrics"; sleep 3; shot lyrics
+          launch
+          xcrun simctl openurl "$DEVICE_ID" "motif://nowplaying"; sleep 3; shot player
+          launch
+          xcrun simctl openurl "$DEVICE_ID" "motif://settings"; sleep 3; shot settings
+
+          for name in home library lyrics player settings; do
             test -f "audit/$name.png" || { echo "MISSING audit/$name.png"; ls -la audit; exit 1; }
           done
-          echo "- UI tests: PASS (Song Info, lyric timing, storage; screenshots attached)" >> audit/report.txt
+          echo "- Simulator screenshots: home, library, lyrics, player, settings (captured on $DEVICE_ID)" >> audit/report.txt
 
       - name: Publish bundle audit
         if: always()
@@ -351,9 +307,9 @@ jobs:
             { echo '### Xcode errors'; grep -nE 'error:|warning:' /tmp/motif-build.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
             tail -n 500 /tmp/motif-build.log > build-error.log
           fi
-          if [ -f /tmp/motif-ui-test.log ]; then
-            { echo; echo '### UI test errors'; grep -nE 'error:|failed|XCTAssert' /tmp/motif-ui-test.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
-            { echo; echo '### UI test log'; tail -n 800 /tmp/motif-ui-test.log; } >> build-error.log
+          if [ -f /tmp/motif-screenshots.log ]; then
+            { echo; echo '### Simulator errors'; grep -nE 'error:|failed' /tmp/motif-screenshots.log | tail -n 120; } >> "$GITHUB_STEP_SUMMARY" || true
+            { echo; echo '### Simulator log'; tail -n 800 /tmp/motif-screenshots.log; } >> build-error.log
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'

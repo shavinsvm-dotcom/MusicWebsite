@@ -35,9 +35,11 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @AppStorage("motif.appearance") private var appearanceRaw = AppAppearance.system.rawValue
+    @AppStorage("motif.animatedCovers") private var animatedCovers = false
     @ObservedObject private var equalizer = Equalizer.shared
 
     @State private var showEqualizer = false
+    @State private var foundAnimatedCovers: Int?
     @State private var storageUsage: (library: Int64, downloads: Int64)?
     @State private var confirmRemoveDownloads = false
 
@@ -52,6 +54,21 @@ struct SettingsView: View {
             get: { AppAppearance(rawValue: appearanceRaw) ?? .system },
             set: { appearanceRaw = $0.rawValue }
         )
+    }
+
+    private var animatedCoverScanLabel: String {
+        guard let foundAnimatedCovers else { return "Scan" }
+        return foundAnimatedCovers == 1 ? "1 cover" : "\(foundAnimatedCovers) covers"
+    }
+
+    private func findAnimatedCovers() {
+        let covers = library.tracks.reduce(into: 0) { total, track in
+            if track.artworkURL != nil { total += 1 }
+        }
+        foundAnimatedCovers = covers
+        if covers > 0 {
+            animatedCovers = true
+        }
     }
 
     private var automix: Binding<Bool> {
@@ -75,6 +92,29 @@ struct SettingsView: View {
                     Text("Appearance")
                 } footer: {
                     Text("Follow the system, or keep Lilt light or dark.")
+                }
+
+                Section {
+                    Toggle(isOn: $animatedCovers) {
+                        Label("Animated Covers", systemImage: "sparkles")
+                    }
+                    .tint(.primary)
+                    .accessibilityHint("Adds slow motion and light to large cover art")
+
+                    Button(action: findAnimatedCovers) {
+                        SettingsValueRow(
+                            title: "Find Animated Covers",
+                            systemImage: "wand.and.stars",
+                            value: animatedCoverScanLabel,
+                            indicator: "arrow.clockwise"
+                        )
+                    }
+                    .accessibilityLabel("Find animated covers")
+                    .accessibilityValue(animatedCoverScanLabel)
+                } header: {
+                    Text("Artwork")
+                } footer: {
+                    Text("Lilt scans your library for covers it can bring to life. Animated covers drift slowly and catch the light in the player and shelves; turn the switch off to keep every cover still.")
                 }
 
                 Section {

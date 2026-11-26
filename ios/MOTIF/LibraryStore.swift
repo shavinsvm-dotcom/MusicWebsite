@@ -76,41 +76,50 @@ final class LibraryStore: ObservableObject {
         try? fileManager.createDirectory(at: artworkDirectory, withIntermediateDirectories: true)
         load()
 #if DEBUG
-        if UITestSupport.isEnabled {
-            seedUITestLibraryIfNeeded()
+        if DemoMode.isEnabled {
+            seedDemoLibraryIfNeeded()
         }
 #endif
     }
 
 #if DEBUG
-    /// One local, silent, lyric-bearing track so the UI tests can exercise the
-    /// song menu, player lyrics and timing control without network or imports.
-    private func seedUITestLibraryIfNeeded() {
-        let title = "UI Test Track"
-        guard !tracks.contains(where: { $0.title == title }) else { return }
+    /// One local, silent, lyric-bearing track so simulator screenshots have
+    /// deterministic content without network access or imports.
+    private func seedDemoLibraryIfNeeded() {
+        let seeds: [(title: String, artist: String, album: String)] = [
+            ("Midnight Drive", "Lilt", "After Hours"),
+            ("Glass Horizon", "Nova Vale", "Soft Focus"),
+            ("Paper Lanterns", "The Quiet Hours", "Night Swimming"),
+            ("Slow Motion", "Ember & Ash", "Static Bloom"),
+            ("Golden Hour", "Lilt", "After Hours")
+        ]
+        guard !tracks.contains(where: { $0.title == seeds[0].title }) else { return }
 
-        let url = documentsURL.appendingPathComponent("ui-test-tone.wav")
+        let url = documentsURL.appendingPathComponent("demo-tone.wav")
         if !fileManager.fileExists(atPath: url.path) {
             Self.writeSilentWAV(to: url, seconds: 60)
         }
 
-        let track = Track(
-            title: title,
-            artist: "Lilt Tests",
-            album: "UI Tests",
-            mediaURL: url,
-            duration: 60,
-            source: .local,
-            lyrics: """
-            [00:00.00]First line of the test
-            [00:10.00]Second line of the test
-            [00:20.00]Third line of the test
-            [00:30.00]Fourth line of the test
-            """,
-            lyricsSource: .manual
-        )
-
-        tracks.insert(track, at: 0)
+        for (index, seed) in seeds.enumerated().reversed() {
+            let track = Track(
+                title: seed.title,
+                artist: seed.artist,
+                album: seed.album,
+                mediaURL: url,
+                duration: 60,
+                source: .local,
+                lyrics: index == 0 ? """
+                [00:00.00]Neon on the windshield
+                [00:10.00]City breathing slow
+                [00:20.00]We are just the headlights
+                [00:30.00]Learning where to go
+                [00:40.00]Every empty highway
+                [00:50.00]Turns into a song
+                """ : "",
+                lyricsSource: index == 0 ? .manual : nil
+            )
+            tracks.insert(track, at: 0)
+        }
         save()
     }
 

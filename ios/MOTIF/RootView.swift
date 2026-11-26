@@ -15,6 +15,8 @@ struct RootView: View {
     @State private var showNowPlaying = false
     @State private var selectedTab: AppTab = .home
     @State private var attemptedLyricsIDs: Set<UUID> = []
+    @State private var lyricsPreview: Track?
+    @State private var showRootSettings = false
     @AppStorage("motif.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @Namespace private var playerTransition
 
@@ -28,7 +30,7 @@ struct RootView: View {
     var body: some View {
         tabs
             .transaction { transaction in
-                if UITestSupport.isEnabled {
+                if DemoMode.isEnabled {
                     transaction.disablesAnimations = true
                 }
             }
@@ -52,6 +54,17 @@ struct RootView: View {
                         )
                     )
             }
+            .sheet(item: $lyricsPreview) { track in
+                LyricsView(track: track)
+                    .environmentObject(library)
+                    .environmentObject(player)
+                    .environmentObject(player.progress)
+            }
+            .sheet(isPresented: $showRootSettings) {
+                SettingsView()
+                    .environmentObject(library)
+                    .environmentObject(player)
+            }
             .onOpenURL { url in
                 if url.isFileURL {
                     Task { await library.importFiles([url]) }
@@ -65,6 +78,12 @@ struct RootView: View {
                     playerPresented.wrappedValue = true
                 case "library":
                     selectedTab = .library
+                case "lyrics":
+                    if let track = player.current ?? library.tracks.first {
+                        lyricsPreview = track
+                    }
+                case "settings":
+                    showRootSettings = true
                 default:
                     break
                 }
@@ -95,7 +114,13 @@ struct RootView: View {
                         ?? sameArtist.randomElement()
                         ?? candidates.randomElement()
                 }
-                guard !UITestSupport.isEnabled else { return }
+                if DemoMode.isEnabled {
+                    UserDefaults.standard.set(true, forKey: "motif.animatedCovers")
+                    if player.current == nil, let first = library.tracks.first {
+                        player.play(first, queue: library.tracks)
+                    }
+                    return
+                }
                 await library.refreshLocalMetadata()
                 await library.refreshCloud()
             }

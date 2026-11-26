@@ -298,6 +298,12 @@ struct HomeView: View {
                 ArtworkView(url: track.artworkURL, seed: track.title + track.artist, card: true)
                     .frame(width: 132, height: 132)
 
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.30)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+
                 Image(systemName: "play.fill")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.primary)
@@ -306,6 +312,11 @@ struct HomeView: View {
                     .padding(7)
             }
             .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.6)
+            }
+            .shadow(color: .black.opacity(0.16), radius: 10, y: 6)
 
             Text(track.title)
                 .font(.system(size: 13, weight: .semibold))

@@ -25,6 +25,18 @@ struct CarouselScroll<Content: View>: View {
                 }
             }
         }
+        .mask(
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .black, location: 0.035),
+                    .init(color: .black, location: 0.965),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        )
         .padding(.vertical, 6)
     }
 }
@@ -44,9 +56,12 @@ private struct CarouselItemTransition: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 17.0, *), !reduceMotion {
             content.scrollTransition(.interactive, axis: .horizontal) { view, phase in
-                // Opacity alone keeps the shelf edge soft without forcing a
-                // scaled transform and its offscreen pass for every card.
-                view.opacity(phase.isIdentity ? 1 : 0.84)
+                // Cards ease back, dim and soften as they leave the shelf,
+                // then spring forward when they settle at the leading edge.
+                view
+                    .opacity(phase.isIdentity ? 1 : 0.72)
+                    .scaleEffect(phase.isIdentity ? 1 : 0.94)
+                    .blur(radius: phase.isIdentity ? 0 : 0.6)
             }
         } else {
             content
