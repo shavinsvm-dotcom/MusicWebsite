@@ -7,7 +7,10 @@ import UniformTypeIdentifiers
 @MainActor
 final class LibraryStore: ObservableObject {
     @Published private(set) var tracks: [Track] = [] {
-        didSet { invalidateDerivedCaches() }
+        didSet {
+            tracksRevision &+= 1
+            invalidateDerivedCaches()
+        }
     }
     @Published private(set) var favoriteIDs: Set<UUID> = [] {
         didSet { favoritesCache = nil }
@@ -52,6 +55,9 @@ final class LibraryStore: ObservableObject {
     // Derived collections are read from SwiftUI bodies that run far more often
     // than the library changes. Each one is built once per library revision
     // instead of once per row, per scroll frame or per player state change.
+    /// Bumped on every track-list change so a background merge can tell
+    /// whether the library moved underneath it.
+    private var tracksRevision = 0
     private var favoritesCache: [Track]?
     private var sortedTracksCache: [SongSort: [Track]] = [:]
     private var homeSnapshotCache: HomeSnapshot?
@@ -315,69 +321,34 @@ final class LibraryStore: ObservableObject {
             let remoteTracks = try await TigrisAPI.library()
             let covers = (try? await TigrisAPI.covers()) ?? [:]
 
-            let incoming = remoteTracks.compactMap { remote -> Track? in
-                guard
-                    let title = remote.title,
-                    let mediaString = remote.url,
-                    let mediaURL = TigrisAPI.resolve(mediaString)
-                else { return nil }
+            let startRevision = tracksRevision
+            let existing = tracks
+            let fileManager = self.fileManager
 
-                let artworkURL = covers[remote.id].flatMap(TigrisAPI.resolve)
+            // Converting the manifest, deduplicating it and checking which
+            // downloads are still on disk now happen off the main actor. The
+            // merge indexes remote IDs once instead of scanning the library
+            // for every incoming row.
+            let merged = await Task.detached(priority: .utility) {
+                let incoming = makeCloudTracks(from: remoteTracks, covers: covers)
+                return mergeCloudLibrary(incoming, into: existing, fileManager: fileManager)
+            }.value
 
-                return Track(
-                    title: title,
-                    artist: remote.artist ?? "Unknown artist",
-                    album: remote.album ?? "",
-                    releaseYear: remote.year,
-                    artworkURL: artworkURL,
-                    mediaURL: mediaURL,
-                    duration: remote.duration ?? 0,
-                    source: .cloud,
-                    remoteID: remote.id,
-                    streamURL: mediaURL
-                )
-            }
-
-            add(incoming)
-
-            // `add` skips rows that already exist. Covers are written after the
-            // manifest upload, so a track added before its cover was published
-            // stayed blank forever. Merge those updates back into local rows.
-            var merged = false
-            for remote in incoming {
-                guard
-                    let remoteID = remote.remoteID,
-                    let index = tracks.firstIndex(where: { $0.remoteID == remoteID })
-                else { continue }
-
-                var row = tracks[index]
-
-                // A download can disappear after an app update or an OS cleanup.
-                // Put the row back on its cloud stream instead of leaving it
-                // pointing at a file that no longer exists.
-                if isMissingLocalFile(row.mediaURL) {
-                    row.mediaURL = remote.mediaURL
-                    row.streamURL = remote.streamURL ?? row.streamURL
+            if tracksRevision == startRevision {
+                if merged.changed {
+                    tracks = merged.tracks
+                    save()
                 }
-
-                let missingArtwork = isMissingLocalFile(row.artworkURL)
-                if let artworkURL = remote.artworkURL,
-                   (row.artworkURL == nil
-                    || missingArtwork
-                    || (row.source == .cloud
-                        && row.artworkURL?.isFileURL == false
-                        && row.artworkURL != artworkURL)) {
-                    row.artworkURL = artworkURL
-                } else if missingArtwork {
-                    row.artworkURL = nil
-                }
-
-                if row != tracks[index] {
-                    tracks[index] = row
-                    merged = true
+            } else {
+                // A local edit landed while the merge ran, so redo it against
+                // the current rows instead of clobbering newer state.
+                let incoming = makeCloudTracks(from: remoteTracks, covers: covers)
+                let retry = mergeCloudLibrary(incoming, into: tracks, fileManager: fileManager)
+                if retry.changed {
+                    tracks = retry.tracks
+                    save()
                 }
             }
-            if merged { save() }
 
             await repairMissingCloudCovers()
             cloudMessage = remoteTracks.isEmpty
@@ -1237,11 +1208,16 @@ final class LibraryStore: ObservableObject {
 
     private func canonicalTrack(for track: Track) -> Track? {
         if let exact = trackIndex[track.id] { return exact }
-        // While a deferred save is rebuilding the indexes, a just-added row is
-        // only present in the live array.
+        // A remote-ID hit is a dictionary lookup; scanning the whole library
+        // first made every cloud-row resolution walk thousands of songs.
+        if let remoteID = track.remoteID,
+           let indexed = trackByRemoteID[remoteID] {
+            return indexed
+        }
+        // Last resort while a deferred save is rebuilding the indexes: a
+        // just-added row is only present in the live array.
         if let scanned = tracks.first(where: { $0.id == track.id }) { return scanned }
         guard let remoteID = track.remoteID else { return nil }
-        if let indexed = trackByRemoteID[remoteID] { return indexed }
         return tracks.first { $0.remoteID == remoteID }
     }
 
@@ -1331,8 +1307,7 @@ final class LibraryStore: ObservableObject {
     }
 
     private func isMissingLocalFile(_ url: URL?) -> Bool {
-        guard let url, url.isFileURL else { return false }
-        return !fileManager.fileExists(atPath: url.path)
+        cloudFileIsMissing(url, fileManager: fileManager)
     }
 
     private func existingFile(named name: String, in directory: URL) -> URL? {
@@ -1458,6 +1433,128 @@ private struct LibraryIndexes {
 private struct SaveOutcome {
     var indexes: LibraryIndexes
     var error: String?
+}
+
+private struct CloudMergeResult {
+    var tracks: [Track]
+    var changed: Bool
+}
+
+/// Builds cloud rows from the remote catalogue. Pure, so it can run off the
+/// main actor while the request is still fresh.
+private func makeCloudTracks(
+    from remoteTracks: [TigrisAPI.RemoteTrack],
+    covers: [String: String]
+) -> [Track] {
+    remoteTracks.compactMap { remote -> Track? in
+        guard
+            let title = remote.title,
+            let mediaString = remote.url,
+            let mediaURL = TigrisAPI.resolve(mediaString)
+        else { return nil }
+
+        let artworkURL = covers[remote.id].flatMap(TigrisAPI.resolve)
+
+        return Track(
+            title: title,
+            artist: remote.artist ?? "Unknown artist",
+            album: remote.album ?? "",
+            releaseYear: remote.year,
+            artworkURL: artworkURL,
+            mediaURL: mediaURL,
+            duration: remote.duration ?? 0,
+            source: .cloud,
+            remoteID: remote.id,
+            streamURL: mediaURL
+        )
+    }
+}
+
+/// Merges the remote catalogue into a track list. Runs off the main actor: new
+/// rows are deduplicated against sets built once, and existing rows are found
+/// through one remote-ID dictionary instead of a `firstIndex` scan per track.
+private func mergeCloudLibrary(
+    _ incoming: [Track],
+    into existing: [Track],
+    fileManager: FileManager
+) -> CloudMergeResult {
+    var mergedTracks = existing
+    var changed = false
+
+    var knownIDs = Set(mergedTracks.map(\.id))
+    var knownRemoteIDs = Set(mergedTracks.compactMap(\.remoteID))
+    let additionDate = Date()
+
+    for track in incoming {
+        if let remoteID = track.remoteID, knownRemoteIDs.contains(remoteID) {
+            continue
+        }
+        if knownIDs.contains(track.id) {
+            continue
+        }
+
+        var row = track
+        row.addedAt = additionDate
+        mergedTracks.insert(row, at: 0)
+        knownIDs.insert(row.id)
+        if let remoteID = row.remoteID {
+            knownRemoteIDs.insert(remoteID)
+        }
+        changed = true
+    }
+
+    // Covers are written after the manifest upload, so a track that was added
+    // before its cover was published needs its row merged on every refresh.
+    var indexByRemoteID: [String: Int] = [:]
+    indexByRemoteID.reserveCapacity(mergedTracks.count)
+    for (index, track) in mergedTracks.enumerated() {
+        if let remoteID = track.remoteID, indexByRemoteID[remoteID] == nil {
+            indexByRemoteID[remoteID] = index
+        }
+    }
+
+    for remote in incoming {
+        guard
+            let remoteID = remote.remoteID,
+            let index = indexByRemoteID[remoteID]
+        else { continue }
+
+        var row = mergedTracks[index]
+
+        // A download can disappear after an app update or an OS cleanup. Put
+        // the row back on its cloud stream instead of leaving it pointing at a
+        // file that no longer exists.
+        if cloudFileIsMissing(row.mediaURL, fileManager: fileManager) {
+            row.mediaURL = remote.mediaURL
+            row.streamURL = remote.streamURL ?? row.streamURL
+        }
+
+        let missingArtwork = cloudFileIsMissing(row.artworkURL, fileManager: fileManager)
+        if let artworkURL = remote.artworkURL,
+           (row.artworkURL == nil
+            || missingArtwork
+            || (row.source == .cloud
+                && row.artworkURL?.isFileURL == false
+                && row.artworkURL != artworkURL)) {
+            row.artworkURL = artworkURL
+        } else if missingArtwork {
+            row.artworkURL = nil
+        }
+
+        if row != mergedTracks[index] {
+            mergedTracks[index] = row
+            changed = true
+        }
+    }
+
+    return CloudMergeResult(tracks: mergedTracks, changed: changed)
+}
+
+/// File presence check that does not touch actor state, so the cloud merge can
+/// run on a background task.
+private func cloudFileIsMissing(_ url: URL?, fileManager: FileManager) -> Bool {
+    guard let url, url.isFileURL else { return false }
+    return !fileManager.fileExists(atPath: url.path)
 }
 
 /// Everything the Home screen derives from the library. Building this used to

@@ -20,6 +20,46 @@ final class NowPlayingMarker: ObservableObject {
     @Published fileprivate(set) var isPlaying = false
 }
 
+/// How much bandwidth and buffering streaming playback may spend. Cloud songs
+/// are stored once at their uploaded quality, so these modes change network
+/// behaviour rather than the fidelity of the stored file.
+enum PlaybackQuality: String, CaseIterable, Identifiable {
+    case dataSaver
+    case balanced
+    case high
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .dataSaver: return "Data Saver"
+        case .balanced: return "Balanced"
+        case .high: return "High Quality"
+        }
+    }
+
+    /// Adaptive streams honour this cap; progressive files play as stored.
+    var peakBitRate: Double {
+        switch self {
+        case .dataSaver: return 128_000
+        case .balanced: return 256_000
+        case .high: return 0
+        }
+    }
+
+    var forwardBufferDuration: TimeInterval {
+        switch self {
+        case .dataSaver: return 2
+        case .balanced: return 6
+        case .high: return 15
+        }
+    }
+
+    var waitsToMinimizeStalling: Bool {
+        self != .dataSaver
+    }
+}
+
 @MainActor
 final class PlayerManager: ObservableObject {
     enum RepeatMode {
@@ -42,6 +82,9 @@ final class PlayerManager: ObservableObject {
     @Published private(set) var isShuffled = false
     @Published private(set) var repeatMode: RepeatMode = .off
     @Published private(set) var crossfadeDuration: TimeInterval = UserDefaults.standard.double(forKey: "motif.crossfadeDuration")
+    @Published private(set) var playbackQuality: PlaybackQuality = PlaybackQuality(
+        rawValue: UserDefaults.standard.string(forKey: "motif.playbackQuality") ?? ""
+    ) ?? .balanced
     @Published private(set) var automixEnabled = UserDefaults.standard.bool(forKey: "motif.automixEnabled")
     @Published private(set) var sleepTimerEnd: Date?
     @Published private(set) var playbackError: String?
@@ -123,6 +166,28 @@ final class PlayerManager: ObservableObject {
         configureRemoteCommands()
         installSystemObservers()
         installTimeObserver()
+        player.automaticallyWaitsToMinimizeStalling = playbackQuality.waitsToMinimizeStalling
+    }
+
+    func setPlaybackQuality(_ quality: PlaybackQuality) {
+        guard quality != playbackQuality else { return }
+        playbackQuality = quality
+        UserDefaults.standard.set(quality.rawValue, forKey: "motif.playbackQuality")
+        applyPlaybackQuality()
+    }
+
+    /// Applies the streaming profile to the item already playing and drops the
+    /// preloaded item, which was configured with the previous profile.
+    private func applyPlaybackQuality() {
+        player.automaticallyWaitsToMinimizeStalling = playbackQuality.waitsToMinimizeStalling
+        if let item = player.currentItem {
+            item.preferredForwardBufferDuration = playbackQuality.forwardBufferDuration
+            if let mediaURL = current?.mediaURL, !mediaURL.isFileURL {
+                item.preferredPeakBitRate = playbackQuality.peakBitRate
+            }
+        }
+        preloadedNextID = nil
+        preloadedItem = nil
     }
 
     func play(_ track: Track, queue newQueue: [Track]? = nil) {
@@ -693,7 +758,10 @@ final class PlayerManager: ObservableObject {
 
     private func makeFreshPlayerItem(for track: Track) -> AVPlayerItem {
         let item = AVPlayerItem(url: track.mediaURL)
-        item.preferredForwardBufferDuration = 2
+        item.preferredForwardBufferDuration = playbackQuality.forwardBufferDuration
+        if !track.mediaURL.isFileURL {
+            item.preferredPeakBitRate = playbackQuality.peakBitRate
+        }
         Equalizer.shared.attach(to: item)
         return item
     }

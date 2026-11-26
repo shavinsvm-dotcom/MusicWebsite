@@ -84,6 +84,8 @@ struct SettingsView: View {
 
                     crossfadeRow
 
+                    qualityRow
+
                     Button {
                         showEqualizer = true
                     } label: {
@@ -99,7 +101,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Playback")
                 } footer: {
-                    Text("Automix blends tracks that flow together. Crossfade overlaps the end of one song with the next.")
+                    Text("Automix blends tracks that flow together. Crossfade overlaps the end of one song with the next. Streaming quality caps network bandwidth and sets how far ahead audio buffers; downloaded songs always play at their original quality.")
                 }
 
                 Section {
@@ -163,6 +165,30 @@ struct SettingsView: View {
         }
         .accessibilityLabel("Sleep Timer")
         .accessibilityValue(player.sleepTimerRemainingText ?? "Off")
+    }
+
+    private var qualityRow: some View {
+        Menu {
+            ForEach(PlaybackQuality.allCases) { option in
+                Button {
+                    player.setPlaybackQuality(option)
+                } label: {
+                    if option == player.playbackQuality {
+                        Label(option.title, systemImage: "checkmark")
+                    } else {
+                        Text(option.title)
+                    }
+                }
+            }
+        } label: {
+            SettingsValueRow(
+                title: "Streaming Quality",
+                systemImage: "dot.radiowaves.left.and.right",
+                value: player.playbackQuality.title
+            )
+        }
+        .accessibilityLabel("Streaming Quality")
+        .accessibilityValue(player.playbackQuality.title)
     }
 
     private var crossfadeRow: some View {
