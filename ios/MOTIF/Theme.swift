@@ -313,14 +313,36 @@ struct MotifPressStyle: ButtonStyle {
     }
 }
 
-/// Transport and glass controls move as one piece: the whole control, glass
-/// included, compresses on touch, then springs back with the same pop and
-/// spark burst as the transport heart. Reduce Motion keeps the press feedback
-/// but skips the pop.
+/// Every player control answers with its own release motion: the skips lean in
+/// their direction, shuffle crosses, repeat turns, play punches. Keeping them
+/// distinct stops the transport from feeling stamped from one template.
+enum PlayerControlMotion: Equatable {
+    /// The control runs its own animation (the transport heart).
+    case none
+    /// Mini-player play/pause: two quick beats.
+    case toggle
+    /// Mini-player previous/next: a short lean with a small trail.
+    case skipBack
+    case skipForward
+    /// Chevron down: the sheet drops toward the mini player.
+    case close
+    /// Menu: the three dots fan upward.
+    case more
+    /// Shuffle: the arrows cross back and forth.
+    case shuffle
+    /// Transport previous/next: a rubber-band pull leaving a trail.
+    case previous
+    case next
+    /// Transport play/pause: a downbeat with a brief glow.
+    case play
+    /// Repeat: one full turn of the glyph.
+    case repeatTurn
+}
+
 struct PlayerControlPressStyle: ButtonStyle {
     var scale: CGFloat = 0.96
     var haptic: MotifHaptics.Event? = .light
-    var animated: Bool = true
+    var motion: PlayerControlMotion = .toggle
 
     func makeBody(configuration: Configuration) -> some View {
         PlayerControlPressLabel(
@@ -328,9 +350,17 @@ struct PlayerControlPressStyle: ButtonStyle {
             isPressed: configuration.isPressed,
             scale: scale,
             haptic: haptic,
-            animated: animated
+            motion: motion
         )
     }
+}
+
+/// One carrying dot for a control's release flourish.
+private struct PlayerSpark {
+    let angle: Double
+    let start: CGFloat
+    let travel: CGFloat
+    let size: CGFloat
 }
 
 private struct PlayerControlPressLabel<Content: View>: View {
@@ -338,18 +368,24 @@ private struct PlayerControlPressLabel<Content: View>: View {
     let isPressed: Bool
     let scale: CGFloat
     let haptic: MotifHaptics.Event?
-    let animated: Bool
+    let motion: PlayerControlMotion
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pop: CGFloat = 1
+    @State private var shift: CGSize = .zero
+    @State private var turn: Double = 0
     @State private var burstProgress: CGFloat = 1
+    @State private var glow: Double = 0
     @State private var burstToken = 0
 
     var body: some View {
         content
-            .scaleEffect(isPressed ? scale : (animated ? pop : 1))
+            .scaleEffect(isPressed ? scale : pop)
+            .offset(isPressed ? .zero : shift)
+            .rotationEffect(.degrees(isPressed ? 0 : turn))
+            .shadow(color: .white.opacity(glow), radius: 14)
             .overlay {
-                if animated, burstProgress < 1 {
+                if !reduceMotion, !sparkSpecs.isEmpty, burstProgress < 1 {
                     sparkBurst
                 }
             }
@@ -359,8 +395,8 @@ private struct PlayerControlPressLabel<Content: View>: View {
                     if let haptic {
                         MotifHaptics.play(haptic)
                     }
-                } else if animated, !reduceMotion {
-                    animatePop()
+                } else if !reduceMotion {
+                    animate()
                 }
             }
     }
@@ -368,27 +404,26 @@ private struct PlayerControlPressLabel<Content: View>: View {
     private var pressAnimation: Animation? {
         guard !reduceMotion else { return nil }
         if isPressed { return .easeOut(duration: 0.09) }
-        return animated ? nil : MotifMotion.control
+        return motion == .none ? MotifMotion.control : nil
     }
 
     private var sparkBurst: some View {
         GeometryReader { geometry in
             let side = min(geometry.size.width, geometry.size.height)
-            let start = side * 0.21
-            let travel = side * 0.36
-            let large = max(2.0, side * 0.12)
-            let small = max(1.0, side * 0.06)
 
             ZStack {
-                ForEach(0..<8, id: \.self) { index in
-                    let angle = Double(index) / 8 * 2 * Double.pi
-                    let dot = index.isMultiple(of: 2) ? large : small
+                ForEach(sparkSpecs.indices, id: \.self) { index in
+                    let spark = sparkSpecs[index]
+                    let radians = spark.angle * Double.pi / 180
+                    let distance = side * (spark.start + spark.travel * burstProgress)
+                    let dot = max(1.2, side * spark.size)
+
                     Circle()
                         .fill(Color.primary)
                         .frame(width: dot, height: dot)
                         .offset(
-                            x: CGFloat(cos(angle)) * (start + travel * burstProgress),
-                            y: CGFloat(sin(angle)) * (start + travel * burstProgress)
+                            x: CGFloat(cos(radians)) * distance,
+                            y: CGFloat(sin(radians)) * distance
                         )
                         .scaleEffect(1 - burstProgress * 0.55)
                         .opacity(Double(1 - burstProgress))
@@ -400,29 +435,195 @@ private struct PlayerControlPressLabel<Content: View>: View {
         .accessibilityHidden(true)
     }
 
-    private func animatePop() {
+    /// Each motion carries its dots in a different shape: a trail behind the
+    /// skips, a falling dot for close, a fan for More, a crossing pair for
+    /// shuffle and four corner kicks for play.
+    private var sparkSpecs: [PlayerSpark] {
+        switch motion {
+        case .skipBack:
+            return trail(from: 180, spread: 26, travel: 0.24)
+        case .skipForward:
+            return trail(from: 0, spread: 26, travel: 0.24)
+        case .close:
+            return [PlayerSpark(angle: 90, start: 0.22, travel: 0.26, size: 0.05)]
+        case .more:
+            return [
+                PlayerSpark(angle: 242, start: 0.18, travel: 0.26, size: 0.045),
+                PlayerSpark(angle: 270, start: 0.20, travel: 0.34, size: 0.055),
+                PlayerSpark(angle: 298, start: 0.18, travel: 0.26, size: 0.045)
+            ]
+        case .shuffle:
+            return [
+                PlayerSpark(angle: 0, start: 0.18, travel: 0.28, size: 0.05),
+                PlayerSpark(angle: 180, start: 0.18, travel: 0.28, size: 0.05)
+            ]
+        case .play:
+            return [45.0, 135.0, 225.0, 315.0].map {
+                PlayerSpark(angle: $0, start: 0.20, travel: 0.20, size: 0.05)
+            }
+        case .previous:
+            return trail(from: 180, spread: 34, travel: 0.34)
+        case .next:
+            return trail(from: 0, spread: 34, travel: 0.34)
+        case .toggle, .repeatTurn, .none:
+            return []
+        }
+    }
+
+    private func trail(from angle: Double, spread: Double, travel: CGFloat) -> [PlayerSpark] {
+        [-1.0, 0.0, 1.0].map { offset in
+            PlayerSpark(
+                angle: angle + spread * offset,
+                start: 0.18,
+                travel: travel,
+                size: offset == 0 ? 0.055 : 0.04
+            )
+        }
+    }
+
+    private func animate() {
+        guard motion != .none else { return }
+
         burstToken += 1
         let token = burstToken
 
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            pop = 0.82
+            pop = scale
+            shift = .zero
+            turn = 0
             burstProgress = 0
+            glow = 0
         }
 
-        withAnimation(.spring(response: 0.26, dampingFraction: 0.46)) {
-            pop = 1.32
-        }
-        withAnimation(.easeOut(duration: 0.52)) {
-            burstProgress = 1
-        }
+        switch motion {
+        case .none:
+            return
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            guard token == burstToken else { return }
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.64)) {
-                pop = 1
+        case .toggle:
+            // Two quick beats, like a pulse under the finger.
+            withAnimation(.spring(response: 0.16, dampingFraction: 0.48)) { pop = 1.12 }
+            later(0.13, token) { withAnimation(.spring(response: 0.16, dampingFraction: 0.60)) { pop = 0.97 } }
+            later(0.24, token) { withAnimation(.spring(response: 0.18, dampingFraction: 0.60)) { pop = 1.04 } }
+            later(0.34, token) { withAnimation(.spring(response: 0.26, dampingFraction: 0.70)) { pop = 1 } }
+
+        case .skipBack:
+            // Leans back toward the previous track with a short trail.
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.50)) {
+                pop = 1.05
+                shift = CGSize(width: -4, height: 0)
             }
+            withAnimation(.easeOut(duration: 0.32)) { burstProgress = 1 }
+            later(0.12, token) {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.72)) {
+                    pop = 1
+                    shift = .zero
+                }
+            }
+
+        case .skipForward:
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.50)) {
+                pop = 1.05
+                shift = CGSize(width: 4, height: 0)
+            }
+            withAnimation(.easeOut(duration: 0.32)) { burstProgress = 1 }
+            later(0.12, token) {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.72)) {
+                    pop = 1
+                    shift = .zero
+                }
+            }
+
+        case .close:
+            // Drops toward the mini player it returns to.
+            withAnimation(.spring(response: 0.26, dampingFraction: 0.50)) {
+                pop = 1.04
+                shift = CGSize(width: 0, height: 5)
+            }
+            withAnimation(.easeOut(duration: 0.34)) { burstProgress = 1 }
+            later(0.12, token) {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.72)) {
+                    pop = 1
+                    shift = .zero
+                }
+            }
+
+        case .more:
+            // The three dots fan upward.
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.50)) {
+                pop = 1.07
+                turn = -7
+            }
+            withAnimation(.easeOut(duration: 0.36)) { burstProgress = 1 }
+            later(0.12, token) {
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.70)) {
+                    pop = 1
+                    turn = 0
+                }
+            }
+
+        case .shuffle:
+            // The arrows cross back and forth.
+            withAnimation(.spring(response: 0.30, dampingFraction: 0.40)) { turn = -12 }
+            withAnimation(.easeOut(duration: 0.40)) { burstProgress = 1 }
+            later(0.16, token) { withAnimation(.spring(response: 0.20, dampingFraction: 0.55)) { turn = 6 } }
+            later(0.30, token) { withAnimation(.spring(response: 0.26, dampingFraction: 0.70)) { turn = 0 } }
+
+        case .previous:
+            // Rubber-band pull to the left with a trail.
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.44)) {
+                pop = 1.10
+                shift = CGSize(width: -7, height: 0)
+            }
+            withAnimation(.easeOut(duration: 0.40)) { burstProgress = 1 }
+            later(0.13, token) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.70)) {
+                    pop = 1
+                    shift = .zero
+                }
+            }
+
+        case .next:
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.44)) {
+                pop = 1.10
+                shift = CGSize(width: 7, height: 0)
+            }
+            withAnimation(.easeOut(duration: 0.40)) { burstProgress = 1 }
+            later(0.13, token) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.70)) {
+                    pop = 1
+                    shift = .zero
+                }
+            }
+
+        case .play:
+            // A hard downbeat: squash, overshoot and a brief glow.
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.40)) { pop = 1.20 }
+            withAnimation(.easeOut(duration: 0.12)) { glow = 0.45 }
+            withAnimation(.easeOut(duration: 0.26)) { burstProgress = 1 }
+            later(0.16, token) {
+                withAnimation(.easeOut(duration: 0.30)) { glow = 0 }
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.66)) { pop = 1 }
+            }
+
+        case .repeatTurn:
+            // One full turn of the repeat glyph.
+            withAnimation(.spring(response: 0.22, dampingFraction: 0.55)) { pop = 1.05 }
+            withAnimation(.easeInOut(duration: 0.48)) { turn = 360 }
+            later(0.50, token) {
+                var reset = Transaction()
+                reset.disablesAnimations = true
+                withTransaction(reset) { turn = 0 }
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.70)) { pop = 1 }
+            }
+        }
+    }
+
+    private func later(_ delay: TimeInterval, _ token: Int, _ body: @escaping () -> Void) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard token == burstToken else { return }
+            body()
         }
     }
 }
