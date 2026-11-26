@@ -200,6 +200,7 @@ jobs:
           cat audit/report.txt >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture simulator screenshots
+        timeout-minutes: 18
         working-directory: ios
         run: |
           set -euo pipefail
@@ -218,35 +219,47 @@ jobs:
           print(chosen)
           ')
           test -n "$DEVICE_ID"
+          stage() { echo "=== $(date -u +%H:%M:%S) $* ===" | tee -a /tmp/motif-screenshots.log; }
           echo "Simulator: $DEVICE_ID" | tee /tmp/motif-screenshots.log
+          stage "boot simulator"
           xcrun simctl boot "$DEVICE_ID" 2>/dev/null || true
-          xcrun simctl bootstatus "$DEVICE_ID" -b
+          for attempt in $(seq 1 60); do
+            if xcrun simctl getenv "$DEVICE_ID" HOME >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          xcrun simctl getenv "$DEVICE_ID" HOME >/dev/null
 
+          stage "build simulator app"
           xcodebuild \
             -project MOTIF.xcodeproj \
             -scheme MOTIF \
             -configuration Debug \
             -sdk iphonesimulator \
             -destination "id=$DEVICE_ID" \
-            -derivedDataPath build-sim \
+            -derivedDataPath build \
+            -disableAutomaticPackageResolution \
             >> /tmp/motif-screenshots.log 2>&1
 
-          APP=$(find build-sim/Build/Products/Debug-iphonesimulator -maxdepth 1 -name 'MOTIF.app' -print -quit)
+          stage "install app"
+          APP=$(find build/Build/Products/Debug-iphonesimulator -maxdepth 1 -name 'MOTIF.app' -print -quit)
           test -d "$APP"
           xcrun simctl uninstall "$DEVICE_ID" com.example.motif 2>/dev/null || true
           xcrun simctl install "$DEVICE_ID" "$APP"
 
           launch() {
+            stage "launch app"
             xcrun simctl terminate "$DEVICE_ID" com.example.motif 2>/dev/null || true
             xcrun simctl launch "$DEVICE_ID" com.example.motif --motif-screenshots >> /tmp/motif-screenshots.log
             sleep 7
           }
           shot() {
+            stage "capture $1"
             xcrun simctl io "$DEVICE_ID" screenshot "audit/$1.png" >> /tmp/motif-screenshots.log
             sips -Z 1100 "audit/$1.png" >/dev/null
             echo "captured audit/$1.png"
           }
 
+          stage "home"
           launch
           shot home
           xcrun simctl openurl "$DEVICE_ID" "motif://library"; sleep 2; shot library
