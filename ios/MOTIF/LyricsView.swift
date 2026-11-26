@@ -216,6 +216,7 @@ struct LyricsView: View {
     @State private var showFinder = false
     @State private var contentRevealed = false
     @State private var backdropDrifting = false
+    @State private var selectedDetent: PresentationDetent = .large
     /// Positive values show each line later, for lyric files that run ahead.
     @State private var timingDelay: Double = 0
 
@@ -325,7 +326,7 @@ struct LyricsView: View {
         }
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.visible)
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.medium, .large], selection: $selectedDetent)
         .onAppear {
             if !reduceMotion { backdropDrifting = true }
             withAnimation(.easeOut(duration: 0.55)) { contentRevealed = true }
