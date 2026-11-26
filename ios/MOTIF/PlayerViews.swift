@@ -65,7 +65,7 @@ struct MiniPlayer: View {
                                     .contentShape(Circle())
                                     .rowControl(Circle())
                             }
-                            .buttonStyle(PlayerControlPressStyle(motion: .skipBack))
+                            .buttonStyle(PlayerControlPressStyle())
                             .accessibilityLabel("Previous")
 
                             Button {
@@ -73,14 +73,12 @@ struct MiniPlayer: View {
                                     player.toggle()
                                 }
                             } label: {
-                                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                                    .font(.system(size: 15, weight: .semibold))
+                                PlayPauseGlyph(isPlaying: player.isPlaying, size: 15)
                                     .frame(width: 34, height: 34)
                                     .contentShape(Circle())
-                                    .motifReplace()
                                     .rowControl(Circle())
                             }
-                            .buttonStyle(PlayerControlPressStyle(haptic: .medium, motion: .toggle))
+                            .buttonStyle(PlayerControlPressStyle(scale: 0.93, pressedOpacity: 0.9, haptic: .medium))
                             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                             Button {
@@ -94,7 +92,7 @@ struct MiniPlayer: View {
                                     .contentShape(Circle())
                                     .rowControl(Circle())
                             }
-                            .buttonStyle(PlayerControlPressStyle(motion: .skipForward))
+                            .buttonStyle(PlayerControlPressStyle())
                             .accessibilityLabel("Next")
                         }
                     }
@@ -524,7 +522,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .playerGlass(Circle())
                 }
-                .buttonStyle(PlayerControlPressStyle(motion: .close))
+                .buttonStyle(PlayerControlPressStyle())
                 .accessibilityLabel("Close player")
 
                 Spacer()
@@ -657,7 +655,7 @@ struct NowPlayingView: View {
                         .frame(width: 40, height: 40)
                         .playerGlass(Circle())
                 }
-                .buttonStyle(PlayerControlPressStyle(motion: .more))
+                .buttonStyle(PlayerControlPressStyle())
                 .accessibilityLabel("More options")
                 }
                 }
@@ -708,7 +706,7 @@ struct NowPlayingView: View {
                     .frame(width: 42, height: 42)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(motion: .previous))
+            .buttonStyle(PlayerControlPressStyle())
             .accessibilityLabel("Previous")
 
             Button {
@@ -716,14 +714,12 @@ struct NowPlayingView: View {
                     player.toggle()
                 }
             } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 25, weight: .bold))
+                PlayPauseGlyph(isPlaying: player.isPlaying, size: 25, weight: .bold)
                     .foregroundStyle(.white)
                     .frame(width: 68, height: 68)
-                    .motifReplace()
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(haptic: .medium, motion: .play))
+            .buttonStyle(PlayerControlPressStyle(scale: 0.93, pressedOpacity: 0.9, haptic: .medium))
             .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
             Button {
@@ -737,7 +733,7 @@ struct NowPlayingView: View {
                     .frame(width: 42, height: 42)
                     .playerGlass(Circle())
             }
-            .buttonStyle(PlayerControlPressStyle(motion: .next))
+            .buttonStyle(PlayerControlPressStyle())
             .accessibilityLabel("Next")
             }
         }
@@ -752,11 +748,12 @@ struct NowPlayingView: View {
             Image(systemName: icon)
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(active ? Color.white : Color.white.opacity(0.62))
+                .motifBounce(active)
                 .frame(width: 42, height: 42)
                 .motifReplace()
                 .playerGlass(Circle())
         }
-        .buttonStyle(PlayerControlPressStyle(motion: .shuffle))
+        .buttonStyle(PlayerControlPressStyle(haptic: .selection))
     }
 
     private var repeatButton: some View {
@@ -767,6 +764,7 @@ struct NowPlayingView: View {
                 Image(systemName: "repeat")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(player.repeatMode == .off ? Color.white.opacity(0.62) : Color.white)
+                    .motifBounce(player.repeatMode != .off)
 
                 if player.repeatMode != .off {
                     Circle()
@@ -780,7 +778,7 @@ struct NowPlayingView: View {
             .frame(width: 42, height: 42)
             .playerGlass(Circle())
         }
-        .buttonStyle(PlayerControlPressStyle(motion: .repeatTurn))
+        .buttonStyle(PlayerControlPressStyle(haptic: .selection))
         .accessibilityLabel("Repeat")
         .accessibilityValue(repeatLabel)
     }
@@ -857,7 +855,7 @@ private struct FavoriteHeartButton: View {
                 }
                 .contentShape(Circle())
         }
-        .buttonStyle(PlayerControlPressStyle(haptic: nil, motion: .none))
+        .buttonStyle(PlayerControlPressStyle(scale: 1, pressedOpacity: 1, haptic: nil))
         .accessibilityLabel(isFavorite ? "Remove favorite" : "Favorite")
         .accessibilityValue(isFavorite ? "Favorite" : "Not favorite")
     }
