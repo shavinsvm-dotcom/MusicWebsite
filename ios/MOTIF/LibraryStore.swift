@@ -38,6 +38,10 @@ final class LibraryStore: ObservableObject {
     private var trackIndex: [UUID: Track] = [:]
     private var trackByRemoteID: [String: Track] = [:]
     private var playlistTrackCache: [UUID: [Track]] = [:]
+    /// False from the moment a mutation schedules a save until the deferred
+    /// writer rebuilds the indexes off the main thread. Playlist resolution
+    /// reads the live array while false so a just-added song never vanishes.
+    private var indexesAreCurrent = true
     private var pendingSave: LibrarySnapshot?
     private var saveTask: Task<Void, Never>?
 
@@ -181,10 +185,9 @@ final class LibraryStore: ObservableObject {
 
     func isFavorite(_ track: Track) -> Bool {
         if favoriteIDs.contains(track.id) { return true }
-        guard let remoteID = track.remoteID,
-              let existing = trackByRemoteID[remoteID] else {
-            return false
-        }
+        guard track.remoteID != nil,
+              let existing = canonicalTrack(for: track)
+        else { return false }
         return favoriteIDs.contains(existing.id)
     }
 
@@ -197,7 +200,21 @@ final class LibraryStore: ObservableObject {
             return cached
         }
 
-        let resolved = playlist.trackIDs.compactMap { trackIndex[$0] }
+        let resolved: [Track]
+        if indexesAreCurrent {
+            resolved = playlist.trackIDs.compactMap { trackIndex[$0] }
+        } else {
+            // The deferred writer has not rebuilt the indexes yet; resolve
+            // against the live array so new rows are not silently dropped and
+            // removed rows do not linger.
+            var byID: [UUID: Track] = [:]
+            byID.reserveCapacity(tracks.count)
+            for track in tracks {
+                byID[track.id] = track
+            }
+            resolved = playlist.trackIDs.compactMap { byID[$0] }
+        }
+
         playlistTrackCache[playlist.id] = resolved
         return resolved
     }
@@ -1220,8 +1237,12 @@ final class LibraryStore: ObservableObject {
 
     private func canonicalTrack(for track: Track) -> Track? {
         if let exact = trackIndex[track.id] { return exact }
+        // While a deferred save is rebuilding the indexes, a just-added row is
+        // only present in the live array.
+        if let scanned = tracks.first(where: { $0.id == track.id }) { return scanned }
         guard let remoteID = track.remoteID else { return nil }
-        return trackByRemoteID[remoteID]
+        if let indexed = trackByRemoteID[remoteID] { return indexed }
+        return tracks.first { $0.remoteID == remoteID }
     }
 
     private func rebuildIndexes() {
@@ -1236,6 +1257,7 @@ final class LibraryStore: ObservableObject {
         }
 
         playlistTrackCache.removeAll(keepingCapacity: true)
+        indexesAreCurrent = true
     }
 
     private func load() {
@@ -1320,7 +1342,11 @@ final class LibraryStore: ObservableObject {
     }
 
     private func save() {
-        rebuildIndexes()
+        // Index rebuilding and the shared widget snapshot live in the
+        // debounced writer now: a play, favorite or playlist edit should never
+        // walk the whole library or block on cfprefsd.
+        indexesAreCurrent = false
+        playlistTrackCache.removeAll(keepingCapacity: true)
 
         pendingSave = LibrarySnapshot(
             tracks: tracks,
@@ -1330,38 +1356,29 @@ final class LibraryStore: ObservableObject {
             playCounts: playCounts
         )
         scheduleSave()
-
-        let recent = recentTracks.prefix(4).map { track in
-            SharedLibrarySnapshot.Item(
-                id: track.id.uuidString,
-                title: track.title,
-                artist: track.artist,
-                artworkURL: track.artworkURL?.absoluteString
-            )
-        }
-        let firstPlaylist = playlists.first
-        SharedLibrarySnapshot.save(
-            SharedLibrarySnapshot(
-                trackCount: tracks.count,
-                playlistCount: playlists.count,
-                recent: Array(recent),
-                playlistName: firstPlaylist?.name,
-                playlistArtworkURL: firstPlaylist?.customCoverURL?.absoluteString
-            )
-        )
     }
 
-    /// Coalesce library writes and move JSON encoding/disk I/O off the main
-    /// thread. Play counts and favorites can fire several save requests in a
-    /// burst, and each one previously encoded the whole library synchronously.
+    /// Coalesce library writes and move JSON encoding, index rebuilding and
+    /// the shared snapshot off the main thread. Play counts and favorites can
+    /// fire several save requests in a burst, and each one previously rebuilt
+    /// every index and wrote the widget snapshot synchronously.
     private func scheduleSave() {
         guard saveTask == nil else { return }
         saveTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 150_000_000)
             guard let self else { return }
+
             while let snapshot = self.pendingSave {
                 self.pendingSave = nil
-                if let error = await self.write(snapshot) {
+                let outcome = await self.write(snapshot)
+
+                // A newer mutation already queued another write; let that one
+                // publish its fresher indexes instead.
+                if self.pendingSave == nil {
+                    self.applyIndexes(outcome.indexes)
+                }
+
+                if let error = outcome.error {
                     self.errorMessage = "Couldn’t save your library: \(error)"
                 }
             }
@@ -1369,16 +1386,78 @@ final class LibraryStore: ObservableObject {
         }
     }
 
-    private nonisolated func write(_ snapshot: LibrarySnapshot) async -> String? {
+    private func applyIndexes(_ indexes: LibraryIndexes) {
+        trackIndex = indexes.byID
+        trackByRemoteID = indexes.byRemoteID
+        playlistTrackCache.removeAll(keepingCapacity: true)
+        indexesAreCurrent = true
+    }
+
+    private nonisolated static func buildIndexes(_ tracks: [Track]) -> LibraryIndexes {
+        var indexes = LibraryIndexes()
+        indexes.byID.reserveCapacity(tracks.count)
+        for track in tracks {
+            indexes.byID[track.id] = track
+            if let remoteID = track.remoteID, indexes.byRemoteID[remoteID] == nil {
+                indexes.byRemoteID[remoteID] = track
+            }
+        }
+        return indexes
+    }
+
+    /// The widget/app-group snapshot is built from the same indexes the write
+    /// already needs, so it costs no extra pass over the library.
+    private nonisolated static func sharedSnapshot(
+        _ snapshot: LibrarySnapshot,
+        indexes: LibraryIndexes
+    ) -> SharedLibrarySnapshot {
+        let recent = snapshot.recentTrackIDs.prefix(4).compactMap { indexes.byID[$0] }
+        let firstPlaylist = snapshot.playlists.first
+
+        return SharedLibrarySnapshot(
+            trackCount: snapshot.tracks.count,
+            playlistCount: snapshot.playlists.count,
+            recent: recent.map {
+                SharedLibrarySnapshot.Item(
+                    id: $0.id.uuidString,
+                    title: $0.title,
+                    artist: $0.artist,
+                    artworkURL: $0.artworkURL?.absoluteString
+                )
+            },
+            playlistName: firstPlaylist?.name,
+            playlistArtworkURL: firstPlaylist?.customCoverURL?.absoluteString
+        )
+    }
+
+    private nonisolated func write(_ snapshot: LibrarySnapshot) async -> SaveOutcome {
+        let indexes = Self.buildIndexes(snapshot.tracks)
+
+        // UserDefaults.set waits on a cfprefsd round trip, so the shared
+        // snapshot is written here rather than in save().
+        SharedLibrarySnapshot.save(Self.sharedSnapshot(snapshot, indexes: indexes))
+
         let url = libraryURL
         do {
             let data = try JSONEncoder().encode(snapshot)
             try data.write(to: url, options: .atomic)
-            return nil
+            return SaveOutcome(indexes: indexes, error: nil)
         } catch {
-            return error.localizedDescription
+            return SaveOutcome(indexes: indexes, error: error.localizedDescription)
         }
     }
+}
+
+/// Built off the main thread by the deferred writer and applied back on the
+/// main actor once the write finishes.
+private struct LibraryIndexes {
+    var byID: [UUID: Track] = [:]
+    var byRemoteID: [String: Track] = [:]
+}
+
+private struct SaveOutcome {
+    var indexes: LibraryIndexes
+    var error: String?
 }
 
 /// Everything the Home screen derives from the library. Building this used to

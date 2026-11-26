@@ -323,6 +323,13 @@ struct PlaylistTile: View {
     }
 }
 
+/// The Add Songs sheet needs both the addable catalogue and the current
+/// matches, so a body read must not filter or sort the library more than once.
+private struct AddSongsResults {
+    var available: [Track] = []
+    var matches: [Track] = []
+}
+
 struct AddSongsView: View {
     @EnvironmentObject private var library: LibraryStore
     @Environment(\.dismiss) private var dismiss
@@ -331,6 +338,8 @@ struct AddSongsView: View {
 
     @State private var query = ""
     @State private var selectedIDs: Set<UUID> = []
+    @State private var results: AddSongsResults?
+    @State private var searchTask: Task<Void, Never>?
 
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -344,35 +353,64 @@ struct AddSongsView: View {
         Set(playlist?.trackIDs ?? [])
     }
 
-    private var availableTracks: [Track] {
-        library.tracks.filter { !existingIDs.contains($0.id) }
+    private var visibleResults: AddSongsResults {
+        results ?? buildResults(for: query)
     }
 
-    private var matchingTracks: [Track] {
-        guard !trimmedQuery.isEmpty else { return availableTracks }
-        return availableTracks
-            .filter {
-                LibrarySearch.matches(
-                    trimmedQuery,
-                    in: [$0.title, $0.artist, $0.album]
-                )
+    /// One pass over the library per settled query: the available list is
+    /// filtered once and the matching subset is ranked once before sorting.
+    private func buildResults(for rawQuery: String) -> AddSongsResults {
+        let existing = existingIDs
+        let available = library.tracks.filter { !existing.contains($0.id) }
+        let text = rawQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !text.isEmpty else {
+            return AddSongsResults(available: available, matches: available)
+        }
+
+        let tokens = LibrarySearch.tokens(in: text)
+        let matches = available
+            .compactMap { track -> (track: Track, rank: Int)? in
+                guard LibrarySearch.matches(tokens, in: [track.title, track.artist, track.album]) else {
+                    return nil
+                }
+                return (track, LibrarySearch.rank(title: track.title, query: text))
             }
             .sorted { lhs, rhs in
-                let leftRank = LibrarySearch.rank(title: lhs.title, query: trimmedQuery)
-                let rightRank = LibrarySearch.rank(title: rhs.title, query: trimmedQuery)
-                if leftRank != rightRank { return leftRank < rightRank }
-                return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
+                if lhs.rank != rhs.rank { return lhs.rank < rhs.rank }
+                return lhs.track.title.localizedCaseInsensitiveCompare(rhs.track.title) == .orderedAscending
             }
+            .map { $0.track }
+
+        return AddSongsResults(available: available, matches: matches)
+    }
+
+    /// Wait for a short pause in typing, then search once instead of on every
+    /// key press.
+    private func scheduleSearch(_ rawQuery: String) {
+        searchTask?.cancel()
+        searchTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 120_000_000)
+            guard !Task.isCancelled else { return }
+            results = buildResults(for: rawQuery)
+        }
+    }
+
+    private func refreshResultsNow() {
+        searchTask?.cancel()
+        results = buildResults(for: query)
     }
 
     var body: some View {
+        let shown = visibleResults
+
         NavigationStack {
             List {
-                if matchingTracks.isEmpty {
+                if shown.matches.isEmpty {
                     emptyState
                 } else {
                     Section {
-                        ForEach(matchingTracks) { track in
+                        ForEach(shown.matches) { track in
                             Button {
                                 toggle(track)
                             } label: {
@@ -432,6 +470,20 @@ struct AddSongsView: View {
                     .disabled(selectedIDs.isEmpty)
                 }
             }
+            .onAppear {
+                if results == nil {
+                    results = buildResults(for: query)
+                }
+            }
+            .onChange(of: query) { newValue in
+                scheduleSearch(newValue)
+            }
+            .onChange(of: library.tracks.count) { _ in
+                refreshResultsNow()
+            }
+            .onDisappear {
+                searchTask?.cancel()
+            }
         }
     }
 
@@ -462,13 +514,13 @@ struct AddSongsView: View {
 
     private var emptySymbol: String {
         if library.tracks.isEmpty { return "music.note" }
-        if availableTracks.isEmpty { return "checkmark.circle" }
+        if visibleResults.available.isEmpty { return "checkmark.circle" }
         return "magnifyingglass"
     }
 
     private var emptyTitle: String {
         if library.tracks.isEmpty { return "Your library is empty" }
-        if availableTracks.isEmpty { return "Everything is already here" }
+        if visibleResults.available.isEmpty { return "Everything is already here" }
         return "No songs match"
     }
 
@@ -476,7 +528,7 @@ struct AddSongsView: View {
         if library.tracks.isEmpty {
             return "Import songs first, then come back to build this playlist."
         }
-        if availableTracks.isEmpty {
+        if visibleResults.available.isEmpty {
             return "Every song in your library is already in this playlist."
         }
         return "Try a shorter title, artist, or album name."
