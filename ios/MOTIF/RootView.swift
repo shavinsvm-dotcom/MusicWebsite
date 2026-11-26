@@ -351,7 +351,7 @@ private struct MiniPlayerInset: ViewModifier {
     /// iOS 26 floats the tab bar above the tab content, so the mini player
     /// needs a little clearance to sit above it rather than behind its glass.
     private var tabBarClearance: CGFloat {
-        if #available(iOS 26.0, *) { return 46 }
+        if #available(iOS 26.0, *) { return 18 }
         return 0
     }
 }
