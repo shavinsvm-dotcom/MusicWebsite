@@ -314,8 +314,9 @@ struct MotifPressStyle: ButtonStyle {
 }
 
 /// Transport and glass controls move as one piece: the whole control, glass
-/// included, compresses on touch, then springs back with a small pop and a
-/// spark burst. Reduce Motion keeps the press feedback but skips the pop.
+/// included, compresses on touch, then springs back with the same pop and
+/// spark burst as the transport heart. Reduce Motion keeps the press feedback
+/// but skips the pop.
 struct PlayerControlPressStyle: ButtonStyle {
     var scale: CGFloat = 0.96
     var haptic: MotifHaptics.Event? = .light
@@ -373,13 +374,15 @@ private struct PlayerControlPressLabel<Content: View>: View {
     private var sparkBurst: some View {
         GeometryReader { geometry in
             let side = min(geometry.size.width, geometry.size.height)
-            let start = side * 0.18
-            let travel = side * 0.24
-            let dot = max(1.4, side * 0.052)
+            let start = side * 0.21
+            let travel = side * 0.36
+            let large = max(2.0, side * 0.12)
+            let small = max(1.0, side * 0.06)
 
             ZStack {
-                ForEach(0..<6, id: \.self) { index in
-                    let angle = Double(index) / 6 * 2 * Double.pi
+                ForEach(0..<8, id: \.self) { index in
+                    let angle = Double(index) / 8 * 2 * Double.pi
+                    let dot = index.isMultiple(of: 2) ? large : small
                     Circle()
                         .fill(Color.primary)
                         .frame(width: dot, height: dot)
@@ -387,7 +390,7 @@ private struct PlayerControlPressLabel<Content: View>: View {
                             x: CGFloat(cos(angle)) * (start + travel * burstProgress),
                             y: CGFloat(sin(angle)) * (start + travel * burstProgress)
                         )
-                        .scaleEffect(1 - burstProgress * 0.45)
+                        .scaleEffect(1 - burstProgress * 0.55)
                         .opacity(Double(1 - burstProgress))
                 }
             }
@@ -404,20 +407,20 @@ private struct PlayerControlPressLabel<Content: View>: View {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            pop = scale
+            pop = 0.82
             burstProgress = 0
         }
 
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.52)) {
-            pop = 1.09
+        withAnimation(.spring(response: 0.26, dampingFraction: 0.46)) {
+            pop = 1.32
         }
-        withAnimation(.easeOut(duration: 0.42)) {
+        withAnimation(.easeOut(duration: 0.52)) {
             burstProgress = 1
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
             guard token == burstToken else { return }
-            withAnimation(.spring(response: 0.34, dampingFraction: 0.70)) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.64)) {
                 pop = 1
             }
         }
