@@ -27,7 +27,11 @@ struct RootView: View {
 
     var body: some View {
         tabs
-            .environment(\.accessibilityReduceMotion, UITestSupport.isEnabled)
+            .transaction { transaction in
+                if UITestSupport.isEnabled {
+                    transaction.disablesAnimations = true
+                }
+            }
             .tint(.primary)
             .preferredColorScheme(AppAppearance.resolved(appearanceRaw))
             .environmentObject(library)
