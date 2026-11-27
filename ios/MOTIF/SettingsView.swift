@@ -96,6 +96,46 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    HStack(spacing: 14) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color.black.opacity(0.92),
+                                            Color.black.opacity(0.70)
+                                        ],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.08), lineWidth: 0.8)
+                                }
+
+                            Image(systemName: "waveform")
+                                .font(.system(size: 23, weight: .semibold))
+                                .foregroundStyle(.white)
+                        }
+                        .frame(width: 54, height: 54)
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Lilt")
+                                .font(.system(size: 22, weight: .bold))
+                                .tracking(-0.4)
+                            Text("A quiet player for your library")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listRowBackground(Color.clear)
+
+                Section {
                     Picker("Appearance", selection: appearance) {
                         ForEach(AppAppearance.allCases) { option in
                             Text(option.title).tag(option)
@@ -103,7 +143,7 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                 } header: {
-                    Text("Appearance")
+                    Label("Appearance", systemImage: "circle.lefthalf.filled")
                 } footer: {
                     Text("Follow the system, or keep Lilt light or dark.")
                 }
@@ -160,9 +200,9 @@ struct SettingsView: View {
                         Text("They’ll download again over Wi-Fi when you play those albums.")
                     }
                 } header: {
-                    Text("Artwork")
+                    Label("Artwork", systemImage: "sparkles")
                 } footer: {
-                    Text("Lilt looks up Apple Music’s official motion artwork and plays it as the main cover. Downloaded covers stay inside Lilt’s private app storage for offline use; they aren’t exposed in Files. Offline downloads run only on Wi-Fi, up to 300 MB, oldest first out. Availability varies by album; Lilt isn’t affiliated with Apple.")
+                    Text("Official Apple Music motion artwork, played as the main cover and offered to the Lock Screen. Saved covers stay private, never appear in Files, and download only on Wi-Fi up to 300 MB. Availability varies by album; Lilt isn’t affiliated with Apple.")
                 }
 
                 Section {
@@ -190,9 +230,9 @@ struct SettingsView: View {
                     .accessibilityLabel("Equalizer")
                     .accessibilityValue(equalizer.isEnabled ? "On" : "Off")
                 } header: {
-                    Text("Playback")
+                    Label("Playback", systemImage: "play.circle")
                 } footer: {
-                    Text("Automix blends tracks that flow together. Crossfade overlaps the end of one song with the next. Streaming quality caps network bandwidth and sets how far ahead audio buffers; downloaded songs always play at their original quality.")
+                    Text("Automix blends tracks that flow together. Crossfade overlaps song endings. Streaming quality caps bandwidth and buffer depth; downloads always play at original quality.")
                 }
 
                 Section {
@@ -209,7 +249,7 @@ struct SettingsView: View {
                     }
                     .disabled((storageUsage?.downloads ?? 0) == 0)
                 } header: {
-                    Text("Storage")
+                    Label("Storage", systemImage: "internaldrive")
                 } footer: {
                     Text("Downloads are offline copies of cloud songs. Removing them frees space; the songs stay in your library and stream again when played.")
                 }
@@ -220,7 +260,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 } header: {
-                    Text("About")
+                    Label("About", systemImage: "info.circle")
                 } footer: {
                     Text("Lilt is a quiet player for your own library. Artwork is the only colour.")
                 }

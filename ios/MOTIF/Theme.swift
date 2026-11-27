@@ -402,9 +402,6 @@ struct ArtworkView: View {
 
     @State private var image: UIImage?
     @State private var failed = false
-    @AppStorage("motif.animatedCovers") private var animatedCovers = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var drifting = false
 
     init(
         url: URL?,
@@ -435,13 +432,6 @@ struct ArtworkView: View {
             cached = url.flatMap { ArtworkImageCache.shared.image(for: $0) }
         }
         _image = State(initialValue: cached)
-    }
-
-    /// Only the full-player artwork drifts. Cards and rows stay still so a
-    /// shelf full of covers does not keep dozens of animations alive while
-    /// scrolling.
-    private var motionEnabled: Bool {
-        animatedCovers && !reduceMotion && highResolution
     }
 
     private var resolvedImage: UIImage? {
@@ -476,17 +466,6 @@ struct ArtworkView: View {
                     .interpolation(thumbnail || card ? .medium : .high)
                     .antialiased(true)
                     .scaledToFill()
-                    .scaleEffect(motionEnabled && drifting ? 1.055 : 1)
-                    .offset(
-                        x: motionEnabled && drifting ? 5 : 0,
-                        y: motionEnabled && drifting ? -4 : 0
-                    )
-                    .animation(
-                        motionEnabled
-                            ? .easeInOut(duration: 18).repeatForever(autoreverses: true)
-                            : .easeOut(duration: 0.25),
-                        value: drifting
-                    )
             } else if url != nil, !failed {
                 // Rows and cards sit in lazy stacks and shelves; a spinning
                 // ProgressView in every loading cell keeps dozens of animations
@@ -501,31 +480,8 @@ struct ArtworkView: View {
                 fallback
             }
 
-            if motionEnabled {
-                LinearGradient(
-                    colors: [
-                        .white.opacity(0),
-                        .white.opacity(0.10),
-                        .white.opacity(0)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .rotationEffect(.degrees(drifting ? 14 : -14))
-                .scaleEffect(1.7)
-                .blendMode(.softLight)
-                .allowsHitTesting(false)
-                .animation(
-                    .easeInOut(duration: 18).repeatForever(autoreverses: true),
-                    value: drifting
-                )
-            }
         }
         .clipped()
-        .onAppear { updateMotion() }
-        .onChange(of: animatedCovers) { _ in updateMotion() }
-        .onChange(of: reduceMotion) { _ in updateMotion() }
-        .onDisappear { drifting = false }
         .task(id: url) {
             if let url {
                 let cached: UIImage?
@@ -558,16 +514,6 @@ struct ArtworkView: View {
                 }
             }
             await loadImage()
-        }
-    }
-
-    private func updateMotion() {
-        if motionEnabled {
-            // Let the static cover paint first, then start the long drift.
-            drifting = false
-            DispatchQueue.main.async { drifting = true }
-        } else {
-            drifting = false
         }
     }
 

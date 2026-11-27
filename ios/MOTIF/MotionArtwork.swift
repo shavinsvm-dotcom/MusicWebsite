@@ -315,6 +315,27 @@ final class MotionArtworkStore: ObservableObject {
         return link.streamURL
     }
 
+    /// The local file the system can use for lock-screen animated artwork.
+    func cachedArtworkFileURL(for track: Track) -> URL? {
+        guard let link = links[Self.albumKey(for: track)] else { return nil }
+        return localURL(for: link)
+    }
+
+    /// The system calls this when the lock-screen artwork is viewed. The
+    /// offline session is Wi-Fi only, so cellular still falls back to the
+    /// static cover instead of spending data.
+    func lockScreenVideoURL(for track: Track) async -> URL? {
+        if let local = cachedArtworkFileURL(for: track) { return local }
+        guard offlineEnabled else { return nil }
+
+        let key = Self.albumKey(for: track)
+        await prepareForPlayback(track)
+        if let task = downloadTask, downloadKey == key {
+            _ = await task.value
+        }
+        return cachedArtworkFileURL(for: track)
+    }
+
     /// Called when the player opens. A miss is cached for 30 days; a network
     /// failure is not, so a later play tries again.
     func prepareForPlayback(_ track: Track) async {

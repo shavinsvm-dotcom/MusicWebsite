@@ -152,6 +152,8 @@ final class PlayerManager: ObservableObject {
     private var infoTick = 0
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var nowPlayingArtworkURL: URL?
+    private var nowPlayingAnimatedArtwork: Any?
+    private var nowPlayingAnimatedArtworkID: String?
     private var crossfadeTask: Task<Void, Never>?
     private var tempoRestoreTask: Task<Void, Never>?
     private var automixNextIndex: Int?
@@ -1111,6 +1113,8 @@ final class PlayerManager: ObservableObject {
             nowPlayingArtwork = nil
             nowPlayingArtworkURL = nil
             nowPlayingArtworkLoadingURL = nil
+            nowPlayingAnimatedArtwork = nil
+            nowPlayingAnimatedArtworkID = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             SharedNowPlaying.clear()
             WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
@@ -1132,6 +1136,10 @@ final class PlayerManager: ObservableObject {
             MPNowPlayingInfoPropertyExternalContentIdentifier: "motif:\(track.id.uuidString)",
             MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue
         ]
+
+        if #available(iOS 26.0, *) {
+            attachAnimatedArtwork(to: &info, track: track)
+        }
 
         guard let artworkURL = track.artworkURL else {
             nowPlayingArtwork = nil
@@ -1168,6 +1176,42 @@ final class PlayerManager: ObservableObject {
                 self.updateNowPlaying()
             }
         }.resume()
+    }
+
+    @available(iOS 26.0, *)
+    private func attachAnimatedArtwork(to info: inout [String: Any], track: Track) {
+        guard UserDefaults.standard.bool(forKey: "motif.animatedCovers"),
+              MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys.contains(
+                  MPNowPlayingInfoProperty1x1AnimatedArtwork
+              )
+        else {
+            nowPlayingAnimatedArtwork = nil
+            nowPlayingAnimatedArtworkID = nil
+            return
+        }
+
+        let artworkID = MotionArtworkStore.albumKey(for: track)
+        if nowPlayingAnimatedArtworkID == artworkID,
+           let existing = nowPlayingAnimatedArtwork {
+            info[MPNowPlayingInfoProperty1x1AnimatedArtwork] = existing
+            return
+        }
+
+        let previewURL = track.artworkURL
+        let artwork = MPMediaItemAnimatedArtwork(
+            artworkID: artworkID,
+            previewImageRequestHandler: { _ in
+                guard let previewURL else { return nil }
+                return ArtworkImageCache.shared.heroImage(for: previewURL)
+                    ?? ArtworkImageCache.shared.image(for: previewURL)
+            },
+            videoAssetFileURLRequestHandler: { _ in
+                await MotionArtworkStore.shared.lockScreenVideoURL(for: track)
+            }
+        )
+        nowPlayingAnimatedArtwork = artwork
+        nowPlayingAnimatedArtworkID = artworkID
+        info[MPNowPlayingInfoProperty1x1AnimatedArtwork] = artwork
     }
 
     private func updatePlaybackSurfaces(for track: Track) {
