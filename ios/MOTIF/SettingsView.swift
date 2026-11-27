@@ -202,7 +202,7 @@ struct SettingsView: View {
                 } header: {
                     Label("Artwork", systemImage: "sparkles")
                 } footer: {
-                    Text("Official Apple Music motion artwork, played as the main cover and offered to the Lock Screen. Saved covers stay private, never appear in Files, and download only on Wi-Fi up to 300 MB. Availability varies by album; Lilt isn’t affiliated with Apple.")
+                    Text("Official Apple Music motion artwork, played as the main cover and offered to the Lock Screen — tap the artwork there to expand it. Saved covers stay private, never appear in Files, and download only on Wi-Fi up to 300 MB. Availability varies by album; Lilt isn’t affiliated with Apple.")
                 }
 
                 Section {

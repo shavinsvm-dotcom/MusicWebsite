@@ -150,6 +150,7 @@ final class PlayerManager: ObservableObject {
     private var lastWidgetIsPlaying: Bool?
     private var nowPlayingArtworkLoadingURL: URL?
     private var nowPlayingArtwork: MPMediaItemArtwork?
+    private var nowPlayingArtworkImage: UIImage?
     private var nowPlayingArtworkURL: URL?
     private var nowPlayingAnimatedArtwork: [String: Any] = [:]
     private var nowPlayingAnimatedArtworkIDs: [String: String] = [:]
@@ -1138,6 +1139,7 @@ final class PlayerManager: ObservableObject {
     private func updateNowPlaying() {
         guard let track = current else {
             nowPlayingArtwork = nil
+            nowPlayingArtworkImage = nil
             nowPlayingArtworkURL = nil
             nowPlayingArtworkLoadingURL = nil
             nowPlayingAnimatedArtwork.removeAll()
@@ -1166,8 +1168,8 @@ final class PlayerManager: ObservableObject {
 
         if #available(iOS 26.0, *) {
             let previewSource: UIImage?
-            if nowPlayingArtworkURL == track.artworkURL, let artwork = nowPlayingArtwork {
-                previewSource = artwork.image(at: CGSize(width: 1400, height: 1400))
+            if nowPlayingArtworkURL == track.artworkURL, let artwork = nowPlayingArtworkImage {
+                previewSource = artwork
             } else if let artworkURL = track.artworkURL {
                 previewSource = ArtworkImageCache.shared.heroImage(for: artworkURL)
                     ?? ArtworkImageCache.shared.image(for: artworkURL)
@@ -1183,6 +1185,7 @@ final class PlayerManager: ObservableObject {
 
         guard let artworkURL = track.artworkURL else {
             nowPlayingArtwork = nil
+            nowPlayingArtworkImage = nil
             nowPlayingArtworkURL = nil
             nowPlayingArtworkLoadingURL = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -1197,6 +1200,7 @@ final class PlayerManager: ObservableObject {
 
         nowPlayingArtworkURL = artworkURL
         nowPlayingArtwork = nil
+        nowPlayingArtworkImage = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
         if nowPlayingArtworkLoadingURL == artworkURL { return }
@@ -1213,6 +1217,7 @@ final class PlayerManager: ObservableObject {
                       self.current?.artworkURL == artworkURL
                 else { return }
                 self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                self.nowPlayingArtworkImage = image
                 self.updateNowPlaying()
             }
         }.resume()
@@ -1232,7 +1237,9 @@ final class PlayerManager: ObservableObject {
             key: MPNowPlayingInfoProperty1x1AnimatedArtwork,
             artworkID: "\(albumID)#1x1",
             fileURL: store.cachedArtworkFileURL(for: track),
-            preview: previewSource.flatMap { Self.animatedPreview(from: $0, aspectRatio: 1) },
+            preview: {
+                previewSource.flatMap { Self.animatedPreview(from: $0, aspectRatio: 1) }
+            },
             supported: supported.contains(MPNowPlayingInfoProperty1x1AnimatedArtwork),
             info: &info
         )
@@ -1241,8 +1248,10 @@ final class PlayerManager: ObservableObject {
             key: MPNowPlayingInfoProperty3x4AnimatedArtwork,
             artworkID: "\(albumID)#3x4",
             fileURL: store.cachedTallArtworkFileURL(for: track),
-            preview: previewSource.flatMap {
-                Self.animatedPreview(from: $0, aspectRatio: 3.0 / 4.0)
+            preview: {
+                previewSource.flatMap {
+                    Self.animatedPreview(from: $0, aspectRatio: 3.0 / 4.0)
+                }
             },
             supported: supported.contains(MPNowPlayingInfoProperty3x4AnimatedArtwork),
             info: &info
@@ -1254,11 +1263,11 @@ final class PlayerManager: ObservableObject {
         key: String,
         artworkID: String,
         fileURL: URL?,
-        preview: UIImage?,
+        preview: () -> UIImage?,
         supported: Bool,
         info: inout [String: Any]
     ) {
-        guard supported, let fileURL, let preview else {
+        guard supported, let fileURL else {
             nowPlayingAnimatedArtwork[key] = nil
             nowPlayingAnimatedArtworkIDs[key] = nil
             return
@@ -1267,6 +1276,12 @@ final class PlayerManager: ObservableObject {
         if nowPlayingAnimatedArtworkIDs[key] == artworkID,
            let existing = nowPlayingAnimatedArtwork[key] {
             info[key] = existing
+            return
+        }
+
+        guard let preview = preview() else {
+            nowPlayingAnimatedArtwork[key] = nil
+            nowPlayingAnimatedArtworkIDs[key] = nil
             return
         }
 

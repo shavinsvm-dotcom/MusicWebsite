@@ -258,7 +258,6 @@ struct NowPlayingView: View {
     @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
     @State private var lyricsFinderTrack: Track?
-    @State private var effectsReady = false
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 58
     @ScaledMetric(relativeTo: .body) private var artistSize: CGFloat = 14
     @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 11
@@ -294,13 +293,6 @@ struct NowPlayingView: View {
             }
         }
         .environment(\.colorScheme, .dark)
-        .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-                withAnimation(MotifMotion.overlay) {
-                    effectsReady = true
-                }
-            }
-        }
         .task(id: currentTrack.map { "\($0.id)-\(animatedCovers)" }) {
             guard animatedCovers, let track = currentTrack else { return }
             await motionArtwork.prepareForPlayback(track)
@@ -392,14 +384,6 @@ struct NowPlayingView: View {
                                 .allowsHitTesting(false)
                         }
 
-                        if effectsReady {
-                            HeroEdgeBlurOverlay(
-                                url: track.artworkURL,
-                                intensity: 1,
-                                isPlaying: player.isPlaying
-                            )
-                            .transition(.opacity)
-                        }
                     }
                 }
                 .compositingGroup()
