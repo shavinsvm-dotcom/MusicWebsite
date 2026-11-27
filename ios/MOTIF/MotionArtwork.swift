@@ -260,6 +260,8 @@ final class MotionArtworkStore: ObservableObject {
     @Published private(set) var scanDone = 0
     @Published private(set) var scanTotal = 0
     @Published private(set) var lastScanFound: Int?
+    @Published private(set) var savedCoverCount = 0
+    @Published private(set) var savedCoverBytes: Int64 = 0
 
     private var missing: [String: Date] = [:]
     private var inFlight: Set<String> = []
@@ -474,6 +476,52 @@ final class MotionArtworkStore: ObservableObject {
         links[key] = link
         enforceCacheLimit(keeping: key)
         save()
+        refreshSavedCoverUsage()
+    }
+
+    /// Settings reads this to show the private cache without exposing its files.
+    func refreshSavedCoverUsage() {
+        var count = 0
+        var bytes: Int64 = 0
+
+        for link in links.values {
+            guard let name = link.localFileName else { continue }
+            let url = mediaDirectory.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            count += 1
+            bytes += fileSize > 0 ? Int64(fileSize) : (link.localBytes ?? 0)
+        }
+
+        savedCoverCount = count
+        savedCoverBytes = bytes
+    }
+
+    func clearSavedCovers() {
+        downloadTask?.cancel()
+        downloadTask = nil
+        downloadKey = nil
+
+        for (key, link) in Array(links) {
+            guard let name = link.localFileName else { continue }
+            try? FileManager.default.removeItem(at: mediaDirectory.appendingPathComponent(name))
+            links[key]?.localFileName = nil
+            links[key]?.localBytes = nil
+            links[key]?.downloadedAt = nil
+            links[key]?.lastUsedAt = nil
+        }
+
+        if let files = try? FileManager.default.contentsOfDirectory(
+            at: mediaDirectory,
+            includingPropertiesForKeys: nil
+        ) {
+            for file in files {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+
+        save()
+        refreshSavedCoverUsage()
     }
 
     private func localURL(for link: MotionArtworkLink) -> URL? {
@@ -511,6 +559,7 @@ final class MotionArtworkStore: ObservableObject {
 
         enforceCacheLimit(keeping: nil)
         save()
+        refreshSavedCoverUsage()
     }
 
     private func enforceCacheLimit(keeping key: String?) {

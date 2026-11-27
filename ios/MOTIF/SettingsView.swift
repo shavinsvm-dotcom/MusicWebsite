@@ -43,6 +43,7 @@ struct SettingsView: View {
     @State private var showEqualizer = false
     @State private var storageUsage: (library: Int64, downloads: Int64)?
     @State private var confirmRemoveDownloads = false
+    @State private var confirmClearSavedCovers = false
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -65,6 +66,14 @@ struct SettingsView: View {
             return found == 1 ? "1 cover" : "\(found) covers"
         }
         return "Scan"
+    }
+
+    private var savedCoversLabel: String {
+        guard motionArtwork.savedCoverBytes > 0 else { return "None" }
+        let count = motionArtwork.savedCoverCount == 1
+            ? "1 cover"
+            : "\(motionArtwork.savedCoverCount) covers"
+        return "\(count) · \(bytesText(motionArtwork.savedCoverBytes))"
     }
 
     private func findAnimatedCovers() {
@@ -107,10 +116,10 @@ struct SettingsView: View {
                     .accessibilityHint("Plays official Apple Music motion artwork as the main cover")
 
                     Toggle(isOn: $offlineAnimatedCovers) {
-                        Label("Download Covers for Offline", systemImage: "arrow.down.circle")
+                        Label("Download Covers on Wi-Fi", systemImage: "wifi")
                     }
                     .tint(.primary)
-                    .accessibilityHint("Keeps played motion artwork in private app storage for offline use")
+                    .accessibilityHint("Saves played motion artwork on Wi-Fi only for offline use")
 
                     Button(action: findAnimatedCovers) {
                         SettingsValueRow(
@@ -123,10 +132,37 @@ struct SettingsView: View {
                     .disabled(motionArtwork.isScanning)
                     .accessibilityLabel("Find animated covers")
                     .accessibilityValue(animatedCoverScanLabel)
+
+                    Button(role: .destructive) {
+                        confirmClearSavedCovers = true
+                    } label: {
+                        SettingsValueRow(
+                            title: "Saved Covers",
+                            systemImage: "internaldrive",
+                            value: savedCoversLabel,
+                            indicator: motionArtwork.savedCoverBytes > 0 ? "trash" : nil
+                        )
+                    }
+                    .disabled(motionArtwork.savedCoverBytes == 0)
+                    .accessibilityLabel("Saved animated covers")
+                    .accessibilityValue(savedCoversLabel)
+                    .accessibilityHint("Clears the saved cover cache")
+                    .confirmationDialog(
+                        "Clear saved covers?",
+                        isPresented: $confirmClearSavedCovers,
+                        titleVisibility: .visible
+                    ) {
+                        Button("Clear Saved Covers", role: .destructive) {
+                            motionArtwork.clearSavedCovers()
+                        }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("They’ll download again over Wi-Fi when you play those albums.")
+                    }
                 } header: {
                     Text("Artwork")
                 } footer: {
-                    Text("Lilt looks up Apple Music’s official motion artwork and plays it as the main cover. Downloaded covers stay inside Lilt’s private app storage for offline use; they aren’t exposed in Files. Up to 300 MB is kept, oldest first out. Availability varies by album; Lilt isn’t affiliated with Apple.")
+                    Text("Lilt looks up Apple Music’s official motion artwork and plays it as the main cover. Downloaded covers stay inside Lilt’s private app storage for offline use; they aren’t exposed in Files. Offline downloads run only on Wi-Fi, up to 300 MB, oldest first out. Availability varies by album; Lilt isn’t affiliated with Apple.")
                 }
 
                 Section {
@@ -197,6 +233,7 @@ struct SettingsView: View {
             .nativeScrollHeader()
             .task {
                 storageUsage = await library.storageUsage()
+                motionArtwork.refreshSavedCoverUsage()
             }
             .confirmationDialog(
                 "Remove all downloads?",

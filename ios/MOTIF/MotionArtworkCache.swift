@@ -18,6 +18,8 @@ actor MotionArtworkCache {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 30
         configuration.timeoutIntervalForResource = 180
+        configuration.allowsCellularAccess = false
+        configuration.allowsExpensiveNetworkAccess = false
         configuration.httpAdditionalHeaders = ["Accept-Language": "en-US,en;q=0.9"]
         session = URLSession(configuration: configuration)
     }

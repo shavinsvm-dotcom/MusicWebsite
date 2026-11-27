@@ -9,8 +9,6 @@ struct MiniPlayer: View {
     let transitionSourceID: String
     let transitionNamespace: Namespace.ID
     @State private var simplifySurface = false
-    @ObservedObject private var motionArtwork = MotionArtworkStore.shared
-    @AppStorage("motif.animatedCovers") private var animatedCovers = false
 
     var body: some View {
         if let track = player.current {
@@ -21,20 +19,11 @@ struct MiniPlayer: View {
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
-                            ZStack {
-                                ArtworkView(
-                                    url: track.artworkURL,
-                                    seed: track.title + track.artist,
-                                    thumbnail: true
-                                )
-
-                                if animatedCovers, let motionURL = motionArtwork.playbackURL(for: track) {
-                                    MotionArtworkView(
-                                        url: motionURL,
-                                        isActive: player.isPlaying && !showNowPlaying
-                                    )
-                                }
-                            }
+                            ArtworkView(
+                                url: track.artworkURL,
+                                seed: track.title + track.artist,
+                                thumbnail: true
+                            )
                             .id(track.id)
                             .frame(width: 34, height: 34)
                             .clipShape(RoundedRectangle(cornerRadius: 10.5, style: .continuous))
@@ -279,6 +268,14 @@ struct NowPlayingView: View {
         return library.resolve(current)
     }
 
+    private var isMotionActive: Bool {
+        player.isPlaying
+            && !showQueue
+            && !showEqualizer
+            && lyricsTrack == nil
+            && lyricsFinderTrack == nil
+    }
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -364,7 +361,7 @@ struct NowPlayingView: View {
                     )
 
                     if let motionURL {
-                        MotionArtworkView(url: motionURL, isActive: player.isPlaying)
+                        MotionArtworkView(url: motionURL, isActive: isMotionActive)
                             .frame(width: artSide, height: artSide)
                             .transition(.opacity)
                             .allowsHitTesting(false)

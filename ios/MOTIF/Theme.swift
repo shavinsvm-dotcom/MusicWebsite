@@ -437,11 +437,11 @@ struct ArtworkView: View {
         _image = State(initialValue: cached)
     }
 
-    /// Only the large player artwork and carousel cards move. Rows and the
-    /// mini player stay still so a long library does not keep dozens of
-    /// animations alive while scrolling.
+    /// Only the full-player artwork drifts. Cards and rows stay still so a
+    /// shelf full of covers does not keep dozens of animations alive while
+    /// scrolling.
     private var motionEnabled: Bool {
-        animatedCovers && !reduceMotion && (card || highResolution)
+        animatedCovers && !reduceMotion && highResolution
     }
 
     private var resolvedImage: UIImage? {

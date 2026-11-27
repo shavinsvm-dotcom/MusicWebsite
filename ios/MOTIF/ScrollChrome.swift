@@ -56,12 +56,12 @@ private struct CarouselItemTransition: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 17.0, *), !reduceMotion {
             content.scrollTransition(.interactive, axis: .horizontal) { view, phase in
-                // Cards ease back, dim and soften as they leave the shelf,
-                // then spring forward when they settle at the leading edge.
+                // Cards ease back and dim as they leave the shelf, then spring
+                // forward when they settle. Avoid a live blur per card here;
+                // it is the expensive part while a shelf is moving.
                 view
                     .opacity(phase.isIdentity ? 1 : 0.72)
                     .scaleEffect(phase.isIdentity ? 1 : 0.94)
-                    .blur(radius: phase.isIdentity ? 0 : 0.6)
             }
         } else {
             content
