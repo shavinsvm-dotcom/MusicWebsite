@@ -547,12 +547,13 @@ final class MotionArtworkStore: ObservableObject {
 
     private static func preparePrivateDirectory(_ url: URL) {
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        var directory = url
         var values = URLResourceValues()
         values.isExcludedFromBackup = true
-        try? url.setResourceValues(values)
+        try? directory.setResourceValues(values)
         try? FileManager.default.setAttributes(
             [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
-            ofItemAtPath: url.path
+            ofItemAtPath: directory.path
         )
     }
 
