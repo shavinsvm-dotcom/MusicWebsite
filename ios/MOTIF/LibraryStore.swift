@@ -48,6 +48,7 @@ final class LibraryStore: ObservableObject {
     private var indexesAreCurrent = true
     private var pendingSave: LibrarySnapshot?
     private var saveTask: Task<Void, Never>?
+    private var widgetArtworkTask: Task<Void, Never>?
 
     /// Keeps consecutive generated covers from ever picking the same colour
     /// and pattern pair, even if the view's own counter starts over.
@@ -1480,6 +1481,7 @@ final class LibraryStore: ObservableObject {
                 // rows the library widget renders. Reload only after the
                 // debounced write, so a burst of play-count edits coalesces.
                 WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFLibrary")
+                self.refreshWidgetArtwork()
 
                 if let error = outcome.error {
                     self.errorMessage = "Couldn’t save your library: \(error)"
@@ -1526,11 +1528,22 @@ final class LibraryStore: ObservableObject {
         let firstPlaylist = snapshot.playlists.first
 
         func item(_ track: Track) -> SharedLibrarySnapshot.Item {
-            SharedLibrarySnapshot.Item(
+            // A widget cannot open a URL, so only rows whose cover already
+            // reached the app-group cache get a file name here. The fill pass
+            // below downloads the rest after the save completes.
+            var fileName: String?
+            if let url = track.artworkURL,
+               let image = ArtworkImageCache.shared.thumbnail(for: url)
+                   ?? ArtworkImageCache.shared.card(for: url)
+                   ?? ArtworkImageCache.shared.image(for: url) {
+                fileName = SharedArtwork.saveRecent(image, trackID: track.id.uuidString)
+            }
+            return SharedLibrarySnapshot.Item(
                 id: track.id.uuidString,
                 title: track.title,
                 artist: track.artist,
-                artworkURL: track.artworkURL?.absoluteString
+                artworkURL: track.artworkURL?.absoluteString,
+                artworkFileName: fileName
             )
         }
 
@@ -1544,6 +1557,61 @@ final class LibraryStore: ObservableObject {
             mostPlayed: mostPlayed.map(item),
             updatedAt: Date()
         )
+    }
+
+    /// Widgets cannot fetch images, so the covers the Recently Played widget
+    /// shows are downloaded here once and rewritten into the shared snapshot.
+    /// Runs behind a single gate so a burst of saves cannot stack up work.
+    private func refreshWidgetArtwork() {
+        guard widgetArtworkTask == nil else { return }
+        widgetArtworkTask = Task { [weak self] in
+            await Self.cacheWidgetArtwork()
+            self?.widgetArtworkTask = nil
+        }
+    }
+
+    private nonisolated static func cacheWidgetArtwork() async {
+        guard var snapshot = SharedLibrarySnapshot.load() else { return }
+        let stamp = snapshot.updatedAt
+        var names: Set<String> = []
+        var changed = false
+
+        func fill(_ items: [SharedLibrarySnapshot.Item]) async -> [SharedLibrarySnapshot.Item] {
+            var output: [SharedLibrarySnapshot.Item] = []
+            output.reserveCapacity(items.count)
+            for var item in items {
+                if let name = item.artworkFileName, SharedArtwork.fileURL(named: name) != nil {
+                    names.insert(name)
+                    output.append(item)
+                    continue
+                }
+                if let value = item.artworkURL,
+                   let url = URL(string: value),
+                   let image = await ArtworkImageCache.shared.loadThumbnail(for: url, maxPixelSize: 240),
+                   let name = SharedArtwork.saveRecent(image, trackID: item.id) {
+                    item.artworkFileName = name
+                    names.insert(name)
+                    changed = true
+                }
+                output.append(item)
+            }
+            return output
+        }
+
+        snapshot.recent = await fill(snapshot.recent)
+        if let mostPlayed = snapshot.mostPlayed {
+            snapshot.mostPlayed = await fill(mostPlayed)
+        }
+
+        if !names.isEmpty {
+            SharedArtwork.pruneRecent(keeping: names)
+        }
+
+        // A newer library write landed while the covers downloaded; that
+        // writer will publish its own snapshot.
+        guard changed, SharedLibrarySnapshot.load()?.updatedAt == stamp else { return }
+        SharedLibrarySnapshot.save(snapshot)
+        WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFLibrary")
     }
 
     private nonisolated func write(_ snapshot: LibrarySnapshot) async -> SaveOutcome {

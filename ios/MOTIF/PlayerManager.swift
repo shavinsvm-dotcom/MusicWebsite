@@ -1208,6 +1208,14 @@ final class PlayerManager: ObservableObject {
         nowPlayingArtworkFileName = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
+        // Hand the widget a cover immediately from the decoded cache instead
+        // of leaving it empty until the network round trip finishes.
+        if let cached = ArtworkImageCache.shared.image(for: artworkURL)
+            ?? ArtworkImageCache.shared.card(for: artworkURL)
+            ?? ArtworkImageCache.shared.thumbnail(for: artworkURL) {
+            nowPlayingArtworkFileName = SharedArtwork.saveNowPlaying(cached)
+        }
+
         if nowPlayingArtworkLoadingURL == artworkURL { return }
         nowPlayingArtworkLoadingURL = artworkURL
 
@@ -1225,6 +1233,9 @@ final class PlayerManager: ObservableObject {
                 self.nowPlayingArtworkImage = image
                 self.nowPlayingArtworkFileName = SharedArtwork.saveNowPlaying(image)
                 self.updateNowPlaying()
+                // A fresh cover file needs its own reload; elapsed-time
+                // gating would otherwise keep the old image on screen.
+                WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
             }
         }.resume()
     }

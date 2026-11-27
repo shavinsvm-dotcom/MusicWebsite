@@ -1,11 +1,16 @@
+import CoreImage
 import Foundation
 import UIKit
 
 /// Small, app-group artwork files the widget can read without networking.
-/// The app writes the current cover here; the widget only reads files.
+/// The app writes covers here; the widget only reads files. Widgets cannot
+/// fetch images themselves, so every cover a widget draws has to exist here.
 enum SharedArtwork {
     static let nowPlayingName = "now-playing.jpg"
+    static let nowPlayingBackdropName = "now-playing-backdrop.jpg"
+    static let recentPrefix = "recent-"
     private static let maximumPixelSize: CGFloat = 600
+    private static let context = CIContext(options: [.useSoftwareRenderer: false])
 
     static var directoryURL: URL? {
         guard let container = FileManager.default.containerURL(
@@ -26,7 +31,24 @@ enum SharedArtwork {
 
     @discardableResult
     static func saveNowPlaying(_ image: UIImage) -> String? {
-        save(image, named: nowPlayingName)
+        writeBackdrop(from: image)
+        return save(image, named: nowPlayingName)
+    }
+
+    static func recentName(for trackID: String) -> String {
+        let safe = trackID.unicodeScalars.map { scalar in
+            CharacterSet.alphanumerics.contains(scalar) ? Character(scalar) : "-"
+        }
+        return recentPrefix + String(safe) + ".jpg"
+    }
+
+    /// Skips the JPEG encode when the row already has a file; covers change
+    /// rarely and this runs on every debounced library save.
+    @discardableResult
+    static func saveRecent(_ image: UIImage, trackID: String) -> String? {
+        let name = recentName(for: trackID)
+        if fileURL(named: name) != nil { return name }
+        return save(image, named: name)
     }
 
     @discardableResult
@@ -67,6 +89,42 @@ enum SharedArtwork {
     static func remove(named name: String?) {
         guard let url = fileURL(named: name) else { return }
         try? FileManager.default.removeItem(at: url)
+    }
+
+    /// Drops cached row covers that the latest snapshot no longer references.
+    static func pruneRecent(keeping names: Set<String>) {
+        guard let directory = directoryURL,
+              let files = try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+              )
+        else { return }
+
+        for file in files where file.lastPathComponent.hasPrefix(recentPrefix) {
+            if !names.contains(file.lastPathComponent) {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+
+    /// Blurring a full-size cover inside a widget is expensive enough to risk
+    /// a skipped render, so it happens once here and the widget just scales a
+    /// tiny JPEG.
+    private static func writeBackdrop(from image: UIImage) {
+        guard let source = CIImage(image: image) else { return }
+        let extent = source.extent
+        guard extent.width > 1, extent.height > 1 else { return }
+
+        let target: CGFloat = 96
+        let scale = max(target / extent.width, target / extent.height)
+        let scaled = source.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let blurred = scaled
+            .clampedToExtent()
+            .applyingGaussianBlur(sigma: 9)
+            .cropped(to: scaled.extent)
+
+        guard let cgImage = context.createCGImage(blurred, from: scaled.extent) else { return }
+        save(UIImage(cgImage: cgImage), named: nowPlayingBackdropName)
     }
 
     private static func downsample(_ image: UIImage) -> UIImage? {

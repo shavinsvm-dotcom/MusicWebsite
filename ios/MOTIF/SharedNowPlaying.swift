@@ -59,6 +59,13 @@ struct SharedNowPlaying: Codable, Equatable {
         return updatedAt.addingTimeInterval(remaining)
     }
 
+    /// True once the anchored elapsed time has run past the track length.
+    /// A widget can read a snapshot days after the app last wrote it.
+    func hasEnded(at date: Date) -> Bool {
+        guard let end = endDate else { return false }
+        return end <= date
+    }
+
     /// A date range the system can animate without reloading the widget.
     var timerWindow: ClosedRange<Date>? {
         guard isPlaying,
@@ -93,6 +100,13 @@ struct SharedNowPlaying: Codable, Equatable {
             : identifier
         return "group." + appIdentifier
     }
+
+    /// False when the signed app cannot reach its shared container, which is
+    /// the usual reason a sideloaded widget has nothing to draw.
+    static var hasAppGroup: Bool {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) != nil
+    }
+
     private static let storageKey = "motif.nowPlaying"
 
     static func save(_ snapshot: SharedNowPlaying) {

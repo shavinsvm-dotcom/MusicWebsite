@@ -69,13 +69,13 @@ struct NowPlayingProvider: TimelineProvider {
     func getSnapshot(in context: Context, completion: @escaping (NowPlayingEntry) -> Void) {
         completion(NowPlayingEntry(
             date: Date(),
-            snapshot: context.isPreview ? WidgetSamples.nowPlaying : SharedNowPlaying.load()
+            snapshot: context.isPreview ? WidgetSamples.nowPlaying : Self.current()
         ))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<NowPlayingEntry>) -> Void) {
         let now = Date()
-        guard let snapshot = SharedNowPlaying.load() else {
+        guard let snapshot = Self.current() else {
             completion(Timeline(
                 entries: [NowPlayingEntry(date: now, snapshot: nil)],
                 policy: .after(now.addingTimeInterval(900))
@@ -83,23 +83,32 @@ struct NowPlayingProvider: TimelineProvider {
             return
         }
 
-        var entries = [NowPlayingEntry(date: now, snapshot: snapshot)]
+        let current = snapshot.isPlaying && snapshot.hasEnded(at: now)
+            ? snapshot.ended(at: now)
+            : snapshot
+        var entries = [NowPlayingEntry(date: now, snapshot: current)]
         var nextRefresh = now.addingTimeInterval(900)
 
         // The app reloads on track/play/seek changes. This end entry is the
         // safety net if Lilt disappears before it can update the widget.
-        if snapshot.isPlaying,
-           let end = snapshot.endDate,
+        if current.isPlaying,
+           let end = current.endDate,
            end > now,
            end.timeIntervalSince(now) < 12 * 60 * 60 {
-            entries.append(NowPlayingEntry(
-                date: end,
-                snapshot: snapshot.ended(at: end)
-            ))
+            entries.append(NowPlayingEntry(date: end, snapshot: current.ended(at: end)))
             nextRefresh = end.addingTimeInterval(30)
         }
 
         completion(Timeline(entries: entries, policy: .after(nextRefresh)))
+    }
+
+    /// A stale snapshot can still claim it is playing long after the app died.
+    private static func current() -> SharedNowPlaying? {
+        guard let snapshot = SharedNowPlaying.load() else { return nil }
+        if snapshot.isPlaying, snapshot.hasEnded(at: Date()) {
+            return snapshot.ended(at: Date())
+        }
+        return snapshot
     }
 }
 
@@ -108,10 +117,10 @@ struct MOTIFNowPlayingWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: NowPlayingProvider()) { entry in
-            MOTIFNowPlayingWidgetView(entry: entry)
+            NowPlayingWidgetView(entry: entry)
         }
         .configurationDisplayName("Now Playing")
-        .description("Your current Lilt track, live progress, and what is coming next.")
+        .description("The song in your ears, its live progress, and what comes next.")
         .supportedFamilies([
             .systemSmall,
             .systemMedium,
@@ -123,7 +132,7 @@ struct MOTIFNowPlayingWidget: Widget {
     }
 }
 
-private struct MOTIFNowPlayingWidgetView: View {
+private struct NowPlayingWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: NowPlayingEntry
 
@@ -137,14 +146,14 @@ private struct MOTIFNowPlayingWidgetView: View {
         case .accessoryInline:
             accessoryInline
         default:
-            fullWidget
+            homeScreen
         }
     }
 
-    private var fullWidget: some View {
-        ZStack {
-            NowPlayingBackdrop(snapshot: entry.snapshot)
+    // MARK: Home Screen
 
+    private var homeScreen: some View {
+        ZStack {
             if let snapshot = entry.snapshot {
                 if family == .systemLarge {
                     largeContent(snapshot)
@@ -157,150 +166,152 @@ private struct MOTIFNowPlayingWidgetView: View {
                 emptyState
             }
         }
-        .widgetBackground(Color(red: 0.06, green: 0.06, blue: 0.08))
+        .widgetContainerBackground {
+            NowPlayingBackground(artworkName: entry.snapshot?.artworkFileName)
+        }
         .widgetURL(URL(string: "motif://nowplaying"))
     }
 
     private func smallContent(_ snapshot: SharedNowPlaying) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .top, spacing: 8) {
-                ArtworkThumbnail(
+                ArtworkTile(
                     fileName: snapshot.artworkFileName,
-                    remoteURL: snapshot.artworkURL,
-                    size: 44
+                    seed: snapshot.title,
+                    size: 42,
+                    corner: 0.2
                 )
-
                 Spacer(minLength: 0)
-
-                Image(systemName: snapshot.isPlaying ? "waveform" : "pause.fill")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                PlaybackGlyph(isPlaying: snapshot.isPlaying, size: 12)
             }
 
-            Text(snapshot.title)
-                .font(.system(size: 13, weight: .semibold))
-                .lineLimit(2)
-
-            Text(snapshot.artist)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(snapshot.title)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                Text(snapshot.artist)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             Spacer(minLength: 0)
 
-            progressBlock(snapshot, compact: true)
+            HStack(spacing: 6) {
+                progressBar(snapshot)
+                timeLabel(snapshot)
+            }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func mediumContent(_ snapshot: SharedNowPlaying) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .top, spacing: 12) {
-                ArtworkThumbnail(
+        HStack(alignment: .top, spacing: 12) {
+            ArtworkTile(
+                fileName: snapshot.artworkFileName,
+                seed: snapshot.title,
+                size: 76,
+                corner: 0.16
+            )
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .top, spacing: 6) {
+                    Text(snapshot.title)
+                        .font(.system(size: 16, weight: .bold))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.82)
+                    Spacer(minLength: 0)
+                    PlaybackGlyph(isPlaying: snapshot.isPlaying, size: 11)
+                }
+
+                Text(snapshot.artist)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                if !snapshot.album.isEmpty {
+                    Text(snapshot.album)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .opacity(0.8)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 2)
+
+                HStack(spacing: 6) {
+                    progressBar(snapshot)
+                    timeLabel(snapshot)
+                }
+
+                if let next = snapshot.next?.first {
+                    upNextLine(next)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func largeContent(_ snapshot: SharedNowPlaying) -> some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack(alignment: .top, spacing: 14) {
+                ArtworkTile(
                     fileName: snapshot.artworkFileName,
-                    remoteURL: snapshot.artworkURL,
-                    size: 58
+                    seed: snapshot.title,
+                    size: 86,
+                    corner: 0.14
                 )
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(snapshot.title)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: 20, weight: .bold))
                         .lineLimit(2)
+                        .minimumScaleFactor(0.8)
                     Text(snapshot.artist)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    if !snapshot.album.isEmpty {
-                        Text(snapshot.album)
-                            .font(.system(size: 9))
-                            .foregroundStyle(.tertiary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: snapshot.isPlaying ? "waveform" : "pause.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 3)
-            }
-
-            Spacer(minLength: 0)
-
-            progressBlock(snapshot)
-
-            if let next = snapshot.next?.first {
-                HStack(spacing: 5) {
-                    Image(systemName: "text.line.last.and.arrowtriangle.forward")
-                        .font(.system(size: 9, weight: .semibold))
-                    Text("Next · \(next.title)")
-                        .font(.system(size: 9, weight: .medium))
-                        .lineLimit(1)
-                }
-                .foregroundStyle(.secondary)
-            }
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-    }
-
-    private func largeContent(_ snapshot: SharedNowPlaying) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 16) {
-                ArtworkThumbnail(
-                    fileName: snapshot.artworkFileName,
-                    remoteURL: snapshot.artworkURL,
-                    size: 92
-                )
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(snapshot.title)
-                        .font(.system(size: 21, weight: .bold))
-                        .lineLimit(2)
-                    Text(snapshot.artist)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                     if !snapshot.album.isEmpty {
                         Text(snapshot.album)
                             .font(.system(size: 10))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
+                            .opacity(0.8)
                             .lineLimit(1)
                     }
                 }
 
                 Spacer(minLength: 0)
 
-                Image(systemName: snapshot.isPlaying ? "waveform" : "pause.fill")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
+                PlaybackGlyph(isPlaying: snapshot.isPlaying, size: 13)
+                    .padding(.top, 2)
             }
 
-            progressBlock(snapshot)
+            HStack(spacing: 7) {
+                progressBar(snapshot)
+                timeLabel(snapshot)
+            }
 
             if let next = snapshot.next, !next.isEmpty {
                 Divider()
-                    .overlay(Color.white.opacity(0.14))
+                    .overlay(Color.primary.opacity(0.12))
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text("UP NEXT")
-                        .font(.system(size: 9, weight: .bold))
-                        .tracking(1.1)
+                        .font(.system(size: 8.5, weight: .bold))
+                        .tracking(1.0)
                         .foregroundStyle(.secondary)
 
                     ForEach(Array(next.prefix(3))) { item in
-                        HStack(spacing: 8) {
+                        HStack(spacing: 7) {
                             Image(systemName: "music.note")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                                .frame(width: 11)
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 10)
                             Text(item.title)
                                 .font(.system(size: 11, weight: .medium))
                                 .lineLimit(1)
-                            Spacer(minLength: 0)
+                            Spacer(minLength: 4)
                             Text(item.artist)
                                 .font(.system(size: 9))
                                 .foregroundStyle(.secondary)
@@ -312,75 +323,42 @@ private struct MOTIFNowPlayingWidgetView: View {
 
             Spacer(minLength: 0)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func progressBlock(_ snapshot: SharedNowPlaying, compact: Bool = false) -> some View {
-        VStack(spacing: 6) {
-            progressBar(snapshot)
-
-            HStack(spacing: 3) {
-                Text(snapshot.isPlaying ? "Playing" : "Paused")
-                    .lineLimit(1)
-
-                Spacer(minLength: 2)
-
-                if compact {
-                    compactTime(snapshot)
-                } else if let window = snapshot.timerWindow {
-                    Text(timerInterval: window, countsDown: false)
-                    Text("·")
-                    Text(timerInterval: window, countsDown: true)
-                } else {
-                    Text(timeText(snapshot.elapsed))
-                    Text("·")
-                    Text(timeText(max(snapshot.duration - snapshot.elapsed, 0)))
-                }
-            }
-            .font(.system(size: 9, weight: .medium).monospacedDigit())
-            .foregroundStyle(.secondary)
+    private func upNextLine(_ item: SharedNowPlaying.NextItem) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.system(size: 8, weight: .semibold))
+            Text("Next · \(item.title)")
+                .font(.system(size: 9, weight: .medium))
+                .lineLimit(1)
         }
-    }
-
-    private func compactTime(_ snapshot: SharedNowPlaying) -> some View {
-        Group {
-            if let window = snapshot.timerWindow {
-                Text(timerInterval: window, countsDown: true)
-            } else {
-                Text(timeText(max(snapshot.duration - snapshot.elapsed, 0)))
-            }
-        }
-        .lineLimit(1)
-    }
-
-    @ViewBuilder
-    private func progressBar(_ snapshot: SharedNowPlaying) -> some View {
-        if let window = snapshot.timerWindow {
-            ProgressView(timerInterval: window, countsDown: false)
-                .tint(.primary)
-                .labelsHidden()
-        } else {
-            ProgressView(value: progress(snapshot))
-                .tint(.primary)
-        }
+        .foregroundStyle(.secondary)
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 6) {
             Image(systemName: "waveform")
-                .font(.system(size: 22, weight: .light))
+                .font(.system(size: 20, weight: .light))
                 .foregroundStyle(.secondary)
-            Text("lilt")
-                .font(.system(size: 17, weight: .bold, design: .rounded))
-                .tracking(-0.5)
-            Text("Play a song to see it here.")
-                .font(.system(size: 11))
+
+            Text("Nothing playing")
+                .font(.system(size: 13, weight: .semibold))
+
+            Text(SharedNowPlaying.hasAppGroup
+                 ? "Open Lilt and play a song."
+                 : "Lilt cannot share data with widgets. Open Lilt › Settings › Widgets.")
+                .font(.system(size: 10))
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+
+    // MARK: Lock Screen
 
     private var accessoryCircular: some View {
         ZStack {
@@ -391,27 +369,28 @@ private struct MOTIFNowPlayingWidgetView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-                    .frame(width: 38, height: 38)
+                    .frame(width: 34, height: 34)
                     .clipShape(Circle())
+                    .accentedFullColor()
             } else {
                 Image(systemName: entry.snapshot?.isPlaying == true ? "waveform" : "pause.fill")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
             }
         }
         .widgetAccentable()
-        .widgetURL(URL(string: "motif://nowplaying"))
     }
 
     private var accessoryRectangular: some View {
         HStack(spacing: 8) {
             if let snapshot = entry.snapshot {
-                ArtworkThumbnail(
+                ArtworkTile(
                     fileName: snapshot.artworkFileName,
-                    remoteURL: nil,
-                    size: 30
+                    seed: snapshot.title,
+                    size: 32,
+                    corner: 0.18
                 )
 
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(snapshot.title)
                         .font(.headline)
                         .lineLimit(1)
@@ -423,17 +402,19 @@ private struct MOTIFNowPlayingWidgetView: View {
                         .frame(height: 3)
                 }
             } else {
-                Text("Lilt · Nothing playing")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Lilt")
+                        .font(.headline)
+                    Text("Nothing playing")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
-        .widgetURL(URL(string: "motif://nowplaying"))
     }
 
     private var accessoryInline: some View {
         Text(inlineText)
-            .widgetURL(URL(string: "motif://nowplaying"))
     }
 
     private var inlineText: String {
@@ -442,8 +423,46 @@ private struct MOTIFNowPlayingWidgetView: View {
         return "\(prefix)\(snapshot.title) · \(snapshot.artist)"
     }
 
+    // MARK: Progress
+
+    @ViewBuilder
+    private func progressBar(_ snapshot: SharedNowPlaying) -> some View {
+        if let window = activeWindow(snapshot) {
+            ProgressView(timerInterval: window, countsDown: false)
+                .progressViewStyle(.linear)
+                .labelsHidden()
+        } else {
+            ProgressView(value: progress(snapshot))
+                .progressViewStyle(.linear)
+                .labelsHidden()
+        }
+    }
+
+    @ViewBuilder
+    private func timeLabel(_ snapshot: SharedNowPlaying) -> some View {
+        Group {
+            if let window = activeWindow(snapshot) {
+                Text(timerInterval: window, countsDown: true)
+            } else {
+                Text(timeText(max(snapshot.duration - snapshot.elapsed, 0)))
+            }
+        }
+        .font(.system(size: 9, weight: .semibold).monospacedDigit())
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+
+    /// Only animate against a window that is still running, so a stale
+    /// snapshot cannot pin the widget to 0:00.
+    private func activeWindow(_ snapshot: SharedNowPlaying) -> ClosedRange<Date>? {
+        guard let window = snapshot.timerWindow, window.upperBound > entry.date else {
+            return nil
+        }
+        return window
+    }
+
     private func progress(_ snapshot: SharedNowPlaying) -> Double {
-        guard snapshot.duration > 0 else { return 0 }
+        guard snapshot.duration.isFinite, snapshot.duration > 0 else { return 0 }
         return min(1, max(0, snapshot.elapsed / snapshot.duration))
     }
 
@@ -487,7 +506,7 @@ struct MOTIFLibraryWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: LibraryProvider()) { entry in
-            MOTIFLibraryWidgetView(entry: entry)
+            LibraryWidgetView(entry: entry)
         }
         .configurationDisplayName("Recently Played")
         .description("Jump back into the songs you have played most recently.")
@@ -495,14 +514,12 @@ struct MOTIFLibraryWidget: Widget {
     }
 }
 
-private struct MOTIFLibraryWidgetView: View {
+private struct LibraryWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: LibraryEntry
 
     var body: some View {
         ZStack {
-            LibraryBackdrop()
-
             if let snapshot = entry.snapshot {
                 if family == .systemLarge {
                     largeContent(snapshot)
@@ -515,50 +532,57 @@ private struct MOTIFLibraryWidgetView: View {
                 emptyState
             }
         }
-        .widgetBackground(Color(red: 0.06, green: 0.06, blue: 0.08))
+        .widgetContainerBackground {
+            LibraryBackground()
+        }
         .widgetURL(URL(string: "motif://library"))
     }
 
     private func smallContent(_ snapshot: SharedLibrarySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header(snapshot)
+        VStack(alignment: .leading, spacing: 6) {
+            if let first = snapshot.recent.first {
+                ArtworkTile(
+                    fileName: first.artworkFileName,
+                    seed: first.title,
+                    size: 46,
+                    corner: 0.18
+                )
 
-            Text("\(snapshot.trackCount)")
-                .font(.system(size: 30, weight: .bold))
-                .tracking(-0.8)
-            Text(snapshot.trackCount == 1 ? "song" : "songs")
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(first.title)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                    Text(first.artist)
+                        .font(.system(size: 9.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            } else {
+                Text("Recently played")
+                    .font(.system(size: 13, weight: .semibold))
+                Text("Play a song and it lands here.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Spacer(minLength: 0)
 
-            if let first = snapshot.recent.first {
-                HStack(spacing: 8) {
-                    ArticleArtwork(item: first, size: 38)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(first.title)
-                            .font(.system(size: 10, weight: .medium))
-                            .lineLimit(1)
-                        Text(first.artist)
-                            .font(.system(size: 9))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-            } else {
-                Text("Play something to fill this.")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+            HStack(spacing: 5) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 8, weight: .semibold))
+                Text("\(snapshot.trackCount) songs")
+                    .font(.system(size: 9, weight: .medium))
             }
+            .foregroundStyle(.secondary)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func mediumContent(_ snapshot: SharedLibrarySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             header(snapshot)
-                .padding(.bottom, 2)
 
             ForEach(Array(snapshot.recent.prefix(3))) { item in
                 recentRow(item)
@@ -568,12 +592,11 @@ private struct MOTIFLibraryWidgetView: View {
 
             footer(snapshot)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func largeContent(_ snapshot: SharedLibrarySnapshot) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             header(snapshot)
 
             ForEach(Array(snapshot.recent.prefix(6))) { item in
@@ -584,23 +607,23 @@ private struct MOTIFLibraryWidgetView: View {
 
             footer(snapshot)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func header(_ snapshot: SharedLibrarySnapshot) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(.secondary)
             Text("RECENTLY PLAYED")
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 8.5, weight: .bold))
                 .tracking(1.0)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
             Text("\(snapshot.trackCount) songs")
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
+                .opacity(0.8)
         }
     }
 
@@ -617,7 +640,12 @@ private struct MOTIFLibraryWidgetView: View {
 
     private func row(_ item: SharedLibrarySnapshot.Item) -> some View {
         HStack(spacing: 8) {
-            ArticleArtwork(item: item, size: 28)
+            ArtworkTile(
+                fileName: item.artworkFileName,
+                seed: item.title,
+                size: 26,
+                corner: 0.2
+            )
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.title)
@@ -633,13 +661,14 @@ private struct MOTIFLibraryWidgetView: View {
 
             Image(systemName: "play.fill")
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
+                .opacity(0.7)
         }
         .contentShape(Rectangle())
     }
 
     private func footer(_ snapshot: SharedLibrarySnapshot) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Text("\(snapshot.playlistCount) playlists")
             if let favorites = snapshot.favoriteCount {
                 Text("·")
@@ -655,23 +684,29 @@ private struct MOTIFLibraryWidgetView: View {
                 .font(.system(size: 8, weight: .semibold))
         }
         .font(.system(size: 9, weight: .medium))
-        .foregroundStyle(.tertiary)
+        .foregroundStyle(.secondary)
+        .opacity(0.85)
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 6) {
             Image(systemName: "square.stack")
-                .font(.system(size: 22, weight: .light))
+                .font(.system(size: 20, weight: .light))
                 .foregroundStyle(.secondary)
+
             Text("Your library")
-                .font(.system(size: 16, weight: .bold))
-            Text("Open Lilt and play something to see recent songs here.")
+                .font(.system(size: 13, weight: .semibold))
+
+            Text(SharedNowPlaying.hasAppGroup
+                 ? "Open Lilt and play something to fill this."
+                 : "Lilt cannot share data with widgets. Open Lilt › Settings › Widgets.")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func playURL(_ item: SharedLibrarySnapshot.Item) -> URL? {
@@ -680,12 +715,13 @@ private struct MOTIFLibraryWidgetView: View {
     }
 }
 
-// MARK: - Shared artwork views
+// MARK: - Shared pieces
 
-private struct ArtworkThumbnail: View {
+private struct ArtworkTile: View {
     let fileName: String?
-    let remoteURL: String?
+    let seed: String
     let size: CGFloat
+    let corner: CGFloat
 
     var body: some View {
         Group {
@@ -693,108 +729,145 @@ private struct ArtworkThumbnail: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
-            } else if let remoteURL, let url = URL(string: remoteURL) {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image.resizable().scaledToFill()
-                    } else {
-                        fallback
-                    }
-                }
+                    .accentedFullColor()
             } else {
-                fallback
+                ArtworkPlaceholder(seed: seed)
             }
         }
         .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: size * 0.18, style: .continuous))
-    }
-
-    private var fallback: some View {
-        RoundedRectangle(cornerRadius: size * 0.18, style: .continuous)
-            .fill(Color.secondary.opacity(0.16))
-            .overlay {
-                Image(systemName: "music.note")
-                    .font(.system(size: max(9, size * 0.28), weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
+        .clipShape(RoundedRectangle(cornerRadius: size * corner, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: size * corner, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        }
     }
 }
 
-private struct ArticleArtwork: View {
-    let item: SharedLibrarySnapshot.Item
-    let size: CGFloat
-
-    var body: some View {
-        ArtworkThumbnail(
-            fileName: item.artworkFileName,
-            remoteURL: item.artworkURL,
-            size: size
-        )
-    }
-}
-
-private struct NowPlayingBackdrop: View {
-    let snapshot: SharedNowPlaying?
+private struct ArtworkPlaceholder: View {
+    let seed: String
 
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [
-                    Color(red: 0.10, green: 0.10, blue: 0.12),
-                    Color(red: 0.04, green: 0.04, blue: 0.05)
-                ],
+                colors: Self.gradient(seed),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: "music.note")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+        }
+    }
+
+    private static func gradient(_ seed: String) -> [Color] {
+        var hash: UInt64 = 5381
+        for scalar in seed.unicodeScalars {
+            hash = (hash &* 33) &+ UInt64(scalar.value)
+        }
+        let hue = Double(hash % 360) / 360
+        return [
+            Color(hue: hue, saturation: 0.45, brightness: 0.80),
+            Color(hue: hue + 0.07 > 1 ? hue - 0.55 : hue + 0.07, saturation: 0.55, brightness: 0.46)
+        ]
+    }
+}
+
+private struct PlaybackGlyph: View {
+    let isPlaying: Bool
+    let size: CGFloat
+
+    var body: some View {
+        Image(systemName: isPlaying ? "waveform" : "pause.fill")
+            .font(.system(size: size, weight: .semibold))
+            .foregroundStyle(.secondary)
+    }
+}
+
+// MARK: - Backgrounds
+
+/// Everything that paints behind the content lives here, so WidgetKit can
+/// remove it for the clear, tinted, vibrant and StandBy appearances instead
+/// of flattening a dark slab over the whole widget.
+private struct NowPlayingBackground: View {
+    @Environment(\.colorScheme) private var scheme
+    let artworkName: String?
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: WidgetInk.base(scheme),
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
-            if let snapshot {
-                if let image = SharedArtwork.image(named: snapshot.artworkFileName) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .blur(radius: 28)
-                        .opacity(0.66)
-                } else if let value = snapshot.artworkURL,
-                          let url = URL(string: value) {
-                    AsyncImage(url: url) { phase in
-                        if let image = phase.image {
-                            image.resizable()
-                                .scaledToFill()
-                                .blur(radius: 28)
-                                .opacity(0.66)
-                        } else {
-                            Color.clear
-                        }
-                    }
-                }
+            if artworkName != nil,
+               let backdrop = SharedArtwork.image(named: SharedArtwork.nowPlayingBackdropName) {
+                Image(uiImage: backdrop)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .opacity(scheme == .dark ? 0.85 : 0.55)
             }
 
-            Color.black.opacity(0.24)
+            WidgetInk.scrim(scheme)
         }
-        .clipped()
     }
 }
 
-private struct LibraryBackdrop: View {
+private struct LibraryBackground: View {
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
         LinearGradient(
-            colors: [
-                Color(red: 0.10, green: 0.10, blue: 0.12),
-                Color(red: 0.04, green: 0.04, blue: 0.05)
-            ],
+            colors: WidgetInk.base(scheme),
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
     }
 }
 
+private enum WidgetInk {
+    static func base(_ scheme: ColorScheme) -> [Color] {
+        if scheme == .dark {
+            return [
+                Color(red: 0.15, green: 0.155, blue: 0.18),
+                Color(red: 0.05, green: 0.05, blue: 0.06)
+            ]
+        }
+        return [
+            Color(red: 0.985, green: 0.98, blue: 0.975),
+            Color(red: 0.91, green: 0.905, blue: 0.90)
+        ]
+    }
+
+    static func scrim(_ scheme: ColorScheme) -> Color {
+        scheme == .dark ? Color.black.opacity(0.30) : Color.white.opacity(0.55)
+    }
+}
+
+// MARK: - Availability helpers
+
 private extension View {
     @ViewBuilder
-    func widgetBackground(_ color: Color) -> some View {
+    func widgetContainerBackground<Background: View>(
+        @ViewBuilder content: () -> Background
+    ) -> some View {
         if #available(iOSApplicationExtension 17.0, *) {
-            containerBackground(for: .widget) { color }
+            containerBackground(for: .widget) { content() }
         } else {
-            background(color)
+            background(content())
+        }
+    }
+
+    /// Keep artwork photographic in the clear and tinted appearances instead
+    /// of letting the system flatten it into a white shape.
+    @ViewBuilder
+    func accentedFullColor() -> some View {
+        if #available(iOSApplicationExtension 18.0, *) {
+            widgetAccentedRenderingMode(.fullColor)
+        } else {
+            self
         }
     }
 }
