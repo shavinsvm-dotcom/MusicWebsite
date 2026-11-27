@@ -37,9 +37,9 @@ struct SettingsView: View {
     @AppStorage("motif.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @AppStorage("motif.animatedCovers") private var animatedCovers = false
     @ObservedObject private var equalizer = Equalizer.shared
+    @ObservedObject private var motionArtwork = MotionArtworkStore.shared
 
     @State private var showEqualizer = false
-    @State private var foundAnimatedCovers: Int?
     @State private var storageUsage: (library: Int64, downloads: Int64)?
     @State private var confirmRemoveDownloads = false
 
@@ -57,17 +57,21 @@ struct SettingsView: View {
     }
 
     private var animatedCoverScanLabel: String {
-        guard let foundAnimatedCovers else { return "Scan" }
-        return foundAnimatedCovers == 1 ? "1 cover" : "\(foundAnimatedCovers) covers"
+        if motionArtwork.isScanning {
+            return "\(motionArtwork.scanDone)/\(motionArtwork.scanTotal)"
+        }
+        if let found = motionArtwork.lastScanFound {
+            return found == 1 ? "1 cover" : "\(found) covers"
+        }
+        return "Scan"
     }
 
     private func findAnimatedCovers() {
-        let covers = library.tracks.reduce(into: 0) { total, track in
-            if track.artworkURL != nil { total += 1 }
-        }
-        foundAnimatedCovers = covers
-        if covers > 0 {
-            animatedCovers = true
+        Task {
+            let found = await motionArtwork.scan(tracks: library.tracks)
+            if found > 0 {
+                animatedCovers = true
+            }
         }
     }
 
@@ -99,7 +103,7 @@ struct SettingsView: View {
                         Label("Animated Covers", systemImage: "sparkles")
                     }
                     .tint(.primary)
-                    .accessibilityHint("Adds slow motion and light to large cover art")
+                    .accessibilityHint("Streams official Apple Music motion artwork in the player")
 
                     Button(action: findAnimatedCovers) {
                         SettingsValueRow(
@@ -109,12 +113,13 @@ struct SettingsView: View {
                             indicator: "arrow.clockwise"
                         )
                     }
+                    .disabled(motionArtwork.isScanning)
                     .accessibilityLabel("Find animated covers")
                     .accessibilityValue(animatedCoverScanLabel)
                 } header: {
                     Text("Artwork")
                 } footer: {
-                    Text("Lilt scans your library for covers it can bring to life. Animated covers drift slowly and catch the light in the player and shelves; turn the switch off to keep every cover still.")
+                    Text("Lilt looks up Apple Music’s official motion artwork and streams it in the player. Videos are never saved. Availability varies by album; Lilt isn’t affiliated with Apple.")
                 }
 
                 Section {

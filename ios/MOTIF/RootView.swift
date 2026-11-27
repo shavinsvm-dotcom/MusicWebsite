@@ -116,7 +116,10 @@ struct RootView: View {
                 }
                 if DemoMode.isEnabled {
                     UserDefaults.standard.set(true, forKey: "motif.animatedCovers")
-                    if player.current == nil, let first = library.tracks.first {
+                    if DemoMode.screen == .motion,
+                       let motionTrack = library.tracks.first(where: { $0.title == "Flashing Lights" }) {
+                        player.play(motionTrack, queue: [motionTrack])
+                    } else if player.current == nil, let first = library.tracks.first {
                         player.play(first, queue: library.tracks)
                     }
                     switch DemoMode.screen {
@@ -126,7 +129,7 @@ struct RootView: View {
                         if let track = player.current ?? library.tracks.first {
                             lyricsPreview = track
                         }
-                    case .player:
+                    case .player, .motion:
                         showNowPlaying = true
                     case .settings:
                         showRootSettings = true

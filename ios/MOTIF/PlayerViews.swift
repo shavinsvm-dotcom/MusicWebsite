@@ -252,6 +252,8 @@ struct NowPlayingView: View {
     let onClose: () -> Void
 
     @ObservedObject private var equalizer = Equalizer.shared
+    @ObservedObject private var motionArtwork = MotionArtworkStore.shared
+    @AppStorage("motif.animatedCovers") private var animatedCovers = false
     @State private var showQueue = false
     @State private var showEqualizer = false
     @State private var lyricsTrack: Track?
@@ -290,6 +292,10 @@ struct NowPlayingView: View {
                     effectsReady = true
                 }
             }
+        }
+        .task(id: currentTrack.map { "\($0.id)-\(animatedCovers)" }) {
+            guard animatedCovers, let track = currentTrack else { return }
+            await motionArtwork.prepareForPlayback(track)
         }
         .sheet(isPresented: $showQueue) {
             UpNextView()
@@ -344,6 +350,13 @@ struct NowPlayingView: View {
                         seed: track.title + track.artist,
                         highResolution: true
                     )
+
+                    if animatedCovers, let streamURL = motionArtwork.streamURL(for: track) {
+                        MotionArtworkView(url: streamURL, isActive: player.isPlaying)
+                            .frame(width: artSide, height: artSide)
+                            .transition(.opacity)
+                            .allowsHitTesting(false)
+                    }
 
                     // Carry the blurred backdrop a little way over the sharp
                     // artwork so the hand-off has no visible boundary.
