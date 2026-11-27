@@ -368,10 +368,10 @@ private struct NowPlayingWidgetView: View {
                let image = SharedArtwork.image(named: snapshot.artworkFileName) {
                 Image(uiImage: image)
                     .resizable()
+                    .accentedFullColor()
                     .scaledToFill()
                     .frame(width: 34, height: 34)
                     .clipShape(Circle())
-                    .accentedFullColor()
             } else {
                 Image(systemName: entry.snapshot?.isPlaying == true ? "waveform" : "pause.fill")
                     .font(.system(size: 17, weight: .semibold))
@@ -728,8 +728,8 @@ private struct ArtworkTile: View {
             if let image = SharedArtwork.image(named: fileName) {
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFill()
                     .accentedFullColor()
+                    .scaledToFill()
             } else {
                 ArtworkPlaceholder(seed: seed)
             }
@@ -860,6 +860,9 @@ private extension View {
         }
     }
 
+}
+
+private extension Image {
     /// Keep artwork photographic in the clear and tinted appearances instead
     /// of letting the system flatten it into a white shape.
     @ViewBuilder
