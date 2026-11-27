@@ -145,12 +145,13 @@ final class PlayerManager: ObservableObject {
     private var itemStatusObservation: NSKeyValueObservation?
     private var wasPlayingBeforeInterruption = false
     private var navigationHistory: [Int] = []
-    private var lastWidgetSurfaceUpdate = Date.distantPast
     private var lastWidgetTrackID: UUID?
     private var lastWidgetIsPlaying: Bool?
+    private var lastWidgetElapsed: Double?
     private var nowPlayingArtworkLoadingURL: URL?
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var nowPlayingArtworkImage: UIImage?
+    private var nowPlayingArtworkFileName: String?
     private var nowPlayingArtworkURL: URL?
     private var nowPlayingAnimatedArtwork: [String: Any] = [:]
     private var nowPlayingAnimatedArtworkIDs: [String: String] = [:]
@@ -1140,8 +1141,10 @@ final class PlayerManager: ObservableObject {
         guard let track = current else {
             nowPlayingArtwork = nil
             nowPlayingArtworkImage = nil
+            nowPlayingArtworkFileName = nil
             nowPlayingArtworkURL = nil
             nowPlayingArtworkLoadingURL = nil
+            lastWidgetElapsed = nil
             nowPlayingAnimatedArtwork.removeAll()
             nowPlayingAnimatedArtworkIDs.removeAll()
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -1186,6 +1189,7 @@ final class PlayerManager: ObservableObject {
         guard let artworkURL = track.artworkURL else {
             nowPlayingArtwork = nil
             nowPlayingArtworkImage = nil
+            nowPlayingArtworkFileName = nil
             nowPlayingArtworkURL = nil
             nowPlayingArtworkLoadingURL = nil
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -1201,6 +1205,7 @@ final class PlayerManager: ObservableObject {
         nowPlayingArtworkURL = artworkURL
         nowPlayingArtwork = nil
         nowPlayingArtworkImage = nil
+        nowPlayingArtworkFileName = nil
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
 
         if nowPlayingArtworkLoadingURL == artworkURL { return }
@@ -1218,6 +1223,7 @@ final class PlayerManager: ObservableObject {
                 else { return }
                 self.nowPlayingArtwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
                 self.nowPlayingArtworkImage = image
+                self.nowPlayingArtworkFileName = SharedArtwork.saveNowPlaying(image)
                 self.updateNowPlaying()
             }
         }.resume()
@@ -1317,6 +1323,13 @@ final class PlayerManager: ObservableObject {
     }
 
     private func updatePlaybackSurfaces(for track: Track) {
+        let upcoming = upNextTracks.prefix(3).map {
+            SharedNowPlaying.NextItem(
+                id: $0.id.uuidString,
+                title: $0.title,
+                artist: $0.artist
+            )
+        }
         let snapshot = SharedNowPlaying(
             title: track.title,
             artist: track.artist,
@@ -1325,19 +1338,23 @@ final class PlayerManager: ObservableObject {
             isPlaying: isPlaying,
             elapsed: elapsed,
             duration: duration,
-            updatedAt: Date()
+            updatedAt: Date(),
+            trackID: track.id.uuidString,
+            artworkFileName: nowPlayingArtworkFileName,
+            next: upcoming.isEmpty ? nil : Array(upcoming)
         )
-        let now = Date()
         let trackChanged = lastWidgetTrackID != track.id
         let playbackChanged = lastWidgetIsPlaying != isPlaying
-        let progressRefreshDue = now.timeIntervalSince(lastWidgetSurfaceUpdate) > 15
+        let elapsedChanged = lastWidgetElapsed.map { abs($0 - snapshot.elapsed) > 0.49 } ?? true
 
-        if trackChanged || playbackChanged || progressRefreshDue {
-            SharedNowPlaying.save(snapshot)
+        // Always persist the latest anchor. A seek should never be hidden by a
+        // 15-second refresh gate; only the WidgetKit reload is throttled.
+        SharedNowPlaying.save(snapshot)
+        if trackChanged || playbackChanged || elapsedChanged {
             WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
-            lastWidgetSurfaceUpdate = now
-            lastWidgetTrackID = track.id
-            lastWidgetIsPlaying = isPlaying
         }
+        lastWidgetTrackID = track.id
+        lastWidgetIsPlaying = isPlaying
+        lastWidgetElapsed = snapshot.elapsed
     }
 }

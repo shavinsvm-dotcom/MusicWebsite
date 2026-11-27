@@ -3,6 +3,7 @@ import Combine
 import Foundation
 import UIKit
 import UniformTypeIdentifiers
+import WidgetKit
 
 @MainActor
 final class LibraryStore: ObservableObject {
@@ -1475,6 +1476,11 @@ final class LibraryStore: ObservableObject {
                     self.applyIndexes(outcome.indexes)
                 }
 
+                // The shared snapshot now contains the recent and most-played
+                // rows the library widget renders. Reload only after the
+                // debounced write, so a burst of play-count edits coalesces.
+                WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFLibrary")
+
                 if let error = outcome.error {
                     self.errorMessage = "Couldn’t save your library: \(error)"
                 }
@@ -1508,22 +1514,35 @@ final class LibraryStore: ObservableObject {
         _ snapshot: LibrarySnapshot,
         indexes: LibraryIndexes
     ) -> SharedLibrarySnapshot {
-        let recent = snapshot.recentTrackIDs.prefix(4).compactMap { indexes.byID[$0] }
+        let recent = snapshot.recentTrackIDs.prefix(8).compactMap { indexes.byID[$0] }
+        let mostPlayed = snapshot.playCounts
+            .filter { $0.value > 0 }
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key.uuidString < rhs.key.uuidString
+            }
+            .prefix(4)
+            .compactMap { indexes.byID[$0.key] }
         let firstPlaylist = snapshot.playlists.first
+
+        func item(_ track: Track) -> SharedLibrarySnapshot.Item {
+            SharedLibrarySnapshot.Item(
+                id: track.id.uuidString,
+                title: track.title,
+                artist: track.artist,
+                artworkURL: track.artworkURL?.absoluteString
+            )
+        }
 
         return SharedLibrarySnapshot(
             trackCount: snapshot.tracks.count,
             playlistCount: snapshot.playlists.count,
-            recent: recent.map {
-                SharedLibrarySnapshot.Item(
-                    id: $0.id.uuidString,
-                    title: $0.title,
-                    artist: $0.artist,
-                    artworkURL: $0.artworkURL?.absoluteString
-                )
-            },
+            recent: recent.map(item),
             playlistName: firstPlaylist?.name,
-            playlistArtworkURL: firstPlaylist?.customCoverURL?.absoluteString
+            playlistArtworkURL: firstPlaylist?.customCoverURL?.absoluteString,
+            favoriteCount: snapshot.favoriteIDs.count,
+            mostPlayed: mostPlayed.map(item),
+            updatedAt: Date()
         )
     }
 

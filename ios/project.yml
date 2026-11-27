@@ -55,6 +55,7 @@ targets:
         buildPhase: resources
       - path: MOTIF/SharedNowPlaying.swift
       - path: MOTIF/SharedLibrary.swift
+      - path: MOTIF/SharedArtwork.swift
     settings:
       base:
         PRODUCT_NAME: MOTIFWidgets

@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import WidgetKit
 
 enum AppAppearance: String, CaseIterable, Identifiable {
     case system
@@ -44,6 +45,13 @@ struct SettingsView: View {
     @State private var storageUsage: (library: Int64, downloads: Int64)?
     @State private var confirmRemoveDownloads = false
     @State private var confirmClearSavedCovers = false
+    @State private var widgetRefreshNote: String?
+
+    private var widgetGroupReady: Bool {
+        FileManager.default.containerURL(
+            forSecurityApplicationGroupIdentifier: SharedNowPlaying.appGroup
+        ) != nil
+    }
 
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
@@ -252,6 +260,29 @@ struct SettingsView: View {
                     Label("Storage", systemImage: "internaldrive")
                 } footer: {
                     Text("Downloads are offline copies of cloud songs. Removing them frees space; the songs stay in your library and stream again when played.")
+                }
+
+                Section {
+                    Button {
+                        WidgetCenter.shared.reloadAllTimelines()
+                        widgetRefreshNote = "Requested"
+                    } label: {
+                        SettingsValueRow(
+                            title: "Refresh Widgets",
+                            systemImage: "rectangle.3.group",
+                            value: widgetGroupReady
+                                ? (widgetRefreshNote ?? "Ready")
+                                : "No App Group",
+                            indicator: "arrow.clockwise"
+                        )
+                    }
+                    .disabled(!widgetGroupReady)
+                    .accessibilityLabel("Refresh widgets")
+                    .accessibilityValue(widgetGroupReady ? "Ready" : "App Group unavailable")
+                } header: {
+                    Label("Widgets", systemImage: "rectangle.3.group")
+                } footer: {
+                    Text("Now Playing and Recently Played read the same private app-group snapshot as Lilt. If this says No App Group, enable the shared App Group for both the app and widget targets in Signing & Capabilities.")
                 }
 
                 Section {

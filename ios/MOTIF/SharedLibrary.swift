@@ -6,6 +6,21 @@ struct SharedLibrarySnapshot: Codable, Equatable {
         let title: String
         let artist: String
         let artworkURL: String?
+        var artworkFileName: String? = nil
+
+        init(
+            id: String,
+            title: String,
+            artist: String,
+            artworkURL: String?,
+            artworkFileName: String? = nil
+        ) {
+            self.id = id
+            self.title = title
+            self.artist = artist
+            self.artworkURL = artworkURL
+            self.artworkFileName = artworkFileName
+        }
     }
 
     var trackCount: Int
@@ -13,6 +28,29 @@ struct SharedLibrarySnapshot: Codable, Equatable {
     var recent: [Item]
     var playlistName: String?
     var playlistArtworkURL: String?
+    var favoriteCount: Int?
+    var mostPlayed: [Item]?
+    var updatedAt: Date?
+
+    init(
+        trackCount: Int,
+        playlistCount: Int,
+        recent: [Item],
+        playlistName: String?,
+        playlistArtworkURL: String?,
+        favoriteCount: Int? = nil,
+        mostPlayed: [Item]? = nil,
+        updatedAt: Date? = nil
+    ) {
+        self.trackCount = trackCount
+        self.playlistCount = playlistCount
+        self.recent = recent
+        self.playlistName = playlistName
+        self.playlistArtworkURL = playlistArtworkURL
+        self.favoriteCount = favoriteCount
+        self.mostPlayed = mostPlayed
+        self.updatedAt = updatedAt
+    }
 
     /// Matches SharedNowPlaying.appGroup, including inside the widget.
     static var appGroup: String {

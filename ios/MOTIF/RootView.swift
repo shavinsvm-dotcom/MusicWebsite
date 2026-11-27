@@ -17,6 +17,7 @@ struct RootView: View {
     @State private var attemptedLyricsIDs: Set<UUID> = []
     @State private var lyricsPreview: Track?
     @State private var showRootSettings = false
+    @State private var pendingWidgetURL: URL?
     @AppStorage("motif.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @Namespace private var playerTransition
 
@@ -73,20 +74,10 @@ struct RootView: View {
                 }
 
                 guard url.scheme == "motif" else { return }
-                switch url.host {
-                case "nowplaying":
-                    playerPresented.wrappedValue = true
-                case "library":
-                    selectedTab = .library
-                case "lyrics":
-                    if let track = player.current ?? library.tracks.first {
-                        lyricsPreview = track
-                    }
-                case "settings":
-                    showRootSettings = true
-                default:
-                    break
-                }
+                handleDeepLink(url)
+            }
+            .onChange(of: library.tracks.count) { _ in
+                resolvePendingWidgetURL()
             }
             .alert(
                 "Playback stopped",
@@ -179,6 +170,44 @@ struct RootView: View {
                     )
                 }
             }
+    }
+
+    private func handleDeepLink(_ url: URL) {
+        switch url.host {
+        case "nowplaying":
+            playerPresented.wrappedValue = true
+        case "library":
+            selectedTab = .library
+        case "lyrics":
+            if let track = player.current ?? library.tracks.first {
+                lyricsPreview = track
+            }
+        case "settings":
+            showRootSettings = true
+        case "play":
+            guard let rawID = url.pathComponents.dropFirst().first,
+                  let trackID = UUID(uuidString: rawID)
+            else { return }
+
+            if let track = library.tracks.first(where: { $0.id == trackID }) {
+                player.play(track, queue: library.tracks)
+                playerPresented.wrappedValue = true
+                pendingWidgetURL = nil
+            } else if library.tracks.isEmpty {
+                pendingWidgetURL = url
+                selectedTab = .library
+            } else {
+                selectedTab = .library
+            }
+        default:
+            break
+        }
+    }
+
+    private func resolvePendingWidgetURL() {
+        guard let pending = pendingWidgetURL, !library.tracks.isEmpty else { return }
+        pendingWidgetURL = nil
+        handleDeepLink(pending)
     }
 
     private func audioDurationForLyrics(for track: Track) async -> TimeInterval? {
