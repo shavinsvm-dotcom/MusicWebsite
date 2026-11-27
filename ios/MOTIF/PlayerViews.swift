@@ -9,6 +9,8 @@ struct MiniPlayer: View {
     let transitionSourceID: String
     let transitionNamespace: Namespace.ID
     @State private var simplifySurface = false
+    @ObservedObject private var motionArtwork = MotionArtworkStore.shared
+    @AppStorage("motif.animatedCovers") private var animatedCovers = false
 
     var body: some View {
         if let track = player.current {
@@ -19,18 +21,27 @@ struct MiniPlayer: View {
                         showNowPlaying = true
                     } label: {
                         HStack(spacing: 9) {
-                            ArtworkView(
-                                url: track.artworkURL,
-                                seed: track.title + track.artist,
-                                thumbnail: true
-                            )
+                            ZStack {
+                                ArtworkView(
+                                    url: track.artworkURL,
+                                    seed: track.title + track.artist,
+                                    thumbnail: true
+                                )
+
+                                if animatedCovers, let motionURL = motionArtwork.playbackURL(for: track) {
+                                    MotionArtworkView(
+                                        url: motionURL,
+                                        isActive: player.isPlaying && !showNowPlaying
+                                    )
+                                }
+                            }
                             .id(track.id)
                             .frame(width: 34, height: 34)
-                                .clipShape(RoundedRectangle(cornerRadius: 10.5, style: .continuous))
-                                .overlay {
-                                    ArtworkProgressRing(size: 36, cornerRadius: 11.5)
-                                }
-                                .transition(.opacity)
+                            .clipShape(RoundedRectangle(cornerRadius: 10.5, style: .continuous))
+                            .overlay {
+                                ArtworkProgressRing(size: 36, cornerRadius: 11.5)
+                            }
+                            .transition(.opacity)
 
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(track.title)
@@ -342,6 +353,7 @@ struct NowPlayingView: View {
                 geometry.size.width + 12,
                 geometry.size.height * 0.53
             )
+            let motionURL = animatedCovers ? motionArtwork.playbackURL(for: track) : nil
 
             ZStack(alignment: .top) {
                 ZStack {
@@ -351,46 +363,46 @@ struct NowPlayingView: View {
                         highResolution: true
                     )
 
-                    if animatedCovers, let streamURL = motionArtwork.streamURL(for: track) {
-                        MotionArtworkView(url: streamURL, isActive: player.isPlaying)
+                    if let motionURL {
+                        MotionArtworkView(url: motionURL, isActive: player.isPlaying)
                             .frame(width: artSide, height: artSide)
                             .transition(.opacity)
                             .allowsHitTesting(false)
-                    }
-
-                    // Carry the blurred backdrop a little way over the sharp
-                    // artwork so the hand-off has no visible boundary.
-                    if let backdropImage {
-                        Image(uiImage: backdropImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: artSide, height: artSide)
-                            .mask(
-                                LinearGradient(
-                                    stops: [
-                                        .init(color: .black, location: 0),
-                                        .init(color: .black.opacity(0.84), location: 0.09),
-                                        .init(color: .black.opacity(0.36), location: 0.18),
-                                        .init(color: .clear, location: 0.30),
-                                        .init(color: .clear, location: 0.69),
-                                        .init(color: .black.opacity(0.72), location: 0.91),
-                                        .init(color: .black, location: 1)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
+                    } else {
+                        // Static artwork keeps the hand-off; once motion is
+                        // primary, its frame owns the hero instead.
+                        if let backdropImage {
+                            Image(uiImage: backdropImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: artSide, height: artSide)
+                                .mask(
+                                    LinearGradient(
+                                        stops: [
+                                            .init(color: .black, location: 0),
+                                            .init(color: .black.opacity(0.84), location: 0.09),
+                                            .init(color: .black.opacity(0.36), location: 0.18),
+                                            .init(color: .clear, location: 0.30),
+                                            .init(color: .clear, location: 0.69),
+                                            .init(color: .black.opacity(0.72), location: 0.91),
+                                            .init(color: .black, location: 1)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
                                 )
-                            )
-                            .opacity(0.86)
-                            .allowsHitTesting(false)
-                    }
+                                .opacity(0.86)
+                                .allowsHitTesting(false)
+                        }
 
-                    if effectsReady {
-                        HeroEdgeBlurOverlay(
-                            url: track.artworkURL,
-                            intensity: 1,
-                            isPlaying: player.isPlaying
-                        )
+                        if effectsReady {
+                            HeroEdgeBlurOverlay(
+                                url: track.artworkURL,
+                                intensity: 1,
+                                isPlaying: player.isPlaying
+                            )
                             .transition(.opacity)
+                        }
                     }
                 }
                 .compositingGroup()

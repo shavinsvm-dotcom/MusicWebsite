@@ -242,10 +242,15 @@ actor MotionArtworkResolver {
 struct MotionArtworkLink: Codable {
     var streamURL: URL
     var resolvedAt: Date
+    var localFileName: String?
+    var localBytes: Int64?
+    var downloadedAt: Date?
+    var lastUsedAt: Date?
 }
 
-/// Keeps only the HLS URL, never the video. Resolving is on demand; the scan
-/// only fills the same small index so the next play is instant.
+/// Keeps the resolved HLS URL plus an optional app-private offline copy.
+/// Resolving is on demand; the scan only fills the URL index so the next play
+/// is instant.
 @MainActor
 final class MotionArtworkStore: ObservableObject {
     @MainActor static let shared = MotionArtworkStore()
@@ -260,7 +265,13 @@ final class MotionArtworkStore: ObservableObject {
     private var inFlight: Set<String> = []
     private let resolver = MotionArtworkResolver()
     private let stateURL: URL
+    private let mediaDirectory: URL
+    private let cache = MotionArtworkCache()
+    private var downloadTask: Task<Void, Never>?
+    private var downloadKey: String?
+    private let cacheLimit: Int64 = 300 * 1024 * 1024
     private let missingLifetime: TimeInterval = 30 * 24 * 60 * 60
+    private static let offlineDefaultsKey = "motif.offlineAnimatedCovers"
 
     private struct DiskState: Codable {
         var links: [String: MotionArtworkLink] = [:]
@@ -273,9 +284,13 @@ final class MotionArtworkStore: ObservableObject {
             in: .userDomainMask
         )[0]
         let directory = support.appendingPathComponent("MotionArtwork", isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let media = directory.appendingPathComponent("Media", isDirectory: true)
+        Self.preparePrivateDirectory(directory)
+        Self.preparePrivateDirectory(media)
         stateURL = directory.appendingPathComponent("index.json")
+        mediaDirectory = media
         load()
+        reconcileLocalFiles()
     }
 
     static func albumKey(for track: Track) -> String {
@@ -291,15 +306,22 @@ final class MotionArtworkStore: ObservableObject {
         links[Self.albumKey(for: track)]?.streamURL
     }
 
-    func hasStream(for track: Track) -> Bool {
-        streamURL(for: track) != nil
+    /// Uses the app-private offline copy when there is one, otherwise streams.
+    func playbackURL(for track: Track) -> URL? {
+        guard let link = links[Self.albumKey(for: track)] else { return nil }
+        if let local = localURL(for: link) { return local }
+        return link.streamURL
     }
 
     /// Called when the player opens. A miss is cached for 30 days; a network
     /// failure is not, so a later play tries again.
     func prepareForPlayback(_ track: Track) async {
         let key = Self.albumKey(for: track)
-        if links[key] != nil { return }
+        if links[key] != nil {
+            touch(key)
+            startDownloadIfNeeded(key)
+            return
+        }
         if let missingAt = missing[key],
            Date().timeIntervalSince(missingAt) < missingLifetime { return }
         if inFlight.contains(key) { return }
@@ -312,6 +334,7 @@ final class MotionArtworkStore: ObservableObject {
                 links[key] = MotionArtworkLink(streamURL: url, resolvedAt: Date())
                 missing[key] = nil
                 save()
+                startDownloadIfNeeded(key)
             } else {
                 missing[key] = Date()
                 save()
@@ -390,6 +413,147 @@ final class MotionArtworkStore: ObservableObject {
         lastScanFound = found
         isScanning = false
         return found
+    }
+
+    // MARK: - Offline cache
+
+    private var offlineEnabled: Bool {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: Self.offlineDefaultsKey) != nil else { return true }
+        return defaults.bool(forKey: Self.offlineDefaultsKey)
+    }
+
+    private func touch(_ key: String) {
+        guard let link = links[key], link.localFileName != nil else { return }
+        links[key]?.lastUsedAt = Date()
+        save()
+    }
+
+    private func startDownloadIfNeeded(_ key: String) {
+        guard offlineEnabled,
+              let link = links[key],
+              link.localFileName == nil else { return }
+        if downloadKey == key, downloadTask != nil { return }
+
+        downloadTask?.cancel()
+        downloadKey = key
+        let streamURL = link.streamURL
+        let destination = mediaURL(for: key)
+        downloadTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                if self.downloadKey == key {
+                    self.downloadTask = nil
+                    self.downloadKey = nil
+                }
+            }
+
+            do {
+                let bytes = try await self.cache.download(streamURL: streamURL, to: destination)
+                guard !Task.isCancelled, self.links[key]?.streamURL == streamURL else {
+                    try? FileManager.default.removeItem(at: destination)
+                    return
+                }
+                self.installLocalFile(
+                    for: key,
+                    fileName: destination.lastPathComponent,
+                    bytes: bytes
+                )
+            } catch {
+                // Streaming keeps working; an offline copy is best-effort.
+            }
+        }
+    }
+
+    private func installLocalFile(for key: String, fileName: String, bytes: Int64) {
+        guard var link = links[key] else { return }
+        link.localFileName = fileName
+        link.localBytes = bytes
+        link.downloadedAt = Date()
+        link.lastUsedAt = Date()
+        links[key] = link
+        enforceCacheLimit(keeping: key)
+        save()
+    }
+
+    private func localURL(for link: MotionArtworkLink) -> URL? {
+        guard let name = link.localFileName else { return nil }
+        let url = mediaDirectory.appendingPathComponent(name)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private func mediaURL(for key: String) -> URL {
+        mediaDirectory.appendingPathComponent(MotionArtworkCache.fileName(for: key))
+    }
+
+    private func reconcileLocalFiles() {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: mediaDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        var referenced = Set<String>()
+
+        for (key, link) in Array(links) {
+            guard let name = link.localFileName else { continue }
+            let url = mediaDirectory.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                links[key]?.localFileName = nil
+                links[key]?.localBytes = nil
+                links[key]?.downloadedAt = nil
+                continue
+            }
+            referenced.insert(name)
+        }
+
+        for file in files where !referenced.contains(file.lastPathComponent) {
+            try? FileManager.default.removeItem(at: file)
+        }
+
+        enforceCacheLimit(keeping: nil)
+        save()
+    }
+
+    private func enforceCacheLimit(keeping key: String?) {
+        var entries: [(key: String, bytes: Int64, used: Date)] = []
+
+        for (key, link) in links {
+            guard let name = link.localFileName else { continue }
+            let url = mediaDirectory.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            entries.append((
+                key,
+                Int64(fileSize),
+                link.lastUsedAt ?? link.downloadedAt ?? link.resolvedAt
+            ))
+        }
+
+        var total = entries.reduce(Int64(0)) { $0 + $1.bytes }
+        guard total > cacheLimit else { return }
+
+        entries.sort { $0.used < $1.used }
+        for entry in entries {
+            guard total > cacheLimit else { break }
+            if entry.key == key { continue }
+            if let name = links[entry.key]?.localFileName {
+                try? FileManager.default.removeItem(at: mediaDirectory.appendingPathComponent(name))
+            }
+            links[entry.key]?.localFileName = nil
+            links[entry.key]?.localBytes = nil
+            links[entry.key]?.downloadedAt = nil
+            total -= entry.bytes
+        }
+    }
+
+    private static func preparePrivateDirectory(_ url: URL) {
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: url.path
+        )
     }
 
     private func load() {

@@ -36,6 +36,7 @@ struct SettingsView: View {
 
     @AppStorage("motif.appearance") private var appearanceRaw = AppAppearance.system.rawValue
     @AppStorage("motif.animatedCovers") private var animatedCovers = false
+    @AppStorage("motif.offlineAnimatedCovers") private var offlineAnimatedCovers = true
     @ObservedObject private var equalizer = Equalizer.shared
     @ObservedObject private var motionArtwork = MotionArtworkStore.shared
 
@@ -103,7 +104,13 @@ struct SettingsView: View {
                         Label("Animated Covers", systemImage: "sparkles")
                     }
                     .tint(.primary)
-                    .accessibilityHint("Streams official Apple Music motion artwork in the player")
+                    .accessibilityHint("Plays official Apple Music motion artwork as the main cover")
+
+                    Toggle(isOn: $offlineAnimatedCovers) {
+                        Label("Download Covers for Offline", systemImage: "arrow.down.circle")
+                    }
+                    .tint(.primary)
+                    .accessibilityHint("Keeps played motion artwork in private app storage for offline use")
 
                     Button(action: findAnimatedCovers) {
                         SettingsValueRow(
@@ -119,7 +126,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Artwork")
                 } footer: {
-                    Text("Lilt looks up Apple Music’s official motion artwork and streams it in the player. Videos are never saved. Availability varies by album; Lilt isn’t affiliated with Apple.")
+                    Text("Lilt looks up Apple Music’s official motion artwork and plays it as the main cover. Downloaded covers stay inside Lilt’s private app storage for offline use; they aren’t exposed in Files. Up to 300 MB is kept, oldest first out. Availability varies by album; Lilt isn’t affiliated with Apple.")
                 }
 
                 Section {
