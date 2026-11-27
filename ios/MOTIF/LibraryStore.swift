@@ -94,25 +94,6 @@ final class LibraryStore: ObservableObject {
             ("Golden Hour", "Lilt", "After Hours")
         ]
         let url = documentsURL.appendingPathComponent("demo-tone.wav")
-        if DemoMode.screen == .motion,
-           !tracks.contains(where: { $0.title == "Flashing Lights" }) {
-            if !fileManager.fileExists(atPath: url.path) {
-                Self.writeSilentWAV(to: url, seconds: 60)
-            }
-            tracks.insert(
-                Track(
-                    title: "Flashing Lights",
-                    artist: "Kanye West",
-                    album: "Graduation",
-                    mediaURL: url,
-                    duration: 60,
-                    source: .local
-                ),
-                at: 0
-            )
-            save()
-        }
-
         guard !tracks.contains(where: { $0.title == seeds[0].title }) else { return }
 
         if !fileManager.fileExists(atPath: url.path) {

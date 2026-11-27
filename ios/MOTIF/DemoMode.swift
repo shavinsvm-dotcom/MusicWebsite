@@ -10,7 +10,6 @@ enum DemoMode {
         case lyrics
         case player
         case settings
-        case motion
     }
 
     private static let screenPrefix = "--motif-screen="

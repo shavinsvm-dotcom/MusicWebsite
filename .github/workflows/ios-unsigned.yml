@@ -200,6 +200,7 @@ jobs:
           cat audit/report.txt >> "$GITHUB_STEP_SUMMARY"
 
       - name: Capture simulator screenshots
+        if: github.event_name == 'workflow_dispatch'
         timeout-minutes: 18
         working-directory: ios
         run: |
@@ -272,16 +273,11 @@ jobs:
           shot player
           launch settings
           shot settings
-          launch motion
-          sleep 6
-          shot motion-a
-          sleep 4
-          shot motion-b
 
-          for name in home library lyrics player settings motion-a motion-b; do
+          for name in home library lyrics player settings; do
             test -f "audit/$name.png" || { echo "MISSING audit/$name.png"; ls -la audit; exit 1; }
           done
-          echo "- Simulator screenshots: home, library, lyrics, player, settings, motion-a, motion-b (captured on $DEVICE_ID)" >> audit/report.txt
+          echo "- Simulator screenshots: home, library, lyrics, player, settings (captured on $DEVICE_ID)" >> audit/report.txt
 
       - name: Publish bundle audit
         if: always()

@@ -46,16 +46,16 @@ actor MotionArtworkResolver {
             .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .joined(separator: " ")
         guard !term.isEmpty else { return nil }
-        guard let token = try await token(storefront: storefront) else { return nil }
+        guard let bearer = try await fetchToken(storefront: storefront) else { return nil }
 
         do {
-            let data = try await search(term: term, storefront: storefront, token: token)
+            let data = try await search(term: term, storefront: storefront, token: bearer)
             return Self.motionURL(in: data, track: track)
         } catch MotionArtworkError.unauthorized {
             // Web player tokens rotate; drop the cached one and retry once.
             bearerToken = nil
             bearerFetchedAt = nil
-            guard let refreshed = try await token(storefront: storefront) else { return nil }
+            guard let refreshed = try await fetchToken(storefront: storefront) else { return nil }
             let data = try await search(term: term, storefront: storefront, token: refreshed)
             return Self.motionURL(in: data, track: track)
         }
@@ -63,7 +63,7 @@ actor MotionArtworkResolver {
 
     // MARK: Token
 
-    private func token(storefront: String) async throws -> String? {
+    private func fetchToken(storefront: String) async throws -> String? {
         if let bearerToken, let bearerFetchedAt,
            Date().timeIntervalSince(bearerFetchedAt) < 45 * 60 {
             return bearerToken

@@ -116,10 +116,7 @@ struct RootView: View {
                 }
                 if DemoMode.isEnabled {
                     UserDefaults.standard.set(true, forKey: "motif.animatedCovers")
-                    if DemoMode.screen == .motion,
-                       let motionTrack = library.tracks.first(where: { $0.title == "Flashing Lights" }) {
-                        player.play(motionTrack, queue: [motionTrack])
-                    } else if player.current == nil, let first = library.tracks.first {
+                    if player.current == nil, let first = library.tracks.first {
                         player.play(first, queue: library.tracks)
                     }
                     switch DemoMode.screen {
@@ -129,7 +126,7 @@ struct RootView: View {
                         if let track = player.current ?? library.tracks.first {
                             lyricsPreview = track
                         }
-                    case .player, .motion:
+                    case .player:
                         showNowPlaying = true
                     case .settings:
                         showRootSettings = true
@@ -351,10 +348,7 @@ private struct MiniPlayerInset: ViewModifier {
         }
     }
 
-    /// iOS 26 floats the tab bar above the tab content, so the mini player
-    /// needs a little clearance to sit above it rather than behind its glass.
-    private var tabBarClearance: CGFloat {
-        if #available(iOS 26.0, *) { return 18 }
-        return 0
-    }
+    /// Keep the mini player tight above the tab bar; the iOS 26 floating bar
+    /// already contributes its own safe-area spacing.
+    private var tabBarClearance: CGFloat { 0 }
 }
