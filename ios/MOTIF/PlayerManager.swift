@@ -149,11 +149,12 @@ final class PlayerManager: ObservableObject {
     private var lastWidgetTrackID: UUID?
     private var lastWidgetIsPlaying: Bool?
     private var nowPlayingArtworkLoadingURL: URL?
-    private var infoTick = 0
     private var nowPlayingArtwork: MPMediaItemArtwork?
     private var nowPlayingArtworkURL: URL?
-    private var nowPlayingAnimatedArtwork: Any?
-    private var nowPlayingAnimatedArtworkID: String?
+    private var nowPlayingAnimatedArtwork: [String: Any] = [:]
+    private var nowPlayingAnimatedArtworkIDs: [String: String] = [:]
+    private var artworkCacheObserver: NSObjectProtocol?
+    private var artworkPrefetchTask: Task<Void, Never>?
     private var crossfadeTask: Task<Void, Never>?
     private var tempoRestoreTask: Task<Void, Never>?
     private var automixNextIndex: Int?
@@ -169,6 +170,22 @@ final class PlayerManager: ObservableObject {
         installSystemObservers()
         installTimeObserver()
         player.automaticallyWaitsToMinimizeStalling = playbackQuality.waitsToMinimizeStalling
+
+        artworkCacheObserver = NotificationCenter.default.addObserver(
+            forName: .motionArtworkCacheChanged,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.updateNowPlaying()
+            }
+        }
+    }
+
+    deinit {
+        if let artworkCacheObserver {
+            NotificationCenter.default.removeObserver(artworkCacheObserver)
+        }
     }
 
     func setPlaybackQuality(_ quality: PlaybackQuality) {
@@ -492,6 +509,18 @@ final class PlayerManager: ObservableObject {
         prepareAutomixAnalysis()
         prepareNextTrack()
         updateNowPlaying()
+        prefetchMotionArtwork(for: track)
+    }
+
+    private func prefetchMotionArtwork(for track: Track) {
+        let defaults = UserDefaults.standard
+        let offline = defaults.object(forKey: "motif.offlineAnimatedCovers") as? Bool ?? true
+        guard offline else { return }
+
+        artworkPrefetchTask?.cancel()
+        artworkPrefetchTask = Task {
+            await MotionArtworkStore.shared.prepareForPlayback(track)
+        }
     }
 
     private func handleTrackEnded() {
@@ -582,8 +611,6 @@ final class PlayerManager: ObservableObject {
                     }
                 }
 
-                self.infoTick += 1
-                if self.infoTick % 20 == 0 { self.updateNowPlaying() }
                 self.maybeBeginCrossfade()
             }
         }
@@ -1113,8 +1140,8 @@ final class PlayerManager: ObservableObject {
             nowPlayingArtwork = nil
             nowPlayingArtworkURL = nil
             nowPlayingArtworkLoadingURL = nil
-            nowPlayingAnimatedArtwork = nil
-            nowPlayingAnimatedArtworkID = nil
+            nowPlayingAnimatedArtwork.removeAll()
+            nowPlayingAnimatedArtworkIDs.removeAll()
             MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             SharedNowPlaying.clear()
             WidgetCenter.shared.reloadTimelines(ofKind: "MOTIFNowPlaying")
@@ -1138,7 +1165,20 @@ final class PlayerManager: ObservableObject {
         ]
 
         if #available(iOS 26.0, *) {
-            attachAnimatedArtwork(to: &info, track: track)
+            let previewSource: UIImage?
+            if nowPlayingArtworkURL == track.artworkURL, let artwork = nowPlayingArtwork {
+                previewSource = artwork.image(at: CGSize(width: 1400, height: 1400))
+            } else if let artworkURL = track.artworkURL {
+                previewSource = ArtworkImageCache.shared.heroImage(for: artworkURL)
+                    ?? ArtworkImageCache.shared.image(for: artworkURL)
+            } else {
+                previewSource = nil
+            }
+            attachAnimatedArtwork(
+                to: &info,
+                track: track,
+                previewSource: previewSource
+            )
         }
 
         guard let artworkURL = track.artworkURL else {
@@ -1179,39 +1219,86 @@ final class PlayerManager: ObservableObject {
     }
 
     @available(iOS 26.0, *)
-    private func attachAnimatedArtwork(to info: inout [String: Any], track: Track) {
-        guard UserDefaults.standard.bool(forKey: "motif.animatedCovers"),
-              MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys.contains(
-                  MPNowPlayingInfoProperty1x1AnimatedArtwork
-              )
-        else {
-            nowPlayingAnimatedArtwork = nil
-            nowPlayingAnimatedArtworkID = nil
+    private func attachAnimatedArtwork(
+        to info: inout [String: Any],
+        track: Track,
+        previewSource: UIImage?
+    ) {
+        let supported = MPNowPlayingInfoCenter.supportedAnimatedArtworkKeys
+        let albumID = MotionArtworkStore.albumKey(for: track)
+        let store = MotionArtworkStore.shared
+
+        attachAnimatedVariant(
+            key: MPNowPlayingInfoProperty1x1AnimatedArtwork,
+            artworkID: "\(albumID)#1x1",
+            fileURL: store.cachedArtworkFileURL(for: track),
+            preview: previewSource.flatMap { Self.animatedPreview(from: $0, aspectRatio: 1) },
+            supported: supported.contains(MPNowPlayingInfoProperty1x1AnimatedArtwork),
+            info: &info
+        )
+
+        attachAnimatedVariant(
+            key: MPNowPlayingInfoProperty3x4AnimatedArtwork,
+            artworkID: "\(albumID)#3x4",
+            fileURL: store.cachedTallArtworkFileURL(for: track),
+            preview: previewSource.flatMap {
+                Self.animatedPreview(from: $0, aspectRatio: 3.0 / 4.0)
+            },
+            supported: supported.contains(MPNowPlayingInfoProperty3x4AnimatedArtwork),
+            info: &info
+        )
+    }
+
+    @available(iOS 26.0, *)
+    private func attachAnimatedVariant(
+        key: String,
+        artworkID: String,
+        fileURL: URL?,
+        preview: UIImage?,
+        supported: Bool,
+        info: inout [String: Any]
+    ) {
+        guard supported, let fileURL, let preview else {
+            nowPlayingAnimatedArtwork[key] = nil
+            nowPlayingAnimatedArtworkIDs[key] = nil
             return
         }
 
-        let artworkID = MotionArtworkStore.albumKey(for: track)
-        if nowPlayingAnimatedArtworkID == artworkID,
-           let existing = nowPlayingAnimatedArtwork {
-            info[MPNowPlayingInfoProperty1x1AnimatedArtwork] = existing
+        if nowPlayingAnimatedArtworkIDs[key] == artworkID,
+           let existing = nowPlayingAnimatedArtwork[key] {
+            info[key] = existing
             return
         }
 
-        let previewURL = track.artworkURL
         let artwork = MPMediaItemAnimatedArtwork(
             artworkID: artworkID,
-            previewImageRequestHandler: { _ in
-                guard let previewURL else { return nil }
-                return ArtworkImageCache.shared.heroImage(for: previewURL)
-                    ?? ArtworkImageCache.shared.image(for: previewURL)
-            },
+            previewImageRequestHandler: { _ in preview },
             videoAssetFileURLRequestHandler: { _ in
-                await MotionArtworkStore.shared.lockScreenVideoURL(for: track)
+                FileManager.default.fileExists(atPath: fileURL.path) ? fileURL : nil
             }
         )
-        nowPlayingAnimatedArtwork = artwork
-        nowPlayingAnimatedArtworkID = artworkID
-        info[MPNowPlayingInfoProperty1x1AnimatedArtwork] = artwork
+        nowPlayingAnimatedArtwork[key] = artwork
+        nowPlayingAnimatedArtworkIDs[key] = artworkID
+        info[key] = artwork
+    }
+
+    private static func animatedPreview(from image: UIImage, aspectRatio: CGFloat) -> UIImage? {
+        guard let cgImage = image.cgImage else { return nil }
+        let width = CGFloat(cgImage.width)
+        let height = CGFloat(cgImage.height)
+        guard width > 0, height > 0 else { return nil }
+
+        var crop = CGRect(x: 0, y: 0, width: width, height: height)
+        if width / height > aspectRatio {
+            crop.size.width = height * aspectRatio
+            crop.origin.x = (width - crop.size.width) / 2
+        } else {
+            crop.size.height = width / aspectRatio
+            crop.origin.y = (height - crop.size.height) / 2
+        }
+
+        guard let cropped = cgImage.cropping(to: crop) else { return nil }
+        return UIImage(cgImage: cropped, scale: image.scale, orientation: image.imageOrientation)
     }
 
     private func updatePlaybackSurfaces(for track: Track) {

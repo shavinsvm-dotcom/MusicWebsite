@@ -12,6 +12,15 @@ enum MotionArtworkError: Error {
     case status(Int)
 }
 
+struct MotionArtworkResolution {
+    let squareURL: URL
+    let tallURL: URL?
+}
+
+extension Notification.Name {
+    static let motionArtworkCacheChanged = Notification.Name("motif.motionArtworkCacheChanged")
+}
+
 // MARK: - Resolver
 
 /// Finds the official Apple Music motion artwork for an album and returns its
@@ -34,7 +43,7 @@ actor MotionArtworkResolver {
         session = URLSession(configuration: configuration)
     }
 
-    func resolve(track: Track) async throws -> URL? {
+    func resolve(track: Track) async throws -> MotionArtworkResolution? {
         if let backoffUntil, backoffUntil > Date() {
             throw MotionArtworkError.rateLimited
         }
@@ -50,14 +59,14 @@ actor MotionArtworkResolver {
 
         do {
             let data = try await search(term: term, storefront: storefront, token: bearer)
-            return Self.motionURL(in: data, track: track)
+            return Self.motionResolution(in: data, track: track)
         } catch MotionArtworkError.unauthorized {
             // Web player tokens rotate; drop the cached one and retry once.
             bearerToken = nil
             bearerFetchedAt = nil
             guard let refreshed = try await fetchToken(storefront: storefront) else { return nil }
             let data = try await search(term: term, storefront: storefront, token: refreshed)
-            return Self.motionURL(in: data, track: track)
+            return Self.motionResolution(in: data, track: track)
         }
     }
 
@@ -151,7 +160,7 @@ actor MotionArtworkResolver {
 
     // MARK: Parsing
 
-    private static func motionURL(in data: Data, track: Track) -> URL? {
+    private static func motionResolution(in data: Data, track: Track) -> MotionArtworkResolution? {
         guard let object = try? JSONSerialization.jsonObject(with: data),
               let root = object as? [String: Any],
               let results = root["results"] as? [String: Any],
@@ -163,16 +172,20 @@ actor MotionArtworkResolver {
         let wantedArtist = normalized(track.artist)
         let wantedAlbum = normalized(track.album)
         let wantedBase = baseAlbum(wantedAlbum)
-        var best: (score: Int, url: URL)?
+        var best: (score: Int, resolution: MotionArtworkResolution)?
 
         for item in items {
             guard let attributes = item["attributes"] as? [String: Any],
                   let name = attributes["name"] as? String,
                   let artist = attributes["artistName"] as? String,
                   let editorial = attributes["editorialVideo"] as? [String: Any],
-                  let square = editorial["motionDetailSquare"] as? [String: Any],
-                  let video = square["video"] as? String,
-                  let url = URL(string: video) else { continue }
+                  let square = motionVideoURL(
+                      in: editorial["motionDetailSquare"] ?? editorial["motionSquareVideo1x1"]
+                  ) else { continue }
+
+            let tall = motionVideoURL(
+                in: editorial["motionDetailTall"] ?? editorial["motionTallVideo3x4"]
+            )
 
             let foundArtist = normalized(artist)
             let foundAlbum = normalized(name)
@@ -195,11 +208,25 @@ actor MotionArtworkResolver {
             // An artist-only match is too loose; require the album to line up.
             guard score >= 4 else { continue }
             if score > (best?.score ?? -1) {
-                best = (score, url)
+                best = (
+                    score,
+                    MotionArtworkResolution(squareURL: square, tallURL: tall)
+                )
             }
         }
 
-        return best?.url
+        return best?.resolution
+    }
+
+    private static func motionVideoURL(in value: Any?) -> URL? {
+        guard let detail = value as? [String: Any] else { return nil }
+        for key in ["video", "videoUrl", "hlsUrl", "url"] {
+            if let string = detail[key] as? String,
+               let url = URL(string: string) {
+                return url
+            }
+        }
+        return nil
     }
 
     private static func baseAlbum(_ value: String) -> String {
@@ -241,9 +268,13 @@ actor MotionArtworkResolver {
 
 struct MotionArtworkLink: Codable {
     var streamURL: URL
+    var tallStreamURL: URL?
     var resolvedAt: Date
+    var tallResolvedAt: Date?
     var localFileName: String?
     var localBytes: Int64?
+    var tallLocalFileName: String?
+    var tallLocalBytes: Int64?
     var downloadedAt: Date?
     var lastUsedAt: Date?
 }
@@ -315,36 +346,52 @@ final class MotionArtworkStore: ObservableObject {
         return link.streamURL
     }
 
-    /// The local file the system can use for lock-screen animated artwork.
+    /// The square local file for the in-app motion cover.
     func cachedArtworkFileURL(for track: Track) -> URL? {
         guard let link = links[Self.albumKey(for: track)] else { return nil }
         return localURL(for: link)
     }
 
-    /// The system calls this when the lock-screen artwork is viewed. The
-    /// offline session is Wi-Fi only, so cellular still falls back to the
-    /// static cover instead of spending data.
-    func lockScreenVideoURL(for track: Track) async -> URL? {
-        if let local = cachedArtworkFileURL(for: track) { return local }
-        guard offlineEnabled else { return nil }
-
-        let key = Self.albumKey(for: track)
-        await prepareForPlayback(track)
-        if let task = downloadTask, downloadKey == key {
-            _ = await task.value
-        }
-        return cachedArtworkFileURL(for: track)
+    /// The tall local file the iPhone Lock Screen uses for full-bleed motion.
+    func cachedTallArtworkFileURL(for track: Track) -> URL? {
+        guard let link = links[Self.albumKey(for: track)] else { return nil }
+        return tallLocalURL(for: link)
     }
 
-    /// Called when the player opens. A miss is cached for 30 days; a network
+    /// Called when playback starts. A miss is cached for 30 days; a network
     /// failure is not, so a later play tries again.
     func prepareForPlayback(_ track: Track) async {
+        guard !Task.isCancelled else { return }
         let key = Self.albumKey(for: track)
-        if links[key] != nil {
+
+        if var link = links[key] {
             touch(key)
+
+            // Links saved before tall artwork support need one fresh resolve.
+            if link.tallResolvedAt == nil {
+                do {
+                    if let resolution = try await resolver.resolve(track: track) {
+                        link.streamURL = resolution.squareURL
+                        link.tallStreamURL = resolution.tallURL
+                        link.tallResolvedAt = Date()
+                        links[key] = link
+                        missing[key] = nil
+                        save()
+                    } else {
+                        link.tallResolvedAt = Date()
+                        links[key] = link
+                        save()
+                    }
+                } catch {
+                    // Keep the existing square link; a later play tries again.
+                }
+            }
+
+            guard !Task.isCancelled else { return }
             startDownloadIfNeeded(key)
             return
         }
+
         if let missingAt = missing[key],
            Date().timeIntervalSince(missingAt) < missingLifetime { return }
         if inFlight.contains(key) { return }
@@ -353,15 +400,21 @@ final class MotionArtworkStore: ObservableObject {
         defer { inFlight.remove(key) }
 
         do {
-            if let url = try await resolver.resolve(track: track) {
-                links[key] = MotionArtworkLink(streamURL: url, resolvedAt: Date())
-                missing[key] = nil
-                save()
-                startDownloadIfNeeded(key)
-            } else {
+            guard let resolution = try await resolver.resolve(track: track) else {
                 missing[key] = Date()
                 save()
+                return
             }
+            guard !Task.isCancelled else { return }
+            links[key] = MotionArtworkLink(
+                streamURL: resolution.squareURL,
+                tallStreamURL: resolution.tallURL,
+                resolvedAt: Date(),
+                tallResolvedAt: Date()
+            )
+            missing[key] = nil
+            save()
+            startDownloadIfNeeded(key)
         } catch {
             // Leave unresolved; playback keeps the static cover.
         }
@@ -410,7 +463,7 @@ final class MotionArtworkStore: ObservableObject {
             }
 
             inFlight.insert(key)
-            var resolved: URL?
+            var resolved: MotionArtworkResolution?
             var definitiveMiss = false
             do {
                 resolved = try await resolver.resolve(track: track)
@@ -424,7 +477,12 @@ final class MotionArtworkStore: ObservableObject {
             inFlight.remove(key)
 
             if let resolved {
-                links[key] = MotionArtworkLink(streamURL: resolved, resolvedAt: Date())
+                links[key] = MotionArtworkLink(
+                    streamURL: resolved.squareURL,
+                    tallStreamURL: resolved.tallURL,
+                    resolvedAt: Date(),
+                    tallResolvedAt: Date()
+                )
                 found += 1
             } else if definitiveMiss {
                 missing[key] = Date()
@@ -447,21 +505,28 @@ final class MotionArtworkStore: ObservableObject {
     }
 
     private func touch(_ key: String) {
-        guard let link = links[key], link.localFileName != nil else { return }
+        guard let link = links[key],
+              link.localFileName != nil || link.tallLocalFileName != nil else { return }
         links[key]?.lastUsedAt = Date()
         save()
     }
 
     private func startDownloadIfNeeded(_ key: String) {
-        guard offlineEnabled,
-              let link = links[key],
-              link.localFileName == nil else { return }
+        guard offlineEnabled, let link = links[key] else { return }
+        let needsSquare = link.localFileName == nil
+        let needsTall = link.tallStreamURL != nil && link.tallLocalFileName == nil
+        guard needsSquare || needsTall else { return }
         if downloadKey == key, downloadTask != nil { return }
 
         downloadTask?.cancel()
         downloadKey = key
-        let streamURL = link.streamURL
-        let destination = mediaURL(for: key)
+        let squareURL = link.streamURL
+        let tallURL = needsTall ? link.tallStreamURL : nil
+        let squareDestination = mediaURL(for: key)
+        let tallDestination = tallMediaURL(for: key)
+        let existingSquareName = link.localFileName
+        let existingSquareBytes = link.localBytes ?? 0
+
         downloadTask = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -471,33 +536,102 @@ final class MotionArtworkStore: ObservableObject {
                 }
             }
 
-            do {
-                let bytes = try await self.cache.download(streamURL: streamURL, to: destination)
-                guard !Task.isCancelled, self.links[key]?.streamURL == streamURL else {
-                    try? FileManager.default.removeItem(at: destination)
+            var squareName = existingSquareName
+            var squareBytes = existingSquareBytes
+            if needsSquare {
+                do {
+                    squareBytes = try await self.cache.download(
+                        streamURL: squareURL,
+                        to: squareDestination
+                    )
+                    squareName = squareDestination.lastPathComponent
+                } catch {
                     return
                 }
+
+                guard !Task.isCancelled,
+                      self.links[key]?.streamURL == squareURL,
+                      let downloadedSquareName = squareName
+                else {
+                    try? FileManager.default.removeItem(at: squareDestination)
+                    return
+                }
+
+                // Publish the square cut immediately; the tall cut can follow.
                 self.installLocalFile(
                     for: key,
-                    fileName: destination.lastPathComponent,
-                    bytes: bytes
+                    fileName: downloadedSquareName,
+                    bytes: squareBytes,
+                    tallFileName: nil,
+                    tallBytes: nil
                 )
-            } catch {
-                // Streaming keeps working; an offline copy is best-effort.
+            }
+
+            guard let squareName else { return }
+
+            var tallName: String?
+            var tallBytes: Int64?
+            if let tallURL {
+                do {
+                    tallBytes = try await self.cache.download(
+                        streamURL: tallURL,
+                        to: tallDestination
+                    )
+                    tallName = tallDestination.lastPathComponent
+                } catch {
+                    // The square cover is still usable; retry the tall cut later.
+                }
+            }
+
+            guard !Task.isCancelled else {
+                if tallName != nil { try? FileManager.default.removeItem(at: tallDestination) }
+                return
+            }
+            guard self.links[key]?.streamURL == squareURL else {
+                if tallName != nil { try? FileManager.default.removeItem(at: tallDestination) }
+                return
+            }
+            if needsTall, self.links[key]?.tallStreamURL != tallURL {
+                if tallName != nil { try? FileManager.default.removeItem(at: tallDestination) }
+                tallName = nil
+                tallBytes = nil
+            }
+
+            if let tallName, let tallBytes {
+                self.installLocalFile(
+                    for: key,
+                    fileName: squareName,
+                    bytes: squareBytes,
+                    tallFileName: tallName,
+                    tallBytes: tallBytes
+                )
             }
         }
     }
 
-    private func installLocalFile(for key: String, fileName: String, bytes: Int64) {
+    private func installLocalFile(
+        for key: String,
+        fileName: String,
+        bytes: Int64,
+        tallFileName: String?,
+        tallBytes: Int64?
+    ) {
         guard var link = links[key] else { return }
-        link.localFileName = fileName
-        link.localBytes = bytes
-        link.downloadedAt = Date()
+        if link.localFileName == nil {
+            link.localFileName = fileName
+            link.localBytes = bytes
+            link.downloadedAt = Date()
+        }
+        if let tallFileName, let tallBytes, link.tallLocalFileName == nil {
+            link.tallLocalFileName = tallFileName
+            link.tallLocalBytes = tallBytes
+        }
         link.lastUsedAt = Date()
         links[key] = link
         enforceCacheLimit(keeping: key)
         save()
         refreshSavedCoverUsage()
+        NotificationCenter.default.post(name: .motionArtworkCacheChanged, object: nil)
     }
 
     /// Settings reads this to show the private cache without exposing its files.
@@ -512,6 +646,14 @@ final class MotionArtworkStore: ObservableObject {
             let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
             count += 1
             bytes += fileSize > 0 ? Int64(fileSize) : (link.localBytes ?? 0)
+
+            if let tallName = link.tallLocalFileName {
+                let tallURL = mediaDirectory.appendingPathComponent(tallName)
+                if FileManager.default.fileExists(atPath: tallURL.path) {
+                    let tallSize = (try? tallURL.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                    bytes += tallSize > 0 ? Int64(tallSize) : (link.tallLocalBytes ?? 0)
+                }
+            }
         }
 
         savedCoverCount = count
@@ -524,10 +666,16 @@ final class MotionArtworkStore: ObservableObject {
         downloadKey = nil
 
         for (key, link) in Array(links) {
-            guard let name = link.localFileName else { continue }
-            try? FileManager.default.removeItem(at: mediaDirectory.appendingPathComponent(name))
+            if let name = link.localFileName {
+                try? FileManager.default.removeItem(at: mediaDirectory.appendingPathComponent(name))
+            }
+            if let name = link.tallLocalFileName {
+                try? FileManager.default.removeItem(at: mediaDirectory.appendingPathComponent(name))
+            }
             links[key]?.localFileName = nil
             links[key]?.localBytes = nil
+            links[key]?.tallLocalFileName = nil
+            links[key]?.tallLocalBytes = nil
             links[key]?.downloadedAt = nil
             links[key]?.lastUsedAt = nil
         }
@@ -543,6 +691,7 @@ final class MotionArtworkStore: ObservableObject {
 
         save()
         refreshSavedCoverUsage()
+        NotificationCenter.default.post(name: .motionArtworkCacheChanged, object: nil)
     }
 
     private func localURL(for link: MotionArtworkLink) -> URL? {
@@ -551,8 +700,20 @@ final class MotionArtworkStore: ObservableObject {
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
+    private func tallLocalURL(for link: MotionArtworkLink) -> URL? {
+        guard let name = link.tallLocalFileName else { return nil }
+        let url = mediaDirectory.appendingPathComponent(name)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     private func mediaURL(for key: String) -> URL {
         mediaDirectory.appendingPathComponent(MotionArtworkCache.fileName(for: key))
+    }
+
+    private func tallMediaURL(for key: String) -> URL {
+        let squareName = MotionArtworkCache.fileName(for: key)
+        let tallName = squareName.replacingOccurrences(of: ".mp4", with: "-tall.mp4")
+        return mediaDirectory.appendingPathComponent(tallName)
     }
 
     private func reconcileLocalFiles() {
@@ -563,15 +724,26 @@ final class MotionArtworkStore: ObservableObject {
         var referenced = Set<String>()
 
         for (key, link) in Array(links) {
-            guard let name = link.localFileName else { continue }
-            let url = mediaDirectory.appendingPathComponent(name)
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                links[key]?.localFileName = nil
-                links[key]?.localBytes = nil
-                links[key]?.downloadedAt = nil
-                continue
+            if let name = link.localFileName {
+                let url = mediaDirectory.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    referenced.insert(name)
+                } else {
+                    links[key]?.localFileName = nil
+                    links[key]?.localBytes = nil
+                    links[key]?.downloadedAt = nil
+                }
             }
-            referenced.insert(name)
+
+            if let name = link.tallLocalFileName {
+                let url = mediaDirectory.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    referenced.insert(name)
+                } else {
+                    links[key]?.tallLocalFileName = nil
+                    links[key]?.tallLocalBytes = nil
+                }
+            }
         }
 
         for file in files where !referenced.contains(file.lastPathComponent) {
@@ -587,13 +759,31 @@ final class MotionArtworkStore: ObservableObject {
         var entries: [(key: String, bytes: Int64, used: Date)] = []
 
         for (key, link) in links {
-            guard let name = link.localFileName else { continue }
-            let url = mediaDirectory.appendingPathComponent(name)
-            guard FileManager.default.fileExists(atPath: url.path) else { continue }
-            let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            var bytes: Int64 = 0
+            var foundFile = false
+
+            if let name = link.localFileName {
+                let url = mediaDirectory.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                    bytes += Int64(fileSize)
+                    foundFile = true
+                }
+            }
+
+            if let name = link.tallLocalFileName {
+                let url = mediaDirectory.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: url.path) {
+                    let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+                    bytes += Int64(fileSize)
+                    foundFile = true
+                }
+            }
+
+            guard foundFile else { continue }
             entries.append((
                 key,
-                Int64(fileSize),
+                bytes,
                 link.lastUsedAt ?? link.downloadedAt ?? link.resolvedAt
             ))
         }
@@ -608,8 +798,13 @@ final class MotionArtworkStore: ObservableObject {
             if let name = links[entry.key]?.localFileName {
                 try? FileManager.default.removeItem(at: mediaDirectory.appendingPathComponent(name))
             }
+            if let name = links[entry.key]?.tallLocalFileName {
+                try? FileManager.default.removeItem(at: mediaDirectory.appendingPathComponent(name))
+            }
             links[entry.key]?.localFileName = nil
             links[entry.key]?.localBytes = nil
+            links[entry.key]?.tallLocalFileName = nil
+            links[entry.key]?.tallLocalBytes = nil
             links[entry.key]?.downloadedAt = nil
             total -= entry.bytes
         }
