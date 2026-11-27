@@ -1,0 +1,60 @@
+# Bundle audit
+
+- Commit: 9a9e7536595e9811ba8dc653c5cd16736d66c992
+- IPA sha256: 239d187ebedaa7618ccb72a864467c4f282c1feb26bd7e7d8f2677fd04cbcae1
+- IPA bytes: 4447166
+
+PASS app bundle present - /tmp/ipa-audit/Payload/MOTIF.app
+PASS widget bundle present - /tmp/ipa-audit/Payload/MOTIF.app/PlugIns/MOTIFWidgets.appex
+PASS app privacy manifest present - /tmp/ipa-audit/Payload/MOTIF.app/PrivacyInfo.xcprivacy
+PASS app tracking disabled
+PASS app no tracking domains
+PASS app no collected data types
+PASS app UserDefaults declared
+PASS app UserDefaults reason CA92.1 - ['CA92.1']
+PASS app only UserDefaults API declared - ['NSPrivacyAccessedAPICategoryUserDefaults']
+PASS widget privacy manifest present - /tmp/ipa-audit/Payload/MOTIF.app/PlugIns/MOTIFWidgets.appex/PrivacyInfo.xcprivacy
+PASS widget tracking disabled
+PASS widget no tracking domains
+PASS widget no collected data types
+PASS widget UserDefaults declared
+PASS widget UserDefaults reason CA92.1 - ['CA92.1']
+PASS widget only UserDefaults API declared - ['NSPrivacyAccessedAPICategoryUserDefaults']
+PASS CFBundleIdentifier - com.example.motif
+PASS motion usage description - Lilt uses the phone’s tilt to shift the light on large artwork. Motion data never leaves this device.
+PASS export compliance declared
+PASS launch screen declared
+PASS background audio mode
+PASS portrait only
+PASS marketing version - 1.0
+PASS build number - 1
+PASS minimum iOS 16 - 16.0
+PASS display name - Lilt
+PASS compiled icon
+PASS one audio document type - 1
+PASS document role editor - Editor
+PASS document rank alternate - Alternate
+PASS accepts public.audio - ['public.audio', 'public.mp3', 'public.mpeg-4-audio']
+PASS accepts public.mp3 - ['public.audio', 'public.mp3', 'public.mpeg-4-audio']
+PASS accepts public.mpeg-4-audio - ['public.audio', 'public.mp3', 'public.mpeg-4-audio']
+PASS opens documents in place
+PASS no placeholder metadata outside identifier keys
+PASS no unresolved build settings
+PASS widget bundle id suffix - com.example.motif.widgets
+PASS widget extension declared
+PASS app group constant - group.com.example.motif
+PASS app group prefix - group.com.example.motif
+PASS app entitlements present - MOTIF/MOTIF.entitlements
+PASS app reaches one app group - ['group.com.example.motif']
+PASS app app group matches constant - ['group.com.example.motif']
+PASS app app group has no build setting - ['group.com.example.motif']
+PASS widget entitlements present - MOTIFWidgets/MOTIFWidgets.entitlements
+PASS widget reaches one app group - ['group.com.example.motif']
+PASS widget app group matches constant - ['group.com.example.motif']
+PASS widget app group has no build setting - ['group.com.example.motif']
+
+AUDIT PASSED
+a331d51864743ebe4e00dd22360b4a538b6b3ac26a6b3eb54094e60a36959a12  audit/app-PrivacyInfo.xcprivacy
+a331d51864743ebe4e00dd22360b4a538b6b3ac26a6b3eb54094e60a36959a12  audit/widget-PrivacyInfo.xcprivacy
+0dd287f37e9a156ded98a00c6ca064d19ad92b05a7084493051ce4e0cd4d5193  audit/app-Info.plist
+a3b7234813e86738c003d07dbdda6ced8f977086864c152dfd7b46671186ccf5  audit/widget-Info.plist
