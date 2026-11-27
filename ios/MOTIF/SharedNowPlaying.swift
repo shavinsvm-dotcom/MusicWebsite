@@ -90,16 +90,13 @@ struct SharedNowPlaying: Codable, Equatable {
         return copy
     }
 
-    /// Derived from the running bundle so renaming the bundle identifier
-    /// carries the widget's shared container with it. The widget bundle id is
-    /// the app's id plus `.widgets`.
-    static var appGroup: String {
-        let identifier = Bundle.main.bundleIdentifier ?? "com.example.motif"
-        let appIdentifier = identifier.hasSuffix(".widgets")
-            ? String(identifier.dropLast(".widgets".count))
-            : identifier
-        return "group." + appIdentifier
-    }
+    /// The shared container named by both targets' entitlements files. It is
+    /// fixed on purpose: sideload signing tools rewrite bundle ids, and a
+    /// group that followed the id would stop matching the provisioning
+    /// profile after that rewrite. Keep this in step with
+    /// MOTIF/MOTIF.entitlements and MOTIFWidgets/MOTIFWidgets.entitlements;
+    /// the build checks all three agree.
+    static let appGroup = "group.com.example.motif"
 
     /// False when the signed app cannot reach its shared container, which is
     /// the usual reason a sideloaded widget has nothing to draw.

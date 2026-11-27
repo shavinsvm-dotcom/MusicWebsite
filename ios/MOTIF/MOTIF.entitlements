@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.$(APP_BUNDLE_ID)</string>
+		<string>group.com.example.motif</string>
 	</array>
 </dict>
 </plist>

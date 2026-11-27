@@ -185,6 +185,29 @@ jobs:
                 widget_info.get("CFBundleIdentifier"))
           check("widget extension declared", isinstance(widget_info.get("NSExtension"), dict))
 
+          # The shared container name lives in one Swift constant and in both
+          # entitlements files. Drift between them is what leaves the widgets
+          # installed but permanently empty.
+          source = open("MOTIF/SharedNowPlaying.swift").read()
+          match = re.search(r'static let appGroup = "([^"]+)"', source)
+          check("app group constant", bool(match), match.group(1) if match else None)
+          group = match.group(1) if match else None
+          check("app group prefix", isinstance(group, str) and group.startswith("group."), group)
+
+          for label, relative in (("app", "MOTIF/MOTIF.entitlements"),
+                                  ("widget", "MOTIFWidgets/MOTIFWidgets.entitlements")):
+              path = os.path.join(os.getcwd(), relative)
+              check(label + " entitlements present", os.path.isfile(path), relative)
+              if not os.path.isfile(path):
+                  continue
+              with open(path, "rb") as handle:
+                  entitlements = plistlib.load(handle)
+              groups = entitlements.get("com.apple.security.application-groups") or []
+              check(label + " reaches one app group", len(groups) == 1, groups)
+              check(label + " app group matches constant", groups == [group], groups)
+              check(label + " app group has no build setting",
+                    not any("$(" in str(value) for value in groups), groups)
+
           print()
           if failures:
               print("AUDIT FAILED: " + ", ".join(failures))

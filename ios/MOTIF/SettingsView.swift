@@ -46,11 +46,16 @@ struct SettingsView: View {
     @State private var confirmRemoveDownloads = false
     @State private var confirmClearSavedCovers = false
     @State private var widgetRefreshNote: String?
+    @State private var appGroupCopied = false
 
     private var widgetGroupReady: Bool {
         FileManager.default.containerURL(
             forSecurityApplicationGroupIdentifier: SharedNowPlaying.appGroup
         ) != nil
+    }
+
+    private var appBundleIdentifier: String {
+        Bundle.main.bundleIdentifier ?? "com.example.motif"
     }
 
     private var appVersion: String {
@@ -263,6 +268,36 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    LabeledContent("Status") {
+                        Text(widgetGroupReady ? "Ready" : "No App Group")
+                            .foregroundStyle(widgetGroupReady ? .secondary : .primary)
+                    }
+
+                    LabeledContent("App Group") {
+                        Text(SharedNowPlaying.appGroup)
+                            .font(.system(.footnote, design: .monospaced))
+                            .multilineTextAlignment(.trailing)
+                            .textSelection(.enabled)
+                    }
+
+                    LabeledContent("App Identifier") {
+                        Text(appBundleIdentifier)
+                            .font(.system(.footnote, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.trailing)
+                            .textSelection(.enabled)
+                    }
+
+                    Button {
+                        UIPasteboard.general.string = SharedNowPlaying.appGroup
+                        appGroupCopied = true
+                    } label: {
+                        Label(
+                            appGroupCopied ? "App Group Copied" : "Copy App Group",
+                            systemImage: appGroupCopied ? "checkmark" : "doc.on.doc"
+                        )
+                    }
+
                     Button {
                         WidgetCenter.shared.reloadAllTimelines()
                         widgetRefreshNote = "Requested"
@@ -282,7 +317,11 @@ struct SettingsView: View {
                 } header: {
                     Label("Widgets", systemImage: "rectangle.3.group")
                 } footer: {
-                    Text("Now Playing and Recently Played read the same private app-group snapshot as Lilt. If this says No App Group, enable the shared App Group for both the app and widget targets in Signing & Capabilities.")
+                    if widgetGroupReady {
+                        Text("Widgets read this private container. If a widget looks stale, play a song in Lilt and it refreshes with the current track.")
+                    } else {
+                        Text("Lilt is signed without this App Group, so the widgets have nothing to read. App Groups need a paid Apple Developer account: register \(SharedNowPlaying.appGroup) under Identifiers › App Groups, enable App Groups for both \(appBundleIdentifier) and \(appBundleIdentifier).widgets, then sign the app and the widget extension with that group in their entitlements.")
+                    }
                 }
 
                 Section {
